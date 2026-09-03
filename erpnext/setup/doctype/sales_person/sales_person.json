@@ -13,6 +13,7 @@
   "sales_person_name",
   "parent_sales_person",
   "commission_rate",
+  "sales_commission_scheme",
   "is_group",
   "enabled",
   "cb0",
@@ -57,6 +58,13 @@
    "fieldtype": "Data",
    "label": "Commission Rate",
    "print_hide": 1
+  },
+  {
+   "description": "Optional: Override the default tiered sales commission scheme for this sales person.",
+   "fieldname": "sales_commission_scheme",
+   "fieldtype": "Link",
+   "label": "Sales Commission Scheme",
+   "options": "Sales Commission Scheme"
   },
   {
    "default": "0",
