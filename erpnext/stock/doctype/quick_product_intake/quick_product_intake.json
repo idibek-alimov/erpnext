@@ -1,0 +1,291 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "autoname": "QPI-.YYYY.-.#####",
+ "creation": "2026-09-09 15:15:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_name",
+  "item_code",
+  "col_break1",
+  "item_group",
+  "has_variants",
+  "stock_uom",
+  "sec_break_destination",
+  "company",
+  "target_warehouse",
+  "col_break2",
+  "supplier",
+  "sec_break_pricing",
+  "buying_price",
+  "selling_price",
+  "col_break3",
+  "discount_percentage",
+  "create_pricing_rule",
+  "sec_break_attributes",
+  "colors",
+  "sizes",
+  "sec_break_matrix",
+  "items",
+  "sec_break_accounting",
+  "template_item",
+  "purchase_invoice",
+  "col_break4",
+  "stock_entry",
+  "pricing_rule",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Product Name",
+   "reqd": 1
+  },
+  {
+   "description": "Unique identifier / handle. Leave empty to auto-generate from Product Name",
+   "fieldname": "item_code",
+   "fieldtype": "Data",
+   "label": "Item Code / Model ID"
+  },
+  {
+   "fieldname": "col_break1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Products",
+   "fieldname": "item_group",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item Group",
+   "options": "Item Group",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "has_variants",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Has Variants (Color & Size Matrix)"
+  },
+  {
+   "default": "Nos",
+   "fieldname": "stock_uom",
+   "fieldtype": "Link",
+   "label": "Default Unit of Measure (UOM)",
+   "options": "UOM",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sec_break_destination",
+   "fieldtype": "Section Break",
+   "label": "Warehouse & Supplier"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "remember_last_selected_value": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "target_warehouse",
+   "fieldtype": "Link",
+   "label": "Target Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "If specified, creates Purchase Invoice. If empty, creates Stock Entry (Material Receipt).",
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier (Optional)",
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "sec_break_pricing",
+   "fieldtype": "Section Break",
+   "label": "Default Pricing & Promotional Discount"
+  },
+  {
+   "fieldname": "buying_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Cost (Buying Price)",
+   "options": "Company:company:default_currency",
+   "reqd": 1
+  },
+  {
+   "fieldname": "selling_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Retail (Selling Price)",
+   "options": "Company:company:default_currency",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "discount_percentage",
+   "fieldtype": "Percent",
+   "label": "Promotional Discount %"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.discount_percentage > 0",
+   "fieldname": "create_pricing_rule",
+   "fieldtype": "Check",
+   "label": "Create Pricing Rule (Discount)"
+  },
+  {
+   "depends_on": "eval:doc.has_variants == 1",
+   "fieldname": "sec_break_attributes",
+   "fieldtype": "Section Break",
+   "label": "Matrix Attributes"
+  },
+  {
+   "description": "Comma-separated list of colors (e.g. Black, Cream, Sage Green)",
+   "fieldname": "colors",
+   "fieldtype": "Small Text",
+   "label": "Colors"
+  },
+  {
+   "description": "Comma-separated list of sizes (e.g. S, M, L, XL or 40, 41, 42, 43)",
+   "fieldname": "sizes",
+   "fieldtype": "Small Text",
+   "label": "Sizes"
+  },
+  {
+   "fieldname": "sec_break_matrix",
+   "fieldtype": "Section Break",
+   "label": "Products & Stock Matrix"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Matrix Items",
+   "options": "Quick Product Intake Item",
+   "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "sec_break_accounting",
+   "fieldtype": "Section Break",
+   "label": "Generated Records & Audit Links"
+  },
+  {
+   "fieldname": "template_item",
+   "fieldtype": "Link",
+   "label": "Template Item",
+   "no_copy": 1,
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purchase_invoice",
+   "fieldtype": "Link",
+   "label": "Purchase Invoice",
+   "no_copy": 1,
+   "options": "Purchase Invoice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry",
+   "no_copy": 1,
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pricing_rule",
+   "fieldtype": "Link",
+   "label": "Pricing Rule",
+   "no_copy": 1,
+   "options": "Pricing Rule",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Quick Product Intake",
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-09-09 15:15:00.000000",
+ "modified_by": "Administrator",
+ "module": "Stock",
+ "name": "Quick Product Intake",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 1,
+ "row_format": "Dynamic",
+ "search_fields": "item_name, item_code, item_group",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "item_name"
+}
