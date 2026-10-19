@@ -21,6 +21,7 @@ class ProductCatalogApp {
 		this.selected_category = "All";
 		this.status_filter = "all";
 		this.active_product = null;
+		this.active_color_filter = "ALL";
 
 		this.init();
 	}
@@ -77,25 +78,29 @@ class ProductCatalogApp {
 				tg: "Нархи харид",
 				ru: "Цена закупки",
 			},
+			promo_discount: {
+				tg: "Тахфиф % (0 = бе тахфиф)",
+				ru: "Скидка % (0 = без скидки)",
+			},
+			save_prices_btn: {
+				tg: "💾 Сабти нархи нав",
+				ru: "💾 Обновить цену",
+			},
 			stock: {
-				tg: "Дар анбор",
-				ru: "В наличии",
+				tg: "Бақияи анбор",
+				ru: "Остаток на складе",
 			},
 			sold_30d: {
 				tg: "Фурӯхта шуд (30 рӯз)",
 				ru: "Продано (30 дн)",
 			},
 			restock_btn: {
-				tg: "📥 Қабули мол",
-				ru: "📥 Принять остаток",
-			},
-			change_price_btn: {
-				tg: "✏️ Тағйири нарх / Тахфиф",
-				ru: "✏️ Изменить цену / Скидку",
+				tg: "📥 Қабули мол ба анбор",
+				ru: "📦 Оформить приход на склад",
 			},
 			print_tags_btn: {
-				tg: "🏷️ Чопи нархнома",
-				ru: "🏷️ Печать ценников",
+				tg: "🏷️ Чопи нархномаҳо (58x40)",
+				ru: "🏷️ Печать ценников (58x40)",
 			},
 			color: {
 				tg: "Ранг",
@@ -110,12 +115,32 @@ class ProductCatalogApp {
 				ru: "Штрихкод / Код",
 			},
 			add_qty: {
-				tg: "+ Воридот",
-				ru: "+ Приход",
+				tg: "Воридот (+дона)",
+				ru: "Приход (+шт)",
 			},
 			supplier_optional: {
 				tg: "Таъминкунанда (ихтиёрӣ)",
 				ru: "Поставщик (необязательно)",
+			},
+			restock_section: {
+				tg: "📦 Қабули моли нав ба анбор",
+				ru: "📦 Поступление нового товара на склад",
+			},
+			price_section: {
+				tg: "💰 Нархгузорӣ ва Тахфифҳо",
+				ru: "💰 Изменение цен и скидок",
+			},
+			color_all: {
+				tg: "Ҳамаи рангҳо",
+				ru: "Все цвета",
+			},
+			profit: {
+				tg: "Фоида барои 1 дона",
+				ru: "Прибыль на 1 шт",
+			},
+			margin: {
+				tg: "Маржа",
+				ru: "Маржа",
 			},
 		};
 		return (dict[key] && dict[key][this.lang]) || key;
@@ -164,9 +189,9 @@ class ProductCatalogApp {
 					<div class="text-center py-5"><span class="spinner-border text-primary"></span></div>
 				</div>
 
-				<!-- Slide-out Drawer Backdrop & Container -->
-				<div id="drawer-backdrop" class="drawer-backdrop"></div>
-				<div id="product-drawer" class="product-drawer"></div>
+				<!-- Centered Big Modal Backdrop & Container -->
+				<div id="modal-backdrop" class="drawer-backdrop"></div>
+				<div id="product-modal" class="product-modal"></div>
 			</div>
 		`);
 	}
@@ -222,9 +247,9 @@ class ProductCatalogApp {
 			frappe.set_route("Form", "Quick Product Intake", "new-quick-product-intake-1");
 		});
 
-		// Drawer close
-		this.wrapper.find("#drawer-backdrop").on("click", () => {
-			this.close_drawer();
+		// Modal backdrop close
+		this.wrapper.find("#modal-backdrop").on("click", () => {
+			this.close_modal();
 		});
 	}
 
@@ -359,26 +384,29 @@ class ProductCatalogApp {
 			$area.html(table_html);
 		}
 
-		// Click card / row to open drawer
+		// Click card / row to open large modal
 		$area.find("[data-item-code]").on("click", (e) => {
 			const item_code = $(e.currentTarget).attr("data-item-code");
-			this.open_product_drawer(item_code);
+			this.open_product_modal(item_code);
 		});
 	}
 
-	open_product_drawer(item_code) {
-		const $drawer = this.wrapper.find("#product-drawer");
-		const $backdrop = this.wrapper.find("#drawer-backdrop");
+	open_product_modal(item_code) {
+		const $modal = this.wrapper.find("#product-modal");
+		const $backdrop = this.wrapper.find("#modal-backdrop");
+		this.active_color_filter = "ALL";
 
-		$drawer.html(`
-			<div class="text-center py-5" style="margin-top: 150px;">
+		$modal.html(`
+			<div class="text-center py-5" style="margin-top: 80px;">
 				<div class="spinner-border text-primary" role="status"></div>
-				<p style="margin-top: 12px; color: #64748b;">${this.lang === "tg" ? "Боргирӣ шуда истодааст..." : "Загрузка..."}</p>
+				<p style="margin-top: 12px; color: #64748b; font-weight: 600;">
+					${this.lang === "tg" ? "Маълумоти мол боргирӣ шуда истодааст..." : "Загрузка данных товара..."}
+				</p>
 			</div>
 		`);
 
 		$backdrop.addClass("open");
-		$drawer.addClass("open");
+		$modal.addClass("open");
 
 		frappe.call({
 			method: "erpnext.stock.page.product_catalog.product_catalog.get_product_details",
@@ -386,122 +414,131 @@ class ProductCatalogApp {
 			callback: (r) => {
 				if (r.message) {
 					this.active_product = r.message;
-					this.render_drawer_content();
+					this.render_modal_content();
 				}
 			},
 		});
 	}
 
-	close_drawer() {
-		this.wrapper.find("#drawer-backdrop").removeClass("open");
-		this.wrapper.find("#product-drawer").removeClass("open");
+	close_modal() {
+		this.wrapper.find("#modal-backdrop").removeClass("open");
+		this.wrapper.find("#product-modal").removeClass("open");
 		this.active_product = null;
 	}
 
-	render_drawer_content() {
+	render_modal_content() {
 		const p = this.active_product;
-		const $drawer = this.wrapper.find("#product-drawer");
+		const $modal = this.wrapper.find("#product-modal");
 
-		const margin = p.selling_price > 0 ? Math.round(((p.selling_price - p.buying_price) / p.selling_price) * 100) : 0;
-		const profit_per_pc = flt(p.selling_price - p.buying_price, 2);
+		// Extract unique colors for filter pills (Solution 2)
+		const unique_colors = [];
+		(p.variants || []).forEach((v) => {
+			if (v.color && v.color !== "-" && !unique_colors.includes(v.color)) {
+				unique_colors.push(v.color);
+			}
+		});
 
+		// Supplier dropdown options
 		let suppliers_options = `<option value="">-- ${this.t("supplier_optional")} --</option>`;
 		(p.suppliers || []).forEach((sup) => {
 			suppliers_options += `<option value="${sup}">${sup}</option>`;
 		});
 
-		let rows_html = "";
-		p.variants.forEach((v) => {
-			rows_html += `
-				<tr data-variant-code="${v.item_code}">
-					<td style="font-weight: 700;">${v.color || "-"}</td>
-					<td style="font-weight: 700;">${v.size || "-"}</td>
-					<td style="font-family: monospace; color: #64748b;">${v.barcode || v.custom_short_code || "-"}</td>
-					<td style="font-weight: 800; color: ${v.stock_qty <= 0 ? "#dc2626" : "#059669"};">${v.stock_qty}</td>
-					<td style="color: #64748b;">${v.sold_qty}</td>
-					<td>
-						<input type="number" class="input-restock-qty" min="0" placeholder="+ 0" data-code="${v.item_code}">
-					</td>
-				</tr>
-			`;
-		});
+		// Calculate profit margin
+		const profit = flt(p.selling_price - p.buying_price, 2);
+		const margin = p.selling_price > 0 ? Math.round((profit / p.selling_price) * 100) : 0;
 
-		$drawer.html(`
-			<div class="drawer-header">
-				<div>
-					<h3>${p.item_name}</h3>
-					<span class="product-card-category">${p.item_group} | Code: ${p.custom_short_code || p.item_code}</span>
+		$modal.html(`
+			<div class="modal-header-custom">
+				<div style="display: flex; align-items: center; gap: 12px;">
+					<div style="font-size: 28px;">👕</div>
+					<div>
+						<h3>${p.item_name}</h3>
+						<span class="product-card-category">${p.item_group} | Code: ${p.custom_short_code || p.item_code} | ${this.t("stock")}: <b>${p.total_stock}</b></span>
+					</div>
 				</div>
-				<button type="button" class="drawer-close-btn" id="btn-close-drawer">&times;</button>
+				<button type="button" class="modal-close-btn" id="btn-close-modal">&times;</button>
 			</div>
 
-			<div class="drawer-body">
-				<!-- Metrics Bar -->
-				<div class="drawer-metrics">
-					<div class="metric-box">
-						<div class="metric-title">${this.t("retail_price")}</div>
-						<div class="metric-val" style="color: #2563eb;">${p.selling_price} ${p.currency}</div>
+			<div class="modal-body-custom">
+				<!-- Integrated Price & Promo Editor Card -->
+				<div class="price-editor-card">
+					<div class="price-editor-title">
+						<span>${this.t("price_section")}</span>
+						<span id="live-profit-badge" class="profit-live-badge">
+							${this.t("profit")}: +${profit} ${p.currency} (${margin}% ${this.t("margin")})
+						</span>
 					</div>
-					<div class="metric-box">
-						<div class="metric-title">${this.t("cost_price")}</div>
-						<div class="metric-val">${p.buying_price} ${p.currency}</div>
-					</div>
-					<div class="metric-box">
-						<div class="metric-title">${this.lang === "tg" ? "Фоида" : "Маржа"}</div>
-						<div class="metric-val" style="color: #059669;">+${profit_per_pc} (${margin}%)</div>
-					</div>
-					<div class="metric-box">
-						<div class="metric-title">${this.t("stock")}</div>
-						<div class="metric-val" style="color: ${p.total_stock <= 0 ? "#dc2626" : "#0f172a"};">${p.total_stock}</div>
+					<div class="price-editor-grid">
+						<div class="price-field-group">
+							<label>${this.t("retail_price")}</label>
+							<input type="number" id="inp-selling-price" value="${p.selling_price}" step="any">
+						</div>
+						<div class="price-field-group">
+							<label>${this.t("cost_price")}</label>
+							<input type="number" id="inp-buying-price" value="${p.buying_price}" step="any">
+						</div>
+						<div class="price-field-group">
+							<label>${this.t("promo_discount")}</label>
+							<input type="number" id="inp-discount-pct" value="${p.discount_percentage}" min="0" max="100">
+						</div>
+						<button type="button" class="btn-save-prices" id="btn-save-inline-prices">
+							${this.t("save_prices_btn")}
+						</button>
 					</div>
 				</div>
 
-				<!-- Promo alert if active -->
-				${p.discount_percentage > 0 ? `
-					<div class="alert alert-warning py-2 px-3 mb-3" style="border-radius: 8px; font-size: 13px;">
-						🏷️ <b>${this.lang === "tg" ? "Тахфифи фаъол" : "Активная скидка"}:</b> ${p.discount_percentage}%
-						(${this.lang === "tg" ? "Нархи тахфифӣ" : "Цена со скидкой"}: <b>${flt(p.selling_price * (1 - p.discount_percentage / 100), 2)} ${p.currency}</b>)
+				<!-- Restock Section -->
+				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+					<div style="font-size: 15px; font-weight: 800; color: #0f172a;">
+						${this.t("restock_section")}
+					</div>
+					<div style="display: flex; align-items: center; gap: 8px;">
+						<label style="font-size: 12px; font-weight: 600; margin: 0; color: #64748b;">
+							${this.lang === "tg" ? "Таъминкунанда:" : "Поставщик:"}
+						</label>
+						<select id="modal-supplier-select" class="catalog-select" style="padding: 5px 10px; font-size: 12px;">
+							${suppliers_options}
+						</select>
+					</div>
+				</div>
+
+				<!-- Color Filter Pills (Solution 2) -->
+				${unique_colors.length > 1 ? `
+					<div class="color-pills-bar" id="color-pills-container">
+						<button type="button" class="color-pill active" data-color="ALL">
+							${this.t("color_all")} (${p.variants.length})
+						</button>
+						${unique_colors.map((c) => {
+							const count = p.variants.filter((v) => v.color === c).length;
+							return `<button type="button" class="color-pill" data-color="${c}">${c} (${count})</button>`;
+						}).join("")}
 					</div>
 				` : ""}
 
-				<!-- Section: Restock Matrix -->
-				<div class="drawer-section-title">
-					<span>📦 ${this.lang === "tg" ? "Бақияи анбор ва қабули мол" : "Остатки и быстрый приход"}</span>
-					<span style="font-size: 12px; font-weight: normal; color: #64748b;">${p.variants.length} ${this.lang === "tg" ? "навъ" : "вариантов"}</span>
+				<!-- Scrollable Matrix Table with Sticky Header -->
+				<div class="modal-table-scroller">
+					<table class="matrix-modal-table">
+						<thead>
+							<tr>
+								<th>${this.t("color")}</th>
+								<th>${this.t("size")}</th>
+								<th>${this.t("barcode")}</th>
+								<th>${this.t("stock")}</th>
+								<th>${this.t("sold_30d")}</th>
+								<th style="text-align: center; width: 120px;">${this.t("add_qty")}</th>
+							</tr>
+						</thead>
+						<tbody id="matrix-tbody">
+							<!-- Populated by render_matrix_rows -->
+						</tbody>
+					</table>
 				</div>
-
-				<div style="background: #f8fafc; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
-					<label style="font-size: 12px; font-weight: 600; margin: 0; white-space: nowrap; color: #475569;">
-						${this.lang === "tg" ? "Таъминкунанда:" : "Поставщик:"}
-					</label>
-					<select id="drawer-supplier-select" class="catalog-select" style="flex: 1; padding: 6px 10px; font-size: 12px;">
-						${suppliers_options}
-					</select>
-				</div>
-
-				<table class="matrix-drawer-table">
-					<thead>
-						<tr>
-							<th>${this.t("color")}</th>
-							<th>${this.t("size")}</th>
-							<th>${this.t("barcode")}</th>
-							<th>${this.t("stock")}</th>
-							<th>${this.lang === "tg" ? "Фурӯхта шуд" : "Продано"}</th>
-							<th>${this.t("add_qty")}</th>
-						</tr>
-					</thead>
-					<tbody>
-						${rows_html}
-					</tbody>
-				</table>
 			</div>
 
-			<div class="drawer-footer">
-				<button type="button" class="btn btn-secondary btn-sm" id="btn-print-labels">
+			<div class="modal-footer-custom">
+				<button type="button" class="btn btn-secondary" id="btn-print-labels">
 					${this.t("print_tags_btn")}
-				</button>
-				<button type="button" class="btn-action-price" id="btn-edit-prices">
-					${this.t("change_price_btn")}
 				</button>
 				<button type="button" class="btn-action-restock" id="btn-submit-restock">
 					${this.t("restock_btn")}
@@ -509,32 +546,141 @@ class ProductCatalogApp {
 			</div>
 		`);
 
-		// Event handlers for drawer actions
-		$drawer.find("#btn-close-drawer").on("click", () => this.close_drawer());
+		// Render rows
+		this.render_matrix_rows();
 
-		// 1-Click Restock
-		$drawer.find("#btn-submit-restock").on("click", () => {
+		// Bind Modal Events
+		$modal.find("#btn-close-modal").on("click", () => this.close_modal());
+
+		// Live profit recalculation on input
+		const recalc_profit = () => {
+			const sell = flt($modal.find("#inp-selling-price").val());
+			const buy = flt($modal.find("#inp-buying-price").val());
+			const disc = flt($modal.find("#inp-discount-pct").val());
+
+			const net_sell = disc > 0 ? sell * (1 - disc / 100) : sell;
+			const p_amt = flt(net_sell - buy, 2);
+			const p_margin = net_sell > 0 ? Math.round((p_amt / net_sell) * 100) : 0;
+
+			$modal.find("#live-profit-badge").html(
+				`${this.t("profit")}: +${p_amt} ${p.currency} (${p_margin}% ${this.t("margin")})`
+			);
+		};
+		$modal.find("#inp-selling-price, #inp-buying-price, #inp-discount-pct").on("input", recalc_profit);
+
+		// Save Inline Prices Button
+		$modal.find("#btn-save-inline-prices").on("click", () => {
+			this.handle_save_inline_prices();
+		});
+
+		// Color Pills Filtering (Solution 2)
+		$modal.find(".color-pill").on("click", (e) => {
+			$modal.find(".color-pill").removeClass("active");
+			const $btn = $(e.currentTarget);
+			$btn.addClass("active");
+			this.active_color_filter = $btn.attr("data-color");
+			this.render_matrix_rows();
+		});
+
+		// Restock Submit
+		$modal.find("#btn-submit-restock").on("click", () => {
 			this.handle_restock_submit();
 		});
 
-		// 1-Click Price & Promo edit
-		$drawer.find("#btn-edit-prices").on("click", () => {
-			this.handle_price_edit_dialog();
+		// Print Labels
+		$modal.find("#btn-print-labels").on("click", () => {
+			this.handle_print_labels_dialog();
+		});
+	}
+
+	render_matrix_rows() {
+		const p = this.active_product;
+		const $tbody = this.wrapper.find("#matrix-tbody");
+		const filter = this.active_color_filter;
+
+		const filtered_variants = (p.variants || []).filter((v) => {
+			if (!filter || filter === "ALL") return true;
+			return v.color === filter;
 		});
 
-		// Print Labels
-		$drawer.find("#btn-print-labels").on("click", () => {
-			this.handle_print_labels_dialog();
+		if (filtered_variants.length === 0) {
+			$tbody.html(`
+				<tr>
+					<td colspan="6" class="text-center text-muted py-4">
+						${this.lang === "tg" ? "Ҳеҷ андоза барои ин ранг ёфт нашуд." : "Нет размеров для данного цвета."}
+					</td>
+				</tr>
+			`);
+			return;
+		}
+
+		let rows_html = "";
+		filtered_variants.forEach((v) => {
+			const is_out = v.stock_qty <= 0;
+			rows_html += `
+				<tr data-variant-code="${v.item_code}">
+					<td style="font-weight: 700; color: #1e293b;">${v.color || "-"}</td>
+					<td style="font-weight: 700; color: #1e293b;">${v.size || "-"}</td>
+					<td style="font-family: monospace; color: #64748b;">${v.barcode || v.custom_short_code || "-"}</td>
+					<td style="font-weight: 800; color: ${is_out ? "#dc2626" : "#059669"};">
+						${v.stock_qty} ${is_out ? "⚠️" : ""}
+					</td>
+					<td style="color: #64748b;">${v.sold_qty}</td>
+					<td style="text-align: center;">
+						<input type="number" class="input-restock-qty" min="0" placeholder="+ 0" data-code="${v.item_code}">
+					</td>
+				</tr>
+			`;
+		});
+
+		$tbody.html(rows_html);
+	}
+
+	handle_save_inline_prices() {
+		const p = this.active_product;
+		const $modal = this.wrapper.find("#product-modal");
+
+		const selling_price = flt($modal.find("#inp-selling-price").val());
+		const buying_price = flt($modal.find("#inp-buying-price").val());
+		const discount_pct = flt($modal.find("#inp-discount-pct").val());
+
+		if (selling_price <= 0) {
+			frappe.msgprint(this.lang === "tg" ? "Нархи фурӯш бояд аз 0 калон бошад!" : "Цена продажи должна быть больше 0!");
+			return;
+		}
+
+		frappe.call({
+			method: "erpnext.stock.page.product_catalog.product_catalog.update_prices_and_discount",
+			args: {
+				item_code: p.item_code,
+				selling_price: selling_price,
+				buying_price: buying_price,
+				discount_percentage: discount_pct,
+			},
+			freeze: true,
+			freeze_message: this.lang === "tg" ? "Нархҳо сабт шуда истодаанд..." : "Обновление цен...",
+			callback: (r) => {
+				if (r.message && r.message.success) {
+					frappe.show_alert({
+						message: this.lang === "tg" ? "Нарх ва тахфиф бо муваффақият навсозӣ шуданд!" : "Цены и скидки успешно обновлены!",
+						indicator: "green",
+					});
+					this.load_catalog();
+					p.selling_price = selling_price;
+					p.buying_price = buying_price;
+					p.discount_percentage = discount_pct;
+				}
+			},
 		});
 	}
 
 	handle_restock_submit() {
 		const p = this.active_product;
-		const $drawer = this.wrapper.find("#product-drawer");
-		const supplier = $drawer.find("#drawer-supplier-select").val() || null;
+		const $modal = this.wrapper.find("#product-modal");
+		const supplier = $modal.find("#modal-supplier-select").val() || null;
 
 		const items_to_restock = [];
-		$drawer.find(".input-restock-qty").each((_, input) => {
+		$modal.find(".input-restock-qty").each((_, input) => {
 			const qty = flt($(input).val());
 			const code = $(input).attr("data-code");
 			if (qty > 0) {
@@ -547,7 +693,11 @@ class ProductCatalogApp {
 		});
 
 		if (items_to_restock.length === 0) {
-			frappe.msgprint(this.lang === "tg" ? "Лутфан миқдори воридотро барои ҳадди ақал як андоза ворид намоед." : "Пожалуйста, введите количество прихода хотя бы для одного размера.");
+			frappe.msgprint(
+				this.lang === "tg"
+					? "Лутфан миқдори воридотро барои ҳадди ақал як андоза ворид намоед."
+					: "Пожалуйста, введите количество прихода хотя бы для одного размера."
+			);
 			return;
 		}
 
@@ -571,67 +721,14 @@ class ProductCatalogApp {
 								message: this.lang === "tg" ? "Молҳо бо муваффақият ба анбор қабул шуданд!" : "Товары успешно приняты на склад!",
 								indicator: "green",
 							});
-							// Reload product drawer and main catalog
-							this.open_product_drawer(p.item_code);
+							// Reload modal and main catalog
+							this.open_product_modal(p.item_code);
 							this.load_catalog();
 						}
 					},
 				});
 			}
 		);
-	}
-
-	handle_price_edit_dialog() {
-		const p = this.active_product;
-		const d = new frappe.ui.Dialog({
-			title: this.lang === "tg" ? `Тағйири нархи: ${p.item_name}` : `Изменение цены: ${p.item_name}`,
-			fields: [
-				{
-					fieldname: "selling_price",
-					fieldtype: "Currency",
-					label: this.t("retail_price"),
-					default: p.selling_price,
-					reqd: 1,
-				},
-				{
-					fieldname: "buying_price",
-					fieldtype: "Currency",
-					label: this.t("cost_price"),
-					default: p.buying_price,
-				},
-				{
-					fieldname: "discount_percentage",
-					fieldtype: "Percent",
-					label: this.lang === "tg" ? "Тахфифи аксионӣ % (0 = бе тахфиф)" : "Промо скидка % (0 = без скидки)",
-					default: p.discount_percentage,
-				},
-			],
-			primary_action_label: this.lang === "tg" ? "Сабт ва Навсозӣ" : "Сохранить и Обновить",
-			primary_action: (values) => {
-				frappe.call({
-					method: "erpnext.stock.page.product_catalog.product_catalog.update_prices_and_discount",
-					args: {
-						item_code: p.item_code,
-						selling_price: values.selling_price,
-						buying_price: values.buying_price,
-						discount_percentage: values.discount_percentage,
-					},
-					freeze: true,
-					callback: (r) => {
-						if (r.message && r.message.success) {
-							d.hide();
-							frappe.show_alert({
-								message: this.lang === "tg" ? "Нарх ва тахфиф навсозӣ шуданд!" : "Цена и скидка обновлены!",
-								indicator: "green",
-							});
-							this.open_product_drawer(p.item_code);
-							this.load_catalog();
-						}
-					},
-				});
-			},
-		});
-		d.show();
 	}
 
 	handle_print_labels_dialog() {
@@ -656,7 +753,6 @@ class ProductCatalogApp {
 			primary_action_label: this.lang === "tg" ? "Чоп кардан" : "Печать",
 			primary_action: (values) => {
 				d.hide();
-				// Open Frappe Print View
 				const print_url = `/printview?doctype=Item&name=${encodeURIComponent(p.item_code)}&format=${encodeURIComponent(values.label_template)}&no_letterhead=1`;
 				window.open(print_url, "_blank");
 			},
