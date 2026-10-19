@@ -1,0 +1,126 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-19 21:30:00.000000",
+ "doctype": "DocType",
+ "document_type": "Other",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "color",
+  "size",
+  "current_stock",
+  "qty",
+  "buying_price",
+  "old_selling_price",
+  "selling_price",
+  "item_code",
+  "custom_short_code",
+  "barcode",
+  "is_new_variant"
+ ],
+ "fields": [
+  {
+   "columns": 1,
+   "fieldname": "color",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Color",
+   "read_only_depends_on": "eval:!doc.is_new_variant"
+  },
+  {
+   "columns": 1,
+   "fieldname": "size",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Size",
+   "read_only_depends_on": "eval:!doc.is_new_variant"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "description": "Current stock in all warehouses",
+   "fieldname": "current_stock",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Stock Now",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "description": "Pieces that arrived in THIS delivery",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Received Qty (+)"
+  },
+  {
+   "columns": 2,
+   "description": "Cost per piece in THIS delivery",
+   "fieldname": "buying_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Cost (This Delivery)"
+  },
+  {
+   "columns": 2,
+   "fieldname": "old_selling_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Old Retail Price",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "description": "Price customers will pay from now on",
+   "fieldname": "selling_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "NEW Retail Price",
+   "reqd": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item",
+   "no_copy": 1,
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "custom_short_code",
+   "fieldtype": "Data",
+   "label": "Short Code",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "barcode",
+   "fieldtype": "Data",
+   "label": "Barcode",
+   "read_only_depends_on": "eval:!doc.is_new_variant"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_new_variant",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "New Size / Color"
+  }
+ ],
+ "grid_page_length": 50,
+ "idx": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-19 21:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Stock",
+ "name": "Quick Product Restock Item",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}
