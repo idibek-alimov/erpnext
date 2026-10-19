@@ -13,12 +13,21 @@ frappe.ui.form.on("Quick Product Intake", {
 		});
 	},
 
+	onload(frm) {
+		set_default_warehouse(frm);
+		if (frm.doc.discount_percentage && frm.doc.discount_percentage > 0) {
+			frm.set_value("create_pricing_rule", 1);
+		}
+	},
+
 	refresh(frm) {
+		set_default_warehouse(frm);
+
 		if (frm.doc.docstatus === 0) {
 			if (frm.doc.has_variants) {
 				frm.add_custom_button(__("⚡ Generate Matrix Rows"), () => {
 					generate_matrix_rows(frm);
-				}, __("Matrix Actions"));
+				}).addClass("btn-primary");
 
 				frm.add_custom_button(__("Fill Same Qty for All"), () => {
 					fill_all_quantities(frm);
@@ -52,29 +61,117 @@ frappe.ui.form.on("Quick Product Intake", {
 		}
 	},
 
+	generate_matrix_btn(frm) {
+		generate_matrix_rows(frm);
+	},
+
 	company(frm) {
-		if (frm.doc.company) {
-			frappe.call({
-				method: "frappe.client.get_list",
-				args: {
-					doctype: "Warehouse",
-					filters: {
-						company: frm.doc.company,
-						is_group: 0,
-					},
-					fields: ["name", "warehouse_name"],
-					limit_page_length: 20,
-				},
-				callback: function (r) {
-					if (r.message && r.message.length > 0 && !frm.doc.target_warehouse) {
-						const preferred = r.message.find(w => ["Stores", "Finished Goods"].includes(w.warehouse_name));
-						frm.set_value("target_warehouse", preferred ? preferred.name : r.message[0].name);
-					}
-				},
+		set_default_warehouse(frm, true);
+	},
+
+	discount_percentage(frm) {
+		if (frm.doc.discount_percentage && frm.doc.discount_percentage > 0) {
+			frm.set_value("create_pricing_rule", 1);
+		} else {
+			frm.set_value("create_pricing_rule", 0);
+		}
+	},
+
+	selling_price(frm) {
+		if (frm.doc.items && frm.doc.items.length > 0) {
+			frm.doc.items.forEach(row => {
+				frappe.model.set_value(row.doctype, row.name, "selling_price", frm.doc.selling_price || 0);
 			});
+			frm.refresh_field("items");
+		}
+	},
+
+	buying_price(frm) {
+		if (frm.doc.items && frm.doc.items.length > 0) {
+			frm.doc.items.forEach(row => {
+				frappe.model.set_value(row.doctype, row.name, "buying_price", frm.doc.buying_price || 0);
+			});
+			frm.refresh_field("items");
+		}
+	},
+
+	has_variants(frm) {
+		if (!frm.doc.has_variants) {
+			if (!frm.doc.items || frm.doc.items.length === 0) {
+				const row = frm.add_child("items");
+				row.variant_title = frm.doc.item_name || "";
+				row.buying_price = frm.doc.buying_price || 0;
+				row.selling_price = frm.doc.selling_price || 0;
+				row.qty = 0;
+				frm.refresh_field("items");
+			}
+		}
+	},
+
+	item_name(frm) {
+		if (!frm.doc.has_variants && frm.doc.items && frm.doc.items.length === 1) {
+			frappe.model.set_value(frm.doc.items[0].doctype, frm.doc.items[0].name, "variant_title", frm.doc.item_name || "");
+			frm.refresh_field("items");
 		}
 	},
 });
+
+frappe.ui.form.on("Quick Product Intake Item", {
+	items_add(frm, cdt, cdn) {
+		const row = frappe.get_doc(cdt, cdn);
+		if (!row.selling_price && frm.doc.selling_price) {
+			frappe.model.set_value(cdt, cdn, "selling_price", frm.doc.selling_price);
+		}
+		if (!row.buying_price && frm.doc.buying_price) {
+			frappe.model.set_value(cdt, cdn, "buying_price", frm.doc.buying_price);
+		}
+	},
+});
+
+function set_default_warehouse(frm, force = false) {
+	if (!frm.doc.company) {
+		const default_comp = frappe.defaults.get_default("company") || frappe.defaults.get_user_default("Company");
+		if (default_comp) {
+			frm.set_value("company", default_comp);
+		}
+	}
+
+	const current_wh = frm.doc.target_warehouse || "";
+	const needs_stores_wh = !current_wh || force || current_wh.includes("Finished Goods");
+
+	if (frm.doc.company && needs_stores_wh) {
+		frappe.call({
+			method: "frappe.client.get_list",
+			args: {
+				doctype: "Warehouse",
+				filters: {
+					company: frm.doc.company,
+					is_group: 0,
+				},
+				fields: ["name", "warehouse_name"],
+				limit_page_length: 50,
+			},
+			callback: function (r) {
+				if (r.message && r.message.length > 0) {
+					// 1. Strict match for warehouse named "Stores"
+					let preferred = r.message.find(w => w.warehouse_name === "Stores");
+					// 2. Match warehouse with "store" in warehouse_name or name
+					if (!preferred) {
+						preferred = r.message.find(w =>
+							(w.warehouse_name && w.warehouse_name.toLowerCase().includes("store")) ||
+							(w.name && w.name.toLowerCase().includes("store"))
+						);
+					}
+					// 3. Fallback only if no stores warehouse exists
+					const selected = preferred ? preferred.name : r.message[0].name;
+					if (frm.doc.target_warehouse !== selected) {
+						frm.set_value("target_warehouse", selected);
+					}
+				}
+			},
+		});
+	}
+}
 
 function parse_items_list(text) {
 	if (!text) return [];
@@ -121,7 +218,7 @@ function generate_matrix_rows(frm) {
 
 	frm.refresh_field("items");
 	frappe.show_alert({
-		message: __("{0} matrix rows generated successfully.", [frm.doc.items.length]),
+		message: __("{0} matrix rows generated with Retail Price {1}.", [frm.doc.items.length, frm.doc.selling_price || 0]),
 		indicator: "green",
 	});
 }

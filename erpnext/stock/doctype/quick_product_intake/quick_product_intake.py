@@ -12,6 +12,13 @@ class QuickProductIntake(Document):
 		self.validate_prices()
 		self.set_company_defaults()
 		self.validate_matrix_items()
+		self.validate_promotional_discount()
+
+	def validate_promotional_discount(self):
+		if self.discount_percentage and self.discount_percentage > 0:
+			self.create_pricing_rule = 1
+		else:
+			self.create_pricing_rule = 0
 
 	def validate_prices(self):
 		if not self.buying_price or self.buying_price <= 0:
@@ -25,15 +32,33 @@ class QuickProductIntake(Document):
 				"Global Defaults", "default_company"
 			)
 
-		if not self.target_warehouse and self.company:
-			self.target_warehouse = frappe.db.get_value(
-				"Warehouse",
-				{"company": self.company, "is_group": 0, "warehouse_name": ["in", ["Stores", "Finished Goods"]]},
-				"name",
-			) or frappe.db.get_value(
-				"Warehouse",
-				{"company": self.company, "is_group": 0},
-				"name",
+		if self.company and (not self.target_warehouse or "Finished Goods" in (self.target_warehouse or "")):
+			self.target_warehouse = (
+				frappe.db.get_value(
+					"Warehouse",
+					{"company": self.company, "is_group": 0, "warehouse_name": "Stores"},
+					"name",
+				)
+				or frappe.db.get_value(
+					"Warehouse",
+					{"company": self.company, "is_group": 0, "name": ["like", "%Stores%"]},
+					"name",
+				)
+				or frappe.db.get_value(
+					"Warehouse",
+					{"company": self.company, "is_group": 0, "name": ["like", "%Store%"]},
+					"name",
+				)
+				or frappe.db.get_value(
+					"Warehouse",
+					{"company": self.company, "is_group": 0, "warehouse_name": "Finished Goods"},
+					"name",
+				)
+				or frappe.db.get_value(
+					"Warehouse",
+					{"company": self.company, "is_group": 0},
+					"name",
+				)
 			)
 
 	def validate_matrix_items(self):
@@ -303,7 +328,7 @@ class QuickProductIntake(Document):
 			self.db_set("stock_entry", se.name)
 
 	def process_promotional_discount(self):
-		if not (self.discount_percentage and self.discount_percentage > 0 and self.create_pricing_rule):
+		if not (self.discount_percentage and self.discount_percentage > 0):
 			return
 
 		rule = frappe.new_doc("Pricing Rule")
