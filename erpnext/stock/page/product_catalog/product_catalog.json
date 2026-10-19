@@ -1,0 +1,31 @@
+{
+ "content": null,
+ "creation": "2026-10-19 17:30:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-10-19 17:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Stock",
+ "name": "product-catalog",
+ "owner": "Administrator",
+ "page_name": "product-catalog",
+ "roles": [
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Sales User"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "title": "Каталоги молҳо (Каталог товаров)"
+}
