@@ -49,7 +49,7 @@ class ProductCatalogApp {
 			stock: { tg: "Бақияи анбор", ru: "Остаток на складе" },
 			sold_30d: { tg: "Фурӯхта шуд (30 рӯз)", ru: "Продано (30 дн)" },
 			receive_btn: { tg: "📥 Қабули мол", ru: "📥 Приёмка товара" },
-			edit_btn: { tg: "✏️ Таҳрир", ru: "✏️ Изменить" },
+			edit_btn: { tg: "👁 Кушодан", ru: "👁 Открыть" },
 			from: { tg: "аз", ru: "от" },
 		};
 		return (dict[key] && dict[key][this.lang]) || key;
@@ -212,7 +212,7 @@ class ProductCatalogApp {
 				const variant_info = p.has_variants ? `(${p.variant_count} ${this.lang === "tg" ? "андоза/ранг" : "размеров"})` : "";
 
 				cards_html += `
-					<div class="product-card" style="cursor: default;">
+					<div class="product-card" style="cursor: pointer;" data-open-item="${p.item_code}">
 						<div class="product-card-header">
 							<div class="product-card-img">
 								${p.image ? `<img src="${p.image}" style="width: 100%; height: 100%; border-radius: 8px; object-fit: cover;">` : "👕"}
@@ -267,7 +267,7 @@ class ProductCatalogApp {
 				const promo_tag = p.discount_percentage > 0 ? `<span class="promo-badge">-${p.discount_percentage}%</span>` : "";
 
 				table_html += `
-					<tr style="cursor: default;">
+					<tr style="cursor: pointer;" data-open-item="${p.item_code}">
 						<td style="color: #94a3b8; font-weight: 600;">${p.custom_short_code || idx + 1}</td>
 						<td style="font-weight: 700;">${p.item_name} ${p.has_variants ? `(${p.variant_count})` : ""}</td>
 						<td><span class="product-card-category">${p.item_group}</span></td>
@@ -295,8 +295,13 @@ class ProductCatalogApp {
 			if ($btn.attr("data-action") === "restock") {
 				frappe.new_doc("Quick Product Restock", { item: item_code });
 			} else {
-				frappe.set_route("Form", "Item", item_code);
+				frappe.set_route("product-detail", item_code);
 			}
+			e.stopPropagation();
+		});
+
+		$area.find("[data-open-item]").on("click", (e) => {
+			frappe.set_route("product-detail", $(e.currentTarget).attr("data-open-item"));
 		});
 	}
 }

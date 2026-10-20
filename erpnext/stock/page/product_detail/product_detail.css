@@ -1,0 +1,243 @@
+/* Simplified Product Detail - Clean ERPNext Native Form Look */
+
+.product-detail-container {
+	padding: 24px 32px 48px;
+	max-width: 1180px;
+	margin: 0 auto;
+}
+
+.product-detail-page .pd-card {
+	background: #ffffff;
+	border: 1px solid #e2e8f0;
+	border-radius: 12px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+	padding: 28px 32px;
+}
+
+/* --- Top Header / Image + Info Split --- */
+.pd-main-grid {
+	display: flex;
+	gap: 36px;
+	align-items: flex-start;
+}
+
+.pd-image-col {
+	width: 250px;
+	min-width: 250px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.product-detail-page .pd-image-box {
+	width: 100%;
+	height: 250px;
+	border: 1px solid #e2e8f0;
+	border-radius: 10px;
+	background: #f8fafc;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	position: relative;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.product-detail-page .pd-image-box:hover {
+	border-color: #94a3b8;
+	background: #f1f5f9;
+}
+
+.product-detail-page .pd-image-box img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.product-detail-page .pd-no-photo {
+	text-align: center;
+	color: #94a3b8;
+	padding: 16px;
+}
+
+.product-detail-page .pd-abbr {
+	font-size: 52px;
+	font-weight: 700;
+	color: #cbd5e1;
+	line-height: 1;
+	margin-bottom: 8px;
+}
+
+.pd-upload-btn {
+	margin-top: 12px;
+	width: 100%;
+	padding: 8px 14px;
+	font-size: 13px;
+	font-weight: 600;
+	color: #334155;
+	background: #ffffff;
+	border: 1px solid #cbd5e1;
+	border-radius: 8px;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	transition: all 0.15s ease;
+}
+
+.pd-upload-btn:hover {
+	background: #f8fafc;
+	border-color: #94a3b8;
+	color: #0f172a;
+}
+
+/* Fields Grid */
+.pd-fields-col {
+	flex: 1;
+}
+
+.pd-fields-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 16px 28px;
+}
+
+.pd-fields-grid .frappe-control {
+	margin-bottom: 8px !important;
+}
+
+.pd-fields-grid .frappe-control .control-label {
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: #64748b;
+	margin-bottom: 6px;
+}
+
+.pd-fields-grid .frappe-control .control-value {
+	font-size: 15px;
+	font-weight: 600;
+	color: #0f172a;
+}
+
+/* --- Section Dividers --- */
+.pd-divider {
+	border: 0;
+	border-top: 1px solid #e2e8f0;
+	margin: 28px 0 24px;
+}
+
+.pd-section-title {
+	font-size: 15px;
+	font-weight: 700;
+	color: #0f172a;
+	margin-bottom: 14px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+/* --- Color Selector Section --- */
+.pd-color-section {
+	margin-top: 4px;
+}
+
+.pd-color-wrapper {
+	max-width: 360px;
+}
+
+.pd-color-wrapper .control-label {
+	font-size: 13px;
+	font-weight: 600;
+	color: #334155;
+	margin-bottom: 6px;
+}
+
+/* --- Sizes Table --- */
+.pd-sizes-section {
+	margin-top: 24px;
+}
+
+.pd-table-wrap {
+	border: 1px solid #e2e8f0;
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+.product-detail-page .pd-table {
+	margin-bottom: 0;
+	width: 100%;
+}
+
+.product-detail-page .pd-table th {
+	background: #f8fafc;
+	font-size: 12px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: #475569;
+	padding: 12px 16px;
+	border-bottom: 1px solid #e2e8f0;
+	border-top: none;
+}
+
+.product-detail-page .pd-table td {
+	padding: 12px 16px;
+	font-size: 14px;
+	color: #1e293b;
+	border-top: 1px solid #f1f5f9;
+	vertical-align: middle;
+}
+
+.product-detail-page .pd-table tbody tr:hover td {
+	background-color: #f8fafc;
+}
+
+.product-detail-page .pd-num {
+	font-weight: 700;
+	font-size: 15px;
+}
+
+.product-detail-page .pd-table tfoot td {
+	background: #f8fafc;
+	border-top: 2px solid #e2e8f0;
+	padding: 14px 16px;
+	font-size: 14px;
+}
+
+.product-detail-page .pd-hint {
+	padding: 32px 16px;
+	text-align: center;
+	color: #64748b;
+	background: #f8fafc;
+	border: 1px dashed #cbd5e1;
+	border-radius: 10px;
+	font-size: 14px;
+}
+
+/* Indicator Badges */
+.product-detail-page .indicator-pill {
+	display: inline-block;
+	padding: 3px 10px;
+	border-radius: 12px;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.product-detail-page .indicator-pill.green {
+	background: #ecfdf5;
+	color: #047857;
+}
+
+.product-detail-page .indicator-pill.orange {
+	background: #fffbeb;
+	color: #b45309;
+}
+
+.product-detail-page .indicator-pill.red {
+	background: #fef2f2;
+	color: #b91c1c;
+}
