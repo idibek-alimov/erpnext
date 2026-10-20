@@ -24,6 +24,7 @@ class ProductDetailApp {
 		this.$body = $(page.body).addClass("product-detail-page");
 		this.item_code = null;
 		this.selected_color = null;
+		this.sales_chart = null;
 
 		this.page.set_secondary_action(__("Back to Catalog"), () => frappe.set_route("product-catalog"));
 		this.page.add_menu_item(__("Open full Item form (advanced)"), () => {
@@ -41,7 +42,6 @@ class ProductDetailApp {
 			total_sold: { tg: "Фурӯхта шуд (ҳамагӣ)", ru: "Продано (всего)" },
 			color: { tg: "Интихоби ранг", ru: "Выбор цвета" },
 			color_section_title: { tg: "Ранг ва андозаҳо", ru: "Цвет и размеры" },
-			pick_color: { tg: "— Рангро интихоб кунед —", ru: "— Выберите цвет —" },
 			pick_color_hint: {
 				tg: "Барои дидани андозаҳо ва бақия, лутфан рангро интихоб кунед.",
 				ru: "Пожалуйста, выберите цвет, чтобы увидеть размеры и остатки.",
@@ -63,6 +63,16 @@ class ProductDetailApp {
 			upload_photo: { tg: "📷 Боргирии акс", ru: "📷 Загрузить фото" },
 			change_photo: { tg: "📷 Тағйири акс", ru: "📷 Изменить фото" },
 			photo_saved: { tg: "Акс бомуваффақият сабт шуд!", ru: "Фото успешно сохранено!" },
+			revenue: { tg: "Маблағи фурӯш", ru: "Выручка" },
+			profit: { tg: "Фоидаи соф", ru: "Валовая прибыль" },
+			margin: { tg: "Фоизи маржа", ru: "Маржинальность" },
+			sales_30d: { tg: "Фурӯш (30 рӯз)", ru: "Продажи (30 дней)" },
+			top_sizes_label: { tg: "Хит-андозаҳо", ru: "Хит-размеры" },
+			top_colors_label: { tg: "Хит-рангҳо", ru: "Хит-цвета" },
+			chart_title: { tg: "Динамикаи фурӯш (30 рӯзи охир)", ru: "Динамика продаж (последние 30 дней)" },
+			runway_prefix: { tg: "Бақия мерасад барои: ~", ru: "Хватит на: ~" },
+			days: { tg: "рӯз", ru: "дн." },
+			items_per_day: { tg: "дона/рӯз", ru: "шт/день" },
 		};
 		return (d[key] && d[key][this.lang]) || key;
 	}
@@ -93,6 +103,7 @@ class ProductDetailApp {
 		this.$body.html(`
 			<div class="product-detail-container">
 				<div class="pd-card">
+					<!-- Top Section: Image + Info Fields -->
 					<div class="pd-main-grid">
 						<div class="pd-image-col">
 							<div class="pd-image-box" title="${this.t("change_photo")}"></div>
@@ -109,22 +120,42 @@ class ProductDetailApp {
 								<div class="pd-field-item pd-f-stock"></div>
 								<div class="pd-field-item pd-f-sold"></div>
 							</div>
+
+							<!-- Best Seller Highlights (Top Colors & Sizes) -->
+							<div class="pd-highlights-row" id="pd-highlights"></div>
 						</div>
+					</div>
+
+					<!-- Financial & Stats Summary Cards -->
+					<div class="pd-stats-row" id="pd-stats-row"></div>
+
+					<!-- 30-Day Sales Chart -->
+					<div class="pd-chart-container">
+						<div class="pd-chart-header">
+							<span class="pd-chart-title">📊 ${this.t("chart_title")}</span>
+							<span class="pd-chart-runway" id="pd-chart-runway"></span>
+						</div>
+						<div id="pd-sales-chart-wrapper" style="height: 190px;"></div>
 					</div>
 
 					<div class="pd-divider pd-color-divider"></div>
 
+					<!-- Color Picker Section -->
 					<div class="pd-color-section">
 						<div class="pd-section-title">${this.t("color_section_title")}</div>
 						<div class="pd-color-wrapper"></div>
 					</div>
 
+					<!-- Sizes Table -->
 					<div class="pd-sizes-section"></div>
 				</div>
 			</div>
 		`);
 
 		this.make_info_fields();
+		this.update_stats_cards(null);
+		this.render_highlights(null);
+		this.render_sales_chart(null);
 		this.bind_image_events();
 
 		const has_colors = d.colors.some((c) => c.color);
@@ -159,12 +190,179 @@ class ProductDetailApp {
 
 	make_info_fields() {
 		const d = this.data;
-		this.make_ctl(this.$body.find(".pd-f-name"), { fieldtype: "Data", fieldname: "item_name", label: this.t("product_name") }, d.item_name);
-		this.make_ctl(this.$body.find(".pd-f-code"), { fieldtype: "Data", fieldname: "short_code", label: this.t("code") }, d.short_code || d.item_code);
-		this.make_ctl(this.$body.find(".pd-f-cat"), { fieldtype: "Link", options: "Item Group", fieldname: "item_group", label: this.t("category") }, d.item_group);
-		this.make_ctl(this.$body.find(".pd-f-supp"), { fieldtype: "Link", options: "Supplier", fieldname: "supplier", label: this.t("supplier") }, d.supplier || "");
-		this.make_ctl(this.$body.find(".pd-f-stock"), { fieldtype: "Float", fieldname: "total_stock", label: this.t("total_stock") }, d.total_stock);
-		this.make_ctl(this.$body.find(".pd-f-sold"), { fieldtype: "Float", fieldname: "total_sold", label: this.t("total_sold") }, d.total_sold);
+		this.ctl_name = this.make_ctl(this.$body.find(".pd-f-name"), { fieldtype: "Data", fieldname: "item_name", label: this.t("product_name") }, d.item_name);
+		this.ctl_code = this.make_ctl(this.$body.find(".pd-f-code"), { fieldtype: "Data", fieldname: "short_code", label: this.t("code") }, d.short_code || d.item_code);
+		this.ctl_cat = this.make_ctl(this.$body.find(".pd-f-cat"), { fieldtype: "Link", options: "Item Group", fieldname: "item_group", label: this.t("category") }, d.item_group);
+		this.ctl_supp = this.make_ctl(this.$body.find(".pd-f-supp"), { fieldtype: "Link", options: "Supplier", fieldname: "supplier", label: this.t("supplier") }, d.supplier || "");
+		this.ctl_stock = this.make_ctl(this.$body.find(".pd-f-stock"), { fieldtype: "Float", fieldname: "total_stock", label: this.t("total_stock") }, d.total_stock);
+		this.ctl_sold = this.make_ctl(this.$body.find(".pd-f-sold"), { fieldtype: "Float", fieldname: "total_sold", label: this.t("total_sold") }, d.total_sold);
+	}
+
+	update_stats_cards(colorObj = null) {
+		const d = this.data;
+		const cur = d.currency;
+		const $row = this.$body.find("#pd-stats-row");
+
+		const revenue = colorObj ? colorObj.revenue : d.total_revenue;
+		const sold = colorObj ? colorObj.sold : d.total_sold;
+		const profit = colorObj ? colorObj.profit : d.total_profit;
+		const margin = colorObj ? colorObj.margin_pct : d.margin_pct;
+		const sold_30d = colorObj ? colorObj.sold_last_30d : d.sold_last_30d;
+		const velocity = colorObj ? colorObj.velocity_per_day : d.velocity_per_day;
+		const runway = colorObj ? colorObj.runway_days : d.runway_days;
+
+		const runwayText = runway < 900 ? `${this.t("runway_prefix")}${runway} ${this.t("days")}` : "";
+		const scopeLabel = colorObj ? ` <span style="font-weight: 500; font-size: 11px; color: #2563eb;">(${colorObj.color})</span>` : "";
+
+		$row.html(`
+			<div class="pd-stat-card">
+				<div class="pd-stat-label">${this.t("revenue")}${scopeLabel}</div>
+				<div class="pd-stat-value">${format_currency(revenue, cur)}</div>
+				<div class="pd-stat-sub">${sold} ${this.lang === "tg" ? "дона фурӯхта шуд" : "шт. продано"}</div>
+			</div>
+			<div class="pd-stat-card">
+				<div class="pd-stat-label">${this.t("profit")}${scopeLabel}</div>
+				<div class="pd-stat-value" style="color: #10b981;">+${format_currency(profit, cur)}</div>
+				<div class="pd-stat-sub">${this.t("margin")}: ${margin}%</div>
+			</div>
+			<div class="pd-stat-card">
+				<div class="pd-stat-label">${this.t("sales_30d")}${scopeLabel}</div>
+				<div class="pd-stat-value">${sold_30d} <span style="font-size: 14px; font-weight: 500;">(${velocity} ${this.t("items_per_day")})</span></div>
+				<div class="pd-stat-sub" style="color: #2563eb;">${runwayText}</div>
+			</div>
+		`);
+
+		const $runwayEl = this.$body.find("#pd-chart-runway");
+		if (runwayText) {
+			$runwayEl.html(`⏱️ ${runwayText}${scopeLabel}`).show();
+		} else {
+			$runwayEl.hide();
+		}
+
+		// Also update the stock/sold fields in info grid
+		if (this.ctl_stock) {
+			this.ctl_stock.set_value(colorObj ? colorObj.stock : d.total_stock);
+		}
+		if (this.ctl_sold) {
+			this.ctl_sold.set_value(colorObj ? colorObj.sold : d.total_sold);
+		}
+	}
+
+	render_highlights(colorObj = null) {
+		const d = this.data;
+		const $h = this.$body.find("#pd-highlights");
+		let html = "";
+
+		// If a color is selected: HIDE the hit color stat completely, show top sizes for this color
+		if (colorObj) {
+			const sizes = colorObj.top_sizes || [];
+			if (sizes.length > 0) {
+				html += `
+					<div class="pd-highlight-group">
+						<span class="pd-highlight-title">🏆 ${this.t("top_sizes_label")} (${colorObj.color}):</span>
+						${sizes
+							.map(
+								(s, i) => `
+							<span class="pd-rank-item">
+								<span class="pd-rank-tag">#${i + 1}</span>
+								<span class="pd-rank-val">${frappe.utils.escape_html(s.name)}</span>
+								<span class="pd-rank-pct">(${s.qty} ${this.lang === "tg" ? "дона" : "шт"}, ${s.pct}%)</span>
+							</span>
+						`
+							)
+							.join("")}
+					</div>
+				`;
+			}
+		} else {
+			// No color chosen: show Top Colors AND Top Sizes overall
+			if (d.top_colors && d.top_colors.length > 0) {
+				html += `
+					<div class="pd-highlight-group">
+						<span class="pd-highlight-title">🎨 ${this.t("top_colors_label")}:</span>
+						${d.top_colors
+							.map(
+								(c, i) => `
+							<span class="pd-rank-item">
+								<span class="pd-rank-tag">#${i + 1}</span>
+								<span class="pd-rank-val">${frappe.utils.escape_html(c.name)}</span>
+								<span class="pd-rank-pct">(${c.qty} ${this.lang === "tg" ? "дона" : "шт"}, ${c.pct}%)</span>
+							</span>
+						`
+							)
+							.join("")}
+					</div>
+				`;
+			}
+
+			if (d.top_sizes && d.top_sizes.length > 0) {
+				html += `
+					<div class="pd-highlight-group">
+						<span class="pd-highlight-title">🏆 ${this.t("top_sizes_label")}:</span>
+						${d.top_sizes
+							.map(
+								(s, i) => `
+							<span class="pd-rank-item">
+								<span class="pd-rank-tag">#${i + 1}</span>
+								<span class="pd-rank-val">${frappe.utils.escape_html(s.name)}</span>
+								<span class="pd-rank-pct">(${s.qty} ${this.lang === "tg" ? "дона" : "шт"}, ${s.pct}%)</span>
+							</span>
+						`
+							)
+							.join("")}
+					</div>
+				`;
+			}
+		}
+
+		$h.html(html);
+	}
+
+	render_sales_chart(colorName = null) {
+		const d = this.data;
+		if (!d.chart_labels || d.chart_labels.length === 0) return;
+
+		let values = d.chart_values;
+		if (colorName && d.color_chart_values && d.color_chart_values[colorName]) {
+			values = d.color_chart_values[colorName];
+		}
+
+		const chartEl = this.$body.find("#pd-sales-chart-wrapper")[0];
+		if (!chartEl) return;
+
+		const labels = d.chart_labels.map((l, idx) => (idx % 4 === 0 || idx === d.chart_labels.length - 1 ? l : ""));
+
+		const chartData = {
+			labels: labels,
+			datasets: [
+				{
+					name: colorName ? `${colorName}` : __("All Sales"),
+					values: values,
+				},
+			],
+		};
+
+		if (this.sales_chart) {
+			this.sales_chart.update(chartData);
+		} else {
+			this.sales_chart = new frappe.Chart(chartEl, {
+				title: "",
+				data: chartData,
+				type: "bar",
+				height: 160,
+				colors: ["#2563eb"],
+				axisOptions: {
+					xIsSeries: true,
+					shortenYAxisNumbers: 1,
+				},
+				barOptions: {
+					spaceRatio: 0.35,
+				},
+				tooltipOptions: {
+					formatTooltipY: (d) => `${d} ${this.lang === "tg" ? "дона" : "шт"}`,
+				},
+			});
+		}
 	}
 
 	make_color_field() {
@@ -231,6 +429,9 @@ class ProductDetailApp {
 		this.render_image();
 		this.update_upload_btn_label();
 		this.render_sizes(color);
+		this.render_sales_chart(color ? color.color : null);
+		this.update_stats_cards(color);
+		this.render_highlights(color);
 	}
 
 	update_upload_btn_label() {
