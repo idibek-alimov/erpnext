@@ -35,7 +35,8 @@
    "fieldname": "variant_title",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Variant Title"
+   "description": "Name shown in POS",
+   "label": "POS Display Name"
   },
   {
    "default": "0",

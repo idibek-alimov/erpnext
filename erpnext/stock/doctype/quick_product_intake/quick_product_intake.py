@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import flt
 from erpnext.controllers.item_variant import create_variant
 
 
@@ -12,13 +13,11 @@ class QuickProductIntake(Document):
 		self.validate_prices()
 		self.set_company_defaults()
 		self.validate_matrix_items()
-		self.validate_promotional_discount()
+		self.set_margin()
 
-	def validate_promotional_discount(self):
-		if self.discount_percentage and self.discount_percentage > 0:
-			self.create_pricing_rule = 1
-		else:
-			self.create_pricing_rule = 0
+	def set_margin(self):
+		if self.buying_price:
+			self.margin_percentage = flt((self.selling_price - self.buying_price) / self.buying_price * 100, 2)
 
 	def validate_prices(self):
 		if not self.buying_price or self.buying_price <= 0:
@@ -95,7 +94,6 @@ class QuickProductIntake(Document):
 
 		self.create_item_prices(currency)
 		self.process_stock_intake(currency)
-		self.process_promotional_discount()
 
 	def ensure_attributes_exist(self):
 		"""Ensures Colour and Size Item Attributes and all specified values exist in the database."""
@@ -200,6 +198,8 @@ class QuickProductIntake(Document):
 			attr_args = {color_attr: row.color.strip(), size_attr: row.size.strip()}
 			variant = create_variant(template.name, attr_args)
 			variant.custom_short_code = variant_short_code
+			if row.variant_title:
+				variant.item_name = row.variant_title
 			variant.append("barcodes", {"barcode": row.barcode})
 			variant.flags.ignore_permissions = True
 			variant.insert()
@@ -274,81 +274,33 @@ class QuickProductIntake(Document):
 		if not stock_rows:
 			return
 
-		if self.supplier:
-			# Create Purchase Invoice with update_stock = 1
-			pi = frappe.new_doc("Purchase Invoice")
-			pi.company = self.company
-			pi.supplier = self.supplier
-			pi.posting_date = frappe.utils.today()
-			pi.bill_date = frappe.utils.today()
-			pi.bill_no = f"QPI-{self.name}"
-			pi.update_stock = 1
-			pi.currency = currency
-			pi.remarks = _("Stock Intake from Quick Product Intake {0} ({1})").format(self.name, self.item_name)
+		# Always create a Purchase Invoice (supplier is mandatory) with stock update
+		pi = frappe.new_doc("Purchase Invoice")
+		pi.company = self.company
+		pi.supplier = self.supplier
+		pi.posting_date = frappe.utils.today()
+		pi.bill_date = frappe.utils.today()
+		pi.bill_no = f"QPI-{self.name}"
+		pi.update_stock = 1
+		pi.currency = currency
+		pi.remarks = _("Stock Intake from Quick Product Intake {0} ({1})").format(self.name, self.item_name)
 
-			for row in stock_rows:
-				pi.append(
-					"items",
-					{
-						"item_code": row.generated_item_code,
-						"qty": row.qty,
-						"rate": row.buying_price or self.buying_price,
-						"warehouse": self.target_warehouse,
-					},
-				)
+		for row in stock_rows:
+			pi.append(
+				"items",
+				{
+					"item_code": row.generated_item_code,
+					"qty": row.qty,
+					"rate": row.buying_price or self.buying_price,
+					"warehouse": self.target_warehouse,
+				},
+			)
 
-			pi.flags.ignore_permissions = True
-			pi.flags.ignore_mandatory = True
-			pi.insert()
-			pi.submit()
-			self.db_set("purchase_invoice", pi.name)
-		else:
-			# Create Stock Entry (Material Receipt)
-			se = frappe.new_doc("Stock Entry")
-			se.stock_entry_type = "Material Receipt"
-			se.company = self.company
-			se.posting_date = frappe.utils.today()
-			se.remarks = _("Stock Intake from Quick Product Intake {0} ({1})").format(self.name, self.item_name)
-
-			for row in stock_rows:
-				se.append(
-					"items",
-					{
-						"item_code": row.generated_item_code,
-						"qty": row.qty,
-						"t_warehouse": self.target_warehouse,
-						"basic_rate": row.buying_price or self.buying_price,
-					},
-				)
-
-			se.flags.ignore_permissions = True
-			se.flags.ignore_mandatory = True
-			se.insert()
-			se.submit()
-			self.db_set("stock_entry", se.name)
-
-	def process_promotional_discount(self):
-		if not (self.discount_percentage and self.discount_percentage > 0):
-			return
-
-		rule = frappe.new_doc("Pricing Rule")
-		rule.title = f"Promo {self.discount_percentage}% - {self.item_name}"
-		rule.apply_on = "Item Code"
-		rule.price_or_product_discount = "Price"
-		rule.rate_or_discount = "Discount Percentage"
-		rule.discount_percentage = self.discount_percentage
-		rule.selling = 1
-		rule.for_price_list = "Standard Selling"
-		rule.company = self.company
-
-		for row in self.items:
-			if row.generated_item_code:
-				rule.append("items", {"item_code": row.generated_item_code})
-
-		rule.flags.ignore_permissions = True
-		rule.insert()
-		rule.submit()
-		self.db_set("pricing_rule", rule.name)
+		pi.flags.ignore_permissions = True
+		pi.flags.ignore_mandatory = True
+		pi.insert()
+		pi.submit()
+		self.db_set("purchase_invoice", pi.name)
 
 	def on_cancel(self):
 		if self.purchase_invoice:
@@ -368,3 +320,22 @@ class QuickProductIntake(Document):
 			if pr.docstatus == 1:
 				pr.flags.ignore_permissions = True
 				pr.cancel()
+
+
+@frappe.whitelist()
+def get_attribute_options():
+	"""Existing Colour and Size values, used for the checkbox pickers."""
+
+	def values(*names):
+		for n in names:
+			if frappe.db.exists("Item Attribute", n):
+				return frappe.get_all(
+					"Item Attribute Value",
+					filters={"parent": n},
+					fields=["attribute_value"],
+					order_by="idx asc",
+					pluck="attribute_value",
+				)
+		return []
+
+	return {"colors": values("Colour", "Color"), "sizes": values("Size")}

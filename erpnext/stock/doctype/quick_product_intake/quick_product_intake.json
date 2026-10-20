@@ -23,11 +23,14 @@
   "buying_price",
   "selling_price",
   "col_break3",
-  "discount_percentage",
-  "create_pricing_rule",
+  "margin_percentage",
   "sec_break_attributes",
+  "color_picker",
+  "col_break_attr",
+  "size_picker",
   "colors",
   "sizes",
+  "sec_break_gen_btn",
   "generate_matrix_btn",
   "sec_break_matrix",
   "items",
@@ -108,16 +111,18 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "If specified, creates Purchase Invoice. If empty, creates Stock Entry (Material Receipt).",
+   "description": "A Purchase Invoice is always created for this supplier.",
    "fieldname": "supplier",
    "fieldtype": "Link",
-   "label": "Supplier (Optional)",
-   "options": "Supplier"
+   "label": "Supplier",
+   "options": "Supplier",
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "sec_break_pricing",
    "fieldtype": "Section Break",
-   "label": "Default Pricing & Promotional Discount"
+   "label": "Default Pricing & Margin"
   },
   {
    "fieldname": "buying_price",
@@ -140,34 +145,28 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "discount_percentage",
-   "fieldtype": "Percent",
-   "label": "Promotional Discount %"
-  },
-  {
-   "default": "1",
-   "fieldname": "create_pricing_rule",
-   "fieldtype": "Check",
-   "hidden": 1,
-   "label": "Create Pricing Rule (Discount)"
-  },
-  {
    "depends_on": "eval:doc.has_variants == 1",
    "fieldname": "sec_break_attributes",
    "fieldtype": "Section Break",
    "label": "Matrix Attributes"
   },
   {
-   "description": "Comma-separated list of colors (e.g. Black, Cream, Sage Green)",
    "fieldname": "colors",
    "fieldtype": "Small Text",
-   "label": "Colors"
+   "label": "Colors",
+   "hidden": 1
   },
   {
-   "description": "Comma-separated list of sizes (e.g. S, M, L, XL or 40, 41, 42, 43)",
    "fieldname": "sizes",
    "fieldtype": "Small Text",
-   "label": "Sizes"
+   "label": "Sizes",
+   "hidden": 1
+  },
+  {
+   "depends_on": "eval:doc.has_variants == 1",
+   "fieldname": "sec_break_gen_btn",
+   "fieldtype": "Section Break",
+   "hide_border": 1
   },
   {
    "depends_on": "eval:doc.has_variants == 1",
@@ -237,6 +236,26 @@
    "options": "Quick Product Intake",
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "margin_percentage",
+   "fieldtype": "Float",
+   "label": "Margin %",
+   "description": "Margin over cost. Cost 100 + 30% = Retail 130. Editing either updates the other."
+  },
+  {
+   "fieldname": "color_picker",
+   "fieldtype": "HTML",
+   "label": "Colors"
+  },
+  {
+   "fieldname": "col_break_attr",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "size_picker",
+   "fieldtype": "HTML",
+   "label": "Sizes"
   }
  ],
  "is_submittable": 1,
