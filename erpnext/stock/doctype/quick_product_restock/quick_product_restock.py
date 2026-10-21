@@ -43,17 +43,60 @@ def set_item_price(item_code, price_list, rate, currency):
 		).insert(ignore_permissions=True)
 
 
+def get_item_supplier(item_code):
+	"""Fetches the default supplier or the supplier from the most recent Purchase Invoice."""
+	if not item_code:
+		return ""
+	supp = frappe.db.get_value("Item Default", {"parent": item_code}, "default_supplier")
+	if supp:
+		return supp
+	res = frappe.db.sql(
+		"""SELECT pi.supplier FROM `tabPurchase Invoice Item` pii
+		JOIN `tabPurchase Invoice` pi ON pi.name = pii.parent
+		JOIN `tabItem` i ON (i.name = pii.item_code AND (i.name = %s OR i.variant_of = %s))
+		WHERE pi.docstatus = 1
+		ORDER BY pi.posting_date DESC, pi.creation DESC LIMIT 1""",
+		(item_code, item_code),
+	)
+	return res[0][0] if res else ""
+
+
 class QuickProductRestock(Document):
+	def resolve_item(self):
+		target = None
+		if getattr(self, "short_code", None):
+			target = get_product_by_code(self.short_code)
+		if not target and getattr(self, "item_name", None):
+			matches = search_products(self.item_name, limit=1)
+			if matches:
+				target = matches[0]
+		if target:
+			self.item = target["item_code"]
+			self.item_name = target["item_name"]
+			self.short_code = target["short_code"]
+		else:
+			frappe.throw(_("Could not find product matching '{0}'").format(self.short_code or self.item_name))
+
 	def validate(self):
 		self.set_defaults()
+
+		if not self.supplier:
+			frappe.throw(_("Supplier is required for receiving stock delivery."))
+
+		if not self.item:
+			if getattr(self, "short_code", None) or getattr(self, "item_name", None):
+				self.resolve_item()
+			else:
+				frappe.throw(_("Please select a Product."))
 
 		item = frappe.get_doc("Item", self.item)
 		if item.variant_of:
 			frappe.throw(_("Please select the main product, not a single size/color variant."))
 		self.item_name = item.item_name
+		self.short_code = item.custom_short_code or item.name
 
 		if not self.items:
-			frappe.throw(_("There are no sizes to receive. Please select a Product first."))
+			frappe.throw(_("Please enter the received quantity for at least one size."))
 
 		color_attr = size_attr = None
 		if item.has_variants:
@@ -93,6 +136,8 @@ class QuickProductRestock(Document):
 			self.company = get_default_company()
 		if not self.target_warehouse and self.company:
 			self.target_warehouse = get_stores_warehouse(self.company)
+		if not self.supplier and self.item:
+			self.supplier = get_item_supplier(self.item)
 
 	def on_submit(self):
 		currency = frappe.get_cached_value("Company", self.company, "default_currency") or "TJS"
@@ -177,54 +222,31 @@ class QuickProductRestock(Document):
 
 		remarks = _("Stock received via Quick Product Restock {0} ({1})").format(self.name, self.item_name)
 
-		if self.supplier:
-			pi = frappe.new_doc("Purchase Invoice")
-			pi.company = self.company
-			pi.supplier = self.supplier
-			pi.set_posting_time = 1
-			pi.posting_date = self.posting_date
-			pi.bill_date = self.posting_date
-			pi.bill_no = self.bill_no or f"QPR-{self.name}"
-			pi.update_stock = 1
-			pi.currency = currency
-			pi.remarks = remarks
-			for row in stock_rows:
-				pi.append(
-					"items",
-					{
-						"item_code": row.item_code,
-						"qty": row.qty,
-						"rate": row.buying_price,
-						"warehouse": self.target_warehouse,
-					},
-				)
-			pi.flags.ignore_permissions = True
-			pi.flags.ignore_mandatory = True
-			pi.insert()
-			pi.submit()
-			self.db_set("purchase_invoice", pi.name)
-		else:
-			se = frappe.new_doc("Stock Entry")
-			se.stock_entry_type = "Material Receipt"
-			se.company = self.company
-			se.set_posting_time = 1
-			se.posting_date = self.posting_date
-			se.remarks = remarks
-			for row in stock_rows:
-				se.append(
-					"items",
-					{
-						"item_code": row.item_code,
-						"qty": row.qty,
-						"t_warehouse": self.target_warehouse,
-						"basic_rate": row.buying_price,
-					},
-				)
-			se.flags.ignore_permissions = True
-			se.flags.ignore_mandatory = True
-			se.insert()
-			se.submit()
-			self.db_set("stock_entry", se.name)
+		pi = frappe.new_doc("Purchase Invoice")
+		pi.company = self.company
+		pi.supplier = self.supplier
+		pi.set_posting_time = 1
+		pi.posting_date = self.posting_date
+		pi.bill_date = self.posting_date
+		pi.bill_no = f"QPR-{self.name}"
+		pi.update_stock = 1
+		pi.currency = currency
+		pi.remarks = remarks
+		for row in stock_rows:
+			pi.append(
+				"items",
+				{
+					"item_code": row.item_code,
+					"qty": row.qty,
+					"rate": row.buying_price,
+					"warehouse": self.target_warehouse,
+				},
+			)
+		pi.flags.ignore_permissions = True
+		pi.flags.ignore_mandatory = True
+		pi.insert()
+		pi.submit()
+		self.db_set("purchase_invoice", pi.name)
 
 	def on_cancel(self):
 		if self.purchase_invoice:
@@ -232,12 +254,6 @@ class QuickProductRestock(Document):
 			if pi.docstatus == 1:
 				pi.flags.ignore_permissions = True
 				pi.cancel()
-
-		if self.stock_entry:
-			se = frappe.get_doc("Stock Entry", self.stock_entry)
-			if se.docstatus == 1:
-				se.flags.ignore_permissions = True
-				se.cancel()
 
 
 @frappe.whitelist()
@@ -319,3 +335,180 @@ def get_restock_rows(item):
 			}
 		)
 	return rows
+
+
+@frappe.whitelist()
+def get_product_template_info(item):
+	"""Returns template attributes, available attribute values, last supplier, and existing rows."""
+	doc = frappe.get_doc("Item", item)
+	if doc.variant_of:
+		frappe.throw(_("Please select the main product, not a single size/color variant."))
+
+	color_attr = size_attr = None
+	if doc.has_variants:
+		color_attr, size_attr = get_template_attributes(doc)
+
+	available_colors = []
+	if color_attr:
+		available_colors = [
+			r.attribute_value
+			for r in frappe.get_all(
+				"Item Attribute Value",
+				filters={"parent": color_attr},
+				fields=["attribute_value"],
+				order_by="idx asc, attribute_value asc",
+			)
+		]
+
+	available_sizes = []
+	if size_attr:
+		available_sizes = [
+			r.attribute_value
+			for r in frappe.get_all(
+				"Item Attribute Value",
+				filters={"parent": size_attr},
+				fields=["attribute_value"],
+				order_by="idx asc, attribute_value asc",
+			)
+		]
+
+	rows = get_restock_rows(item)
+	supplier = get_item_supplier(item)
+
+	return {
+		"item_code": doc.name,
+		"item_name": doc.item_name,
+		"short_code": doc.custom_short_code or doc.name,
+		"supplier": supplier,
+		"has_variants": doc.has_variants,
+		"color_attr": color_attr,
+		"size_attr": size_attr,
+		"available_colors": available_colors,
+		"available_sizes": available_sizes,
+		"rows": rows,
+	}
+
+
+@frappe.whitelist()
+def search_products(query="", limit=20):
+	"""Searches main products (not variants) by item_name, custom_short_code, or item_code."""
+	query = (query or "").strip()
+	conditions = ["disabled = 0", "(variant_of IS NULL OR variant_of = '')"]
+	values = {"limit": int(limit or 20)}
+
+	if query:
+		conditions.append(
+			"(item_name LIKE %(q)s OR custom_short_code LIKE %(q)s OR name LIKE %(q)s)"
+		)
+		values["q"] = f"%{query}%"
+		values["q_exact"] = query
+		values["q_start"] = f"{query}%"
+		order_clause = "CASE WHEN custom_short_code = %(q_exact)s THEN 0 WHEN item_name LIKE %(q_start)s THEN 1 ELSE 2 END, item_name ASC"
+	else:
+		order_clause = "item_name ASC"
+
+	items = frappe.db.sql(
+		f"""
+		SELECT name, item_name, custom_short_code
+		FROM `tabItem`
+		WHERE {" AND ".join(conditions)}
+		ORDER BY {order_clause}
+		LIMIT %(limit)s
+		""",
+		values,
+		as_dict=True,
+	)
+
+	results = []
+	for it in items:
+		code_display = it.custom_short_code or it.name
+		results.append(
+			{
+				"label": f"{it.item_name} [ID: {code_display}]",
+				"value": it.item_name,
+				"item_code": it.name,
+				"item_name": it.item_name,
+				"short_code": it.custom_short_code or it.name,
+			}
+		)
+	return results
+
+
+@frappe.whitelist()
+def get_product_by_code(code):
+	"""Finds a main product by custom_short_code, name, or barcode."""
+	code = (code or "").strip()
+	if not code:
+		return None
+
+	# 1. Main item with custom_short_code
+	item = frappe.db.get_value(
+		"Item",
+		{"custom_short_code": code, "disabled": 0, "variant_of": ("is", "not set")},
+		["name", "item_name", "custom_short_code"],
+		as_dict=True,
+	)
+	if not item:
+		# 2. Variant item with custom_short_code -> resolve to parent template
+		var = frappe.db.get_value(
+			"Item",
+			{"custom_short_code": code, "disabled": 0, "variant_of": ("is", "set")},
+			["name", "variant_of"],
+			as_dict=True,
+		)
+		if var and var.variant_of:
+			item = frappe.db.get_value(
+				"Item",
+				var.variant_of,
+				["name", "item_name", "custom_short_code"],
+				as_dict=True,
+			)
+
+	if not item:
+		# 3. Barcode match
+		barcode_item = frappe.db.get_value("Item Barcode", {"barcode": code}, "parent")
+		if barcode_item:
+			b_doc = frappe.db.get_value(
+				"Item",
+				barcode_item,
+				["name", "item_name", "custom_short_code", "variant_of"],
+				as_dict=True,
+			)
+			if b_doc:
+				if b_doc.variant_of:
+					item = frappe.db.get_value(
+						"Item",
+						b_doc.variant_of,
+						["name", "item_name", "custom_short_code"],
+						as_dict=True,
+					)
+				else:
+					item = b_doc
+
+	if not item:
+		# 4. Item code (name) match
+		i_doc = frappe.db.get_value(
+			"Item",
+			{"name": code, "disabled": 0},
+			["name", "item_name", "custom_short_code", "variant_of"],
+			as_dict=True,
+		)
+		if i_doc:
+			if i_doc.variant_of:
+				item = frappe.db.get_value(
+					"Item",
+					i_doc.variant_of,
+					["name", "item_name", "custom_short_code"],
+					as_dict=True,
+				)
+			else:
+				item = i_doc
+
+	if item:
+		return {
+			"item_code": item.name,
+			"item_name": item.item_name,
+			"short_code": item.custom_short_code or item.name,
+		}
+	return None
+

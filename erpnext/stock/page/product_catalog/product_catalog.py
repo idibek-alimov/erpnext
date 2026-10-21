@@ -18,6 +18,25 @@ def get_default_company():
 def get_stores_warehouse(company):
 	if not company:
 		company = get_default_company()
+
+	# 1. Configured global default warehouse in Stock Settings
+	stock_settings_wh = frappe.db.get_single_value("Stock Settings", "default_warehouse")
+	if stock_settings_wh:
+		wh_company, is_group = frappe.db.get_value("Warehouse", stock_settings_wh, ["company", "is_group"]) or (None, 1)
+		if (not wh_company or wh_company == company) and not is_group:
+			return stock_settings_wh
+
+	# 2. Company default warehouse
+	company_wh = frappe.db.get_value("Company", company, "default_warehouse")
+	if company_wh and not frappe.db.get_value("Warehouse", company_wh, "is_group"):
+		return company_wh
+
+	# 3. User default warehouse
+	user_wh = frappe.defaults.get_user_default("default_warehouse")
+	if user_wh and not frappe.db.get_value("Warehouse", user_wh, "is_group"):
+		return user_wh
+
+	# 4. Fallback search
 	return (
 		frappe.db.get_value(
 			"Warehouse",

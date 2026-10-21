@@ -113,9 +113,15 @@ class ProductDetailApp {
 		const d = this.data;
 		this.page.set_title(d.item_name);
 		this.page.clear_primary_action();
-		this.page.set_primary_action(this.t("restock"), () =>
-			frappe.new_doc("Quick Product Restock", { item: this.item_code })
-		);
+		this.page.set_primary_action(this.t("restock"), () => {
+			const color = this.selected_color ? this.selected_color.color : "";
+			frappe.new_doc("Quick Product Restock", {
+				item: this.item_code,
+				item_name: d.item_name,
+				short_code: d.short_code,
+				initial_color: color,
+			});
+		});
 
 		this.$body.html(`
 			<div class="product-detail-container">

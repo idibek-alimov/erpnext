@@ -8,40 +8,46 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "item",
   "item_name",
+  "short_code",
+  "item",
   "col_break1",
   "company",
   "target_warehouse",
   "sec_break_delivery",
   "supplier",
-  "bill_no",
   "col_break2",
   "posting_date",
   "sec_break_matrix",
+  "restock_matrix",
   "items",
   "sec_break_links",
   "purchase_invoice",
-  "col_break3",
-  "stock_entry",
-  "amended_from"
+  "amended_from",
+  "initial_color"
  ],
  "fields": [
   {
-   "description": "Choose the main product (not a single size). Sizes and colors load automatically.",
-   "fieldname": "item",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Product",
-   "options": "Item",
-   "reqd": 1
-  },
-  {
+   "description": "Search and choose product by name",
    "fieldname": "item_name",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Product Name",
-   "read_only": 1
+   "reqd": 1
+  },
+  {
+   "description": "Product numeric ID or barcode",
+   "fieldname": "short_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Product Code (ID)"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Item",
+   "options": "Item"
   },
   {
    "fieldname": "col_break1",
@@ -68,17 +74,13 @@
    "label": "This Delivery"
   },
   {
-   "description": "Supplier of THIS delivery only. Leave empty if there is no supplier invoice. Does not change the product.",
+   "description": "Supplier who delivered this batch",
    "fieldname": "supplier",
    "fieldtype": "Link",
-   "label": "Supplier of THIS Delivery (Optional)",
-   "options": "Supplier"
-  },
-  {
-   "description": "Supplier's invoice / waybill number (optional)",
-   "fieldname": "bill_no",
-   "fieldtype": "Data",
-   "label": "Supplier Bill No."
+   "in_list_view": 1,
+   "label": "Supplier",
+   "options": "Supplier",
+   "reqd": 1
   },
   {
    "fieldname": "col_break2",
@@ -94,14 +96,20 @@
   {
    "fieldname": "sec_break_matrix",
    "fieldtype": "Section Break",
-   "label": "Sizes, Quantities & Prices"
+   "label": "Colors, Sizes & Quantities"
   },
   {
+   "depends_on": "eval:doc.docstatus==0",
+   "fieldname": "restock_matrix",
+   "fieldtype": "HTML",
+   "label": "Colors, Sizes & Quantities"
+  },
+  {
+   "depends_on": "eval:doc.docstatus>0",
    "fieldname": "items",
    "fieldtype": "Table",
    "label": "Sizes & Colors",
-   "options": "Quick Product Restock Item",
-   "reqd": 1
+   "options": "Quick Product Restock Item"
   },
   {
    "collapsible": 1,
@@ -118,18 +126,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "col_break3",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "stock_entry",
-   "fieldtype": "Link",
-   "label": "Stock Entry",
-   "no_copy": 1,
-   "options": "Stock Entry",
-   "read_only": 1
-  },
-  {
    "fieldname": "amended_from",
    "fieldtype": "Link",
    "label": "Amended From",
@@ -137,11 +133,18 @@
    "options": "Quick Product Restock",
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "initial_color",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Initial Color",
+   "print_hide": 1
   }
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-19 21:30:00.000000",
+ "modified": "2026-10-21 22:25:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Quick Product Restock",
@@ -191,7 +194,7 @@
  ],
  "quick_entry": 0,
  "row_format": "Dynamic",
- "search_fields": "item_name, item, supplier",
+ "search_fields": "item_name, short_code, item, supplier",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
