@@ -373,3 +373,153 @@
 	background: #fef2f2;
 	color: #b91c1c;
 }
+
+/* --- Inline Stock Reconciliation (Audit / Переучёт) --- */
+.pd-sizes-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 12px;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.pd-sizes-header .pd-section-title {
+	margin-bottom: 0;
+}
+
+.pd-btn-reconcile {
+	font-weight: 600;
+	font-size: 13px;
+	padding: 5px 12px;
+	border-radius: 6px;
+	border: 1px solid #cbd5e1;
+	background: #ffffff;
+	color: #334155;
+	transition: all 0.15s ease;
+}
+
+.pd-btn-reconcile:hover {
+	background: #f8fafc;
+	border-color: #94a3b8;
+	color: #0f172a;
+}
+
+.pd-reconcile-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	background: #fefce8;
+	border: 1px solid #fef08a;
+	padding: 6px 12px;
+	border-radius: 8px;
+}
+
+.pd-reconcile-hint {
+	font-size: 12px;
+	font-weight: 700;
+	color: #854d0e;
+}
+
+.pd-reconcile-reason {
+	width: auto;
+	min-width: 170px;
+	height: 30px;
+	font-size: 12px;
+	border-radius: 6px;
+	border-color: #cbd5e1;
+}
+
+.pd-btn-save-reconcile {
+	background: #0f172a !important;
+	color: #ffffff !important;
+	border: none;
+	font-weight: 600;
+	font-size: 13px;
+	padding: 5px 14px;
+	border-radius: 6px;
+	transition: background 0.15s ease;
+}
+
+.pd-btn-save-reconcile:hover {
+	background: #1e293b !important;
+}
+
+.pd-btn-cancel-reconcile {
+	font-size: 13px;
+	padding: 5px 12px;
+	border-radius: 6px;
+}
+
+.pd-th-reconcile {
+	background-color: #fef3c7 !important;
+	color: #92400e !important;
+}
+
+.pd-reconcile-cell {
+	min-width: 190px;
+}
+
+.pd-reconcile-field-wrap {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+}
+
+.pd-reconcile-orig-label {
+	font-size: 12px;
+	color: #64748b;
+	font-weight: 600;
+}
+
+.pd-reconcile-input {
+	width: 75px !important;
+	height: 30px !important;
+	padding: 2px 6px !important;
+	text-align: center !important;
+	font-size: 14px !important;
+	font-weight: 700 !important;
+	border: 1.5px solid #cbd5e1 !important;
+	border-radius: 6px !important;
+	box-shadow: none !important;
+	transition: all 0.15s ease;
+}
+
+.pd-reconcile-input:focus {
+	border-color: #2563eb !important;
+	background: #eff6ff !important;
+	outline: none !important;
+}
+
+.pd-reconcile-input.is-changed-pos {
+	border-color: #10b981 !important;
+	background: #f0fdf4 !important;
+	color: #047857 !important;
+}
+
+.pd-reconcile-input.is-changed-neg {
+	border-color: #ef4444 !important;
+	background: #fef2f2 !important;
+	color: #b91c1c !important;
+}
+
+.pd-reconcile-delta-badge {
+	display: inline-block;
+	padding: 2px 7px;
+	border-radius: 10px;
+	font-size: 11px;
+	font-weight: 700;
+	min-width: 28px;
+	text-align: center;
+}
+
+.pd-reconcile-delta-badge.pd-delta-pos {
+	background: #dcfce7;
+	color: #15803d;
+}
+
+.pd-reconcile-delta-badge.pd-delta-neg {
+	background: #fee2e2;
+	color: #b91c1c;
+}

@@ -25,6 +25,7 @@ class ProductDetailApp {
 		this.item_code = null;
 		this.selected_color = null;
 		this.sales_chart = null;
+		this.is_reconciling = false;
 
 		this.page.set_secondary_action(__("Back to Catalog"), () => frappe.set_route("product-catalog"));
 		this.page.add_menu_item(__("Open full Item form (advanced)"), () => {
@@ -73,12 +74,25 @@ class ProductDetailApp {
 			runway_prefix: { tg: "Бақия мерасад барои: ~", ru: "Хватит на: ~" },
 			days: { tg: "рӯз", ru: "дн." },
 			items_per_day: { tg: "дона/рӯз", ru: "шт/день" },
+			reconcile_stock: { tg: "⚖️ Ислоҳи бақия", ru: "⚖️ Корректировка остатков" },
+			reconcile_mode_active: { tg: "Ҳолати ислоҳ", ru: "Режим корректировки" },
+			actual_stock_count: { tg: "Бақияи воқеӣ (Факт)", ru: "Фактический остаток" },
+			current_stock: { tg: "Дар система", ru: "В системе" },
+			save_stock: { tg: "💾 Сабти бақия", ru: "💾 Сохранить" },
+			cancel: { tg: "Бекор кардан", ru: "Отмена" },
+			no_changes_detected: { tg: "Ягон тағйирот дар бақия ворид нашудааст.", ru: "Изменений в остатках не обнаружено." },
+			reconcile_success: { tg: "Бақияи мол бомуваффақият нав карда шуд!", ru: "Остатки успешно скорректированы!" },
+			saving: { tg: "Сабт шуда истодааст...", ru: "Сохранение..." },
+			reason_audit: { tg: "Инвентаризатсия / Переучёт", ru: "Инвентаризация / Переучёт" },
+			reason_damaged: { tg: "Брок (списание)", ru: "Списание брака" },
+			reason_error: { tg: "Иштибоҳ / Пересорт", ru: "Ошибка кассира / Пересорт" },
 		};
 		return (d[key] && d[key][this.lang]) || key;
 	}
 
-	load(item_code) {
+	load(item_code, retain_color = null) {
 		this.item_code = item_code;
+		this.is_reconciling = false;
 		this.$body.html(`<div class="text-center text-muted" style="padding:60px;">${__("Loading...")}</div>`);
 		frappe.call({
 			method: "erpnext.stock.page.product_detail.product_detail.get_product_detail",
@@ -88,6 +102,9 @@ class ProductDetailApp {
 				this.data = r.message;
 				this.selected_color = null;
 				this.render();
+				if (retain_color && this.color_control) {
+					this.color_control.set_value(retain_color);
+				}
 			},
 		});
 	}
@@ -426,6 +443,7 @@ class ProductDetailApp {
 		const value = this.color_control.get_value();
 		const color = this.data.colors.find((c) => c.color === value) || null;
 		this.selected_color = color;
+		this.is_reconciling = false;
 		this.render_image();
 		this.update_upload_btn_label();
 		this.render_sizes(color);
@@ -478,15 +496,35 @@ class ProductDetailApp {
 			return;
 		}
 		const cur = this.data.currency;
+		const isReco = Boolean(this.is_reconciling);
+
 		const rows = color.sizes
 			.map(
 				(s) => `
-			<tr>
+			<tr data-item-code="${frappe.utils.escape_html(s.item_code)}">
 				<td><b>${frappe.utils.escape_html(s.size)}</b></td>
 				<td class="text-muted">${frappe.utils.escape_html(s.short_code)}</td>
 				<td class="text-right">${format_currency(s.buying_price, cur)}</td>
 				<td class="text-right">${format_currency(s.selling_price, cur)}</td>
-				<td class="text-right pd-num">${flt(s.stock_qty)}</td>
+				${
+					isReco
+						? `
+					<td class="text-right pd-reconcile-cell">
+						<div class="pd-reconcile-field-wrap">
+							<span class="pd-reconcile-orig-label" title="${this.t("current_stock")}">${flt(s.stock_qty)} →</span>
+							<input type="number" min="0" step="1"
+								class="form-control input-sm pd-reconcile-input"
+								data-item-code="${frappe.utils.escape_html(s.item_code)}"
+								data-orig-qty="${flt(s.stock_qty)}"
+								value="${flt(s.stock_qty)}">
+							<span class="pd-reconcile-delta-badge" style="display:none;"></span>
+						</div>
+					</td>
+				`
+						: `
+					<td class="text-right pd-num">${flt(s.stock_qty)}</td>
+				`
+				}
 				<td class="text-right">${flt(s.sold_qty)}</td>
 				<td>${this.status_pill(s.stock_qty)}</td>
 			</tr>`
@@ -494,8 +532,36 @@ class ProductDetailApp {
 			.join("");
 
 		$s.html(`
-			<div class="pd-section-title">
-				<span>${this.t("sizes")}${color.color ? ` — <span style="color: #2563eb;">${frappe.utils.escape_html(color.color)}</span>` : ""}</span>
+			<div class="pd-sizes-header">
+				<div class="pd-section-title">
+					<span>${this.t("sizes")}${color.color ? ` — <span style="color: #2563eb;">${frappe.utils.escape_html(color.color)}</span>` : ""}</span>
+				</div>
+				<div class="pd-sizes-actions">
+					${
+						!isReco
+							? `
+						<button type="button" class="btn btn-default btn-xs pd-btn-reconcile" id="pd-btn-start-reconcile">
+							${this.t("reconcile_stock")}
+						</button>
+					`
+							: `
+						<div class="pd-reconcile-bar">
+							<span class="pd-reconcile-hint">${this.t("reconcile_mode_active")}:</span>
+							<select class="form-control input-xs pd-reconcile-reason" id="pd-reconcile-reason">
+								<option value="${this.t("reason_audit")}">${this.t("reason_audit")}</option>
+								<option value="${this.t("reason_damaged")}">${this.t("reason_damaged")}</option>
+								<option value="${this.t("reason_error")}">${this.t("reason_error")}</option>
+							</select>
+							<button type="button" class="btn btn-primary btn-xs pd-btn-save-reconcile" id="pd-btn-save-reconcile">
+								${this.t("save_stock")}
+							</button>
+							<button type="button" class="btn btn-default btn-xs pd-btn-cancel-reconcile" id="pd-btn-cancel-reconcile">
+								${this.t("cancel")}
+							</button>
+						</div>
+					`
+					}
+				</div>
 			</div>
 			<div class="pd-table-wrap table-responsive">
 				<table class="table pd-table">
@@ -505,7 +571,7 @@ class ProductDetailApp {
 							<th>${this.t("short_code")}</th>
 							<th class="text-right">${this.t("cost")}</th>
 							<th class="text-right">${this.t("price")}</th>
-							<th class="text-right">${this.t("left")}</th>
+							<th class="text-right ${isReco ? "pd-th-reconcile" : ""}">${isReco ? this.t("actual_stock_count") : this.t("left")}</th>
 							<th class="text-right">${this.t("sold")}</th>
 							<th>${this.t("status")}</th>
 						</tr>
@@ -514,7 +580,7 @@ class ProductDetailApp {
 					<tfoot>
 						<tr>
 							<td colspan="4"><b>${this.t("total")}</b></td>
-							<td class="text-right pd-num">${flt(color.stock)}</td>
+							<td class="text-right pd-num pd-tfoot-total-stock">${flt(color.stock)}</td>
 							<td class="text-right"><b>${flt(color.sold)}</b></td>
 							<td></td>
 						</tr>
@@ -522,5 +588,119 @@ class ProductDetailApp {
 				</table>
 			</div>
 		`);
+
+		this.bind_reconcile_events(color);
+	}
+
+	bind_reconcile_events(color) {
+		const $s = this.$body.find(".pd-sizes-section");
+
+		$s.find("#pd-btn-start-reconcile").on("click", () => {
+			this.is_reconciling = true;
+			this.render_sizes(color);
+			setTimeout(() => {
+				const $firstInput = this.$body.find(".pd-reconcile-input:first");
+				if ($firstInput.length) {
+					$firstInput.focus().select();
+				}
+			}, 50);
+		});
+
+		$s.find("#pd-btn-cancel-reconcile").on("click", () => {
+			this.is_reconciling = false;
+			this.render_sizes(color);
+		});
+
+		const recalculateTotal = () => {
+			let total = 0;
+			$s.find(".pd-reconcile-input").each(function () {
+				total += flt($(this).val());
+			});
+			$s.find(".pd-tfoot-total-stock").text(total);
+		};
+
+		$s.find(".pd-reconcile-input").on("input change", function () {
+			const $input = $(this);
+			const orig = flt($input.data("orig-qty"));
+			const val = flt($input.val());
+			const diff = val - orig;
+			const $badge = $input.siblings(".pd-reconcile-delta-badge");
+
+			if (diff === 0 || isNaN(diff)) {
+				$badge.hide().text("");
+				$input.removeClass("is-changed-pos is-changed-neg");
+			} else if (diff > 0) {
+				$badge.text(`+${diff}`).attr("class", "pd-reconcile-delta-badge pd-delta-pos").show();
+				$input.addClass("is-changed-pos").removeClass("is-changed-neg");
+			} else {
+				$badge.text(`${diff}`).attr("class", "pd-reconcile-delta-badge pd-delta-neg").show();
+				$input.addClass("is-changed-neg").removeClass("is-changed-pos");
+			}
+
+			recalculateTotal();
+		});
+
+		$s.find("#pd-btn-save-reconcile").on("click", () => {
+			const changes = [];
+			let hasNegative = false;
+
+			$s.find(".pd-reconcile-input").each(function () {
+				const $el = $(this);
+				const item_code = $el.data("item-code");
+				const orig_qty = flt($el.data("orig-qty"));
+				const qty = flt($el.val());
+
+				if (qty < 0) {
+					hasNegative = true;
+					return false;
+				}
+
+				if (qty !== orig_qty) {
+					changes.push({ item_code, orig_qty, qty });
+				}
+			});
+
+			if (hasNegative) {
+				frappe.msgprint(__("Quantity cannot be negative"));
+				return;
+			}
+
+			if (changes.length === 0) {
+				frappe.show_alert({
+					message: this.t("no_changes_detected"),
+					indicator: "orange",
+				});
+				this.is_reconciling = false;
+				this.render_sizes(color);
+				return;
+			}
+
+			const reason = $s.find("#pd-reconcile-reason").val() || this.t("reason_audit");
+			const $btn = $s.find("#pd-btn-save-reconcile");
+			$btn.prop("disabled", true).text(this.t("saving"));
+
+			frappe.call({
+				method: "erpnext.stock.page.product_detail.product_detail.reconcile_stock",
+				args: {
+					item_code: this.item_code,
+					changes: JSON.stringify(changes),
+					reason: reason,
+				},
+				callback: (r) => {
+					$btn.prop("disabled", false).text(this.t("save_stock"));
+					if (r.message && r.message.success) {
+						frappe.show_alert({
+							message: this.t("reconcile_success"),
+							indicator: "green",
+						});
+						this.is_reconciling = false;
+						this.load(this.item_code, color ? color.color : null);
+					}
+				},
+				error: () => {
+					$btn.prop("disabled", false).text(this.t("save_stock"));
+				},
+			});
+		});
 	}
 }
