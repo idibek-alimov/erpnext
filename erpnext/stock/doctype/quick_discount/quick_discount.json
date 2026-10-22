@@ -1,0 +1,286 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "autoname": "QD-.YYYY.-.#####",
+ "creation": "2026-10-22 14:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "enabled",
+  "col_break_header",
+  "priority_tier",
+  "discount_scope",
+  "sec_break_pricing",
+  "discount_percentage",
+  "sec_break_validity",
+  "is_lifetime",
+  "valid_from",
+  "col_break_validity",
+  "valid_upto",
+  "sec_break_scope",
+  "item_group",
+  "category_filter_html",
+  "filter_color",
+  "filter_size",
+  "excluded_items",
+  "category_preview_html",
+  "sec_break_scan",
+  "scan_barcode",
+  "scan_html",
+  "sec_break_items",
+  "items_matrix_html",
+  "items",
+  "sec_break_system",
+  "pricing_rule"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Название акции / кампании",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Активна (Enabled)"
+  },
+  {
+   "fieldname": "col_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Tier 2 - Акция на товар (15)",
+   "fieldname": "priority_tier",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Приоритет акции",
+   "options": "Tier 1 - Ликвидация / Финальная уценка (20)\nTier 2 - Акция на товар (15)\nTier 3 - Распродажа категории (10)\nTier 4 - Базовая / Лояльность (5)",
+   "reqd": 1
+  },
+  {
+   "default": "По выбранным товарам (Items / Scan)",
+   "fieldname": "discount_scope",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Область действия акции",
+   "options": "По выбранным товарам (Items / Scan)\nПо категории (Category)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sec_break_pricing",
+   "fieldtype": "Section Break",
+   "label": "Размер скидки"
+  },
+  {
+   "fieldname": "discount_percentage",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Скидка (%)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sec_break_validity",
+   "fieldtype": "Section Break",
+   "label": "Сроки действия"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_lifetime",
+   "fieldtype": "Check",
+   "label": "Бессрочно (до ручной отмены)"
+  },
+  {
+   "default": "Today",
+   "depends_on": "eval:!doc.is_lifetime",
+   "fieldname": "valid_from",
+   "fieldtype": "Date",
+   "label": "Действует с"
+  },
+  {
+   "fieldname": "col_break_validity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:!doc.is_lifetime",
+   "fieldname": "valid_upto",
+   "fieldtype": "Date",
+   "label": "Действует по"
+  },
+  {
+   "depends_on": "eval:doc.discount_scope == 'По категории (Category)'",
+   "fieldname": "sec_break_scope",
+   "fieldtype": "Section Break",
+   "label": "Параметры категории и фильтры"
+  },
+  {
+   "fieldname": "item_group",
+   "fieldtype": "Link",
+   "label": "Категория товара (Item Group)",
+   "mandatory_depends_on": "eval:doc.discount_scope == 'По категории (Category)'",
+   "options": "Item Group"
+  },
+  {
+   "fieldname": "category_filter_html",
+   "fieldtype": "HTML",
+   "label": "Фильтры по цветам и размерам"
+  },
+  {
+   "fieldname": "filter_color",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Фильтр по цветам"
+  },
+  {
+   "fieldname": "filter_size",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Фильтр по размерам"
+  },
+  {
+   "fieldname": "excluded_items",
+   "fieldtype": "Small Text",
+   "hidden": 1,
+   "label": "Исключенные товары (SKU)"
+  },
+  {
+   "fieldname": "category_preview_html",
+   "fieldtype": "HTML",
+   "label": "Предпросмотр затронутых товаров"
+  },
+  {
+   "depends_on": "eval:doc.discount_scope == 'По выбранным товарам (Items / Scan)'",
+   "fieldname": "sec_break_scan",
+   "fieldtype": "Section Break",
+   "label": "Быстрый подбор («Товар в руках»)"
+  },
+  {
+   "description": "Введите название товара, 4-значный Short Code или сканируйте штрихкод",
+   "fieldname": "scan_barcode",
+   "fieldtype": "Data",
+   "label": "🔍 Поиск по названию / Штрихкод / Short Code"
+  },
+  {
+   "fieldname": "scan_html",
+   "fieldtype": "HTML",
+   "label": "Выбор цветов и размеров"
+  },
+  {
+   "depends_on": "eval:doc.discount_scope == 'По выбранным товарам (Items / Scan)'",
+   "fieldname": "sec_break_items",
+   "fieldtype": "Section Break",
+   "label": "Товары в акции"
+  },
+  {
+   "fieldname": "items_matrix_html",
+   "fieldtype": "HTML",
+   "label": "Обзор выбранных товаров"
+  },
+  {
+   "collapsed": 1,
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "hidden": 1,
+   "label": "Список товаров (таблица)",
+   "options": "Quick Discount Item"
+  },
+  {
+   "collapsed": 1,
+   "fieldname": "sec_break_system",
+   "fieldtype": "Section Break",
+   "label": "Служебные данные"
+  },
+  {
+   "fieldname": "pricing_rule",
+   "fieldtype": "Link",
+   "label": "Связанное Pricing Rule",
+   "no_copy": 1,
+   "options": "Pricing Rule",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "links": [],
+ "modified": "2026-10-22 18:50:00.000000",
+ "modified_by": "Administrator",
+ "module": "Stock",
+ "name": "Quick Discount",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "title, pricing_rule",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}

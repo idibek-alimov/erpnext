@@ -62,11 +62,11 @@ def get_stores_warehouse(company):
 
 
 @frappe.whitelist()
-def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_size=60, company=None):
+def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_size=200, company=None):
 	company = company or get_default_company()
 	stores_wh = get_stores_warehouse(company)
 	page = cint(page) or 1
-	page_size = cint(page_size) or 60
+	page_size = cint(page_size) or 200
 
 	# 1. Base query for product models (templates or standalone items)
 	conditions = ["(i.variant_of IS NULL OR i.variant_of = '')", "i.disabled = 0"]
@@ -146,10 +146,10 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 
 	all_item_codes = list(all_item_codes)
 
-	# 3. Batch get Stock Balances from tabBin
+	# 3. Batch get Stock Balances and Valuation from tabBin
 	bin_records = frappe.db.sql(
 		"""
-		SELECT item_code, SUM(actual_qty) as total_qty
+		SELECT item_code, SUM(actual_qty) as total_qty, SUM(stock_value) as total_stock_value
 		FROM `tabBin`
 		WHERE item_code IN %(item_codes)s
 		GROUP BY item_code
@@ -158,12 +158,13 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 		as_dict=True,
 	)
 	stock_map = {b.item_code: flt(b.total_qty) for b in bin_records}
+	stock_val_map = {b.item_code: flt(b.total_stock_value) for b in bin_records}
 
-	# 4. Batch get 30-Day Sales from tabSales Invoice Item
+	# 4. Batch get 30-Day Sales and Revenue from tabSales Invoice Item
 	start_date = add_days(today(), -30)
 	sales_records = frappe.db.sql(
 		"""
-		SELECT sii.item_code, SUM(sii.qty) as sold_qty
+		SELECT sii.item_code, SUM(sii.qty) as sold_qty, SUM(sii.base_net_amount) as sold_amount
 		FROM `tabSales Invoice Item` sii
 		JOIN `tabSales Invoice` si ON si.name = sii.parent
 		WHERE sii.item_code IN %(item_codes)s
@@ -175,6 +176,7 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 		as_dict=True,
 	)
 	sales_map = {s.item_code: flt(s.sold_qty) for s in sales_records}
+	sales_amount_map = {s.item_code: flt(s.sold_amount) for s in sales_records}
 
 	# 5. Batch get Prices from tabItem Price
 	price_records = frappe.db.sql(
@@ -209,7 +211,7 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 		  AND pr.selling = 1
 		  AND (pr.valid_from IS NULL OR pr.valid_from <= %(today)s)
 		  AND (pr.valid_upto IS NULL OR pr.valid_upto >= %(today)s)
-		ORDER BY pr.priority DESC, pr.modified DESC
+		ORDER BY CAST(pr.priority AS UNSIGNED) DESC, pr.modified DESC
 		""",
 		{"item_codes": all_item_codes, "today": today()},
 		as_dict=True,
@@ -218,6 +220,25 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 	for ar in active_rules:
 		if ar.item_code not in discount_map:
 			discount_map[ar.item_code] = flt(ar.discount_percentage)
+
+	category_rules = frappe.db.sql(
+		"""
+		SELECT prig.item_group, pr.discount_percentage
+		FROM `tabPricing Rule Item Group` prig
+		JOIN `tabPricing Rule` pr ON pr.name = prig.parent
+		WHERE pr.disable = 0
+		  AND pr.selling = 1
+		  AND (pr.valid_from IS NULL OR pr.valid_from <= %(today)s)
+		  AND (pr.valid_upto IS NULL OR pr.valid_upto >= %(today)s)
+		ORDER BY CAST(pr.priority AS UNSIGNED) DESC, pr.modified DESC
+		""",
+		{"today": today()},
+		as_dict=True,
+	)
+	category_discount_map = {}
+	for cr in category_rules:
+		if cr.item_group not in category_discount_map:
+			category_discount_map[cr.item_group] = flt(cr.discount_percentage)
 
 	# Assemble final catalog items
 	catalog = []
@@ -228,6 +249,7 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 		if p.has_variants and variants:
 			total_stock = sum(stock_map.get(v.name, 0) for v in variants)
 			total_sold = sum(sales_map.get(v.name, 0) for v in variants)
+			total_sold_amount = sum(sales_amount_map.get(v.name, 0) for v in variants)
 
 			# Sizes can have different prices: show the lowest ("from") and flag a range
 			sell_values = [selling_price_map[v.name] for v in variants if selling_price_map.get(v.name)]
@@ -242,22 +264,57 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 			buying_price = min(buy_values) if buy_values else 0
 
 			discount_pct = discount_map.get(p_code)
-			if discount_pct is None and variants:
-				discount_pct = discount_map.get(variants[0].name, 0)
+			if discount_pct is None:
+				for v in variants:
+					if v.name in discount_map:
+						discount_pct = discount_map[v.name]
+						break
+			if discount_pct is None:
+				discount_pct = category_discount_map.get(p.item_group, 0)
 			discount_pct = discount_pct or 0
+
+			# Stock valuation at cost
+			stock_val_cost = sum(
+				stock_val_map.get(v.name, 0) or (stock_map.get(v.name, 0) * (buying_price_map.get(v.name) or buying_price))
+				for v in variants
+			)
+			if stock_val_cost == 0 and total_stock > 0 and buying_price > 0:
+				stock_val_cost = total_stock * buying_price
+
+			# Stock valuation at retail
+			if discount_pct > 0:
+				discounted_price = flt(selling_price * (1.0 - (discount_pct / 100.0)), 2)
+			else:
+				discounted_price = selling_price
+
+			stock_val_retail = sum(
+				stock_map.get(v.name, 0) * (selling_price_map.get(v.name) or selling_price)
+				for v in variants
+			)
+			if stock_val_retail == 0 and total_stock > 0 and discounted_price > 0:
+				stock_val_retail = total_stock * discounted_price
 		else:
 			total_stock = stock_map.get(p_code, 0)
 			total_sold = sales_map.get(p_code, 0)
+			total_sold_amount = sales_amount_map.get(p_code, 0)
 			selling_price = selling_price_map.get(p_code, 0)
 			buying_price = buying_price_map.get(p_code, 0)
-			discount_pct = discount_map.get(p_code, 0)
+			discount_pct = discount_map.get(p_code)
+			if discount_pct is None:
+				discount_pct = category_discount_map.get(p.item_group, 0)
+			discount_pct = discount_pct or 0
 			price_varies = False
 
-		# Calculate final discounted price
-		if discount_pct > 0:
-			discounted_price = flt(selling_price * (1.0 - (discount_pct / 100.0)), 2)
-		else:
-			discounted_price = selling_price
+			if discount_pct > 0:
+				discounted_price = flt(selling_price * (1.0 - (discount_pct / 100.0)), 2)
+			else:
+				discounted_price = selling_price
+
+			stock_val_cost = stock_val_map.get(p_code, 0)
+			if stock_val_cost == 0 and total_stock > 0 and buying_price > 0:
+				stock_val_cost = total_stock * buying_price
+
+			stock_val_retail = total_stock * discounted_price
 
 		# Status badge
 		if total_stock <= 0:
@@ -276,7 +333,10 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 			status_label_ru = "В наличии"
 			status_color = "green"
 
-		if status_filter and status_filter != "all" and status != status_filter:
+		if status_filter == "on_sale":
+			if discount_pct <= 0:
+				continue
+		elif status_filter and status_filter != "all" and status != status_filter:
 			continue
 
 		catalog.append({
@@ -287,13 +347,17 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 			"custom_short_code": p.custom_short_code or "",
 			"has_variants": p.has_variants,
 			"variant_count": len(variants),
-			"stock_qty": total_stock,
-			"sold_qty": total_sold,
-			"selling_price": selling_price,
+			"stock_uom": p.stock_uom or "Nos",
+			"stock_qty": flt(total_stock, 2),
+			"stock_value_cost": flt(stock_val_cost, 2),
+			"stock_value_retail": flt(stock_val_retail, 2),
+			"sold_qty": flt(total_sold, 2),
+			"sold_amount": flt(total_sold_amount, 2),
+			"selling_price": flt(selling_price, 2),
 			"price_varies": price_varies,
-			"buying_price": buying_price,
-			"discount_percentage": discount_pct,
-			"discounted_price": discounted_price,
+			"buying_price": flt(buying_price, 2),
+			"discount_percentage": flt(discount_pct, 1),
+			"discounted_price": flt(discounted_price, 2),
 			"status": status,
 			"status_label_tg": status_label_tg,
 			"status_label_ru": status_label_ru,
@@ -305,9 +369,19 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 		"SELECT DISTINCT item_group FROM `tabItem` WHERE disabled = 0 ORDER BY item_group ASC"
 	)
 
+	summary = {
+		"total_items": len(catalog),
+		"total_stock_qty": flt(sum(it["stock_qty"] for it in catalog), 2),
+		"total_stock_value_cost": flt(sum(it["stock_value_cost"] for it in catalog), 2),
+		"total_stock_value_retail": flt(sum(it["stock_value_retail"] for it in catalog), 2),
+		"total_sold_qty": flt(sum(it["sold_qty"] for it in catalog), 2),
+		"total_sold_amount": flt(sum(it["sold_amount"] for it in catalog), 2),
+	}
+
 	return {
 		"items": catalog,
 		"total": len(catalog),
+		"summary": summary,
 		"categories": item_groups,
 		"currency": currency,
 		"stores_warehouse": stores_wh,

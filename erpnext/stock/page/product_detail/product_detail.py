@@ -3,13 +3,31 @@
 
 import frappe
 from frappe import _
-from frappe.utils import flt, add_days, today, format_date, nowtime
+from frappe.utils import flt, cint, add_days, today, format_date, nowtime
 from erpnext.stock.page.product_catalog.product_catalog import get_default_company, get_stores_warehouse
 
 
 @frappe.whitelist()
 def get_product_detail(item_code):
-	"""Everything the simplified product view needs: general info + colors -> sizes + analytics & chart."""
+	if not item_code:
+		frappe.throw(_("Укажите код товара."))
+
+	if not frappe.db.exists("Item", item_code):
+		# Try lookup by short code
+		code_by_short = frappe.db.get_value("Item", {"custom_short_code": item_code, "disabled": 0}, "name")
+		if code_by_short:
+			item_code = code_by_short
+		else:
+			# Try barcode lookup
+			code_by_barcode = frappe.db.get_value("Item Barcode", {"barcode": item_code}, "parent")
+			if code_by_barcode:
+				item_code = code_by_barcode
+
+	# If variant was supplied, navigate up to parent template
+	parent_template = frappe.db.get_value("Item", item_code, "variant_of")
+	if parent_template:
+		item_code = parent_template
+
 	if not frappe.has_permission("Item", "read", item_code):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
@@ -20,7 +38,7 @@ def get_product_detail(item_code):
 		as_dict=True,
 	)
 	if not item:
-		frappe.throw(_("Item {0} not found").format(item_code))
+		frappe.throw(_("Товар {0} не найден").format(item_code))
 
 	if item.has_variants:
 		variants = frappe.get_all(
@@ -71,6 +89,55 @@ def get_product_detail(item_code):
 	):
 		target = sell_map if p.price_list == "Standard Selling" else buy_map
 		target.setdefault(p.item_code, flt(p.price_list_rate))
+
+	# Effective Active Pricing Rules (Discounts)
+	active_item_rules = frappe.db.sql(
+		"""SELECT pri.item_code, pr.name as rule_name, pr.title, pr.priority, pr.discount_percentage, pr.rate, pr.rate_or_discount
+		FROM `tabPricing Rule Item Code` pri
+		JOIN `tabPricing Rule` pr ON pr.name = pri.parent
+		WHERE pri.item_code IN %(c)s
+		  AND pr.disable = 0
+		  AND pr.selling = 1
+		  AND (pr.valid_from IS NULL OR pr.valid_from <= %(today)s)
+		  AND (pr.valid_upto IS NULL OR pr.valid_upto >= %(today)s)
+		ORDER BY CAST(pr.priority AS UNSIGNED) DESC, pr.modified DESC""",
+		{"c": codes, "today": today()},
+		as_dict=True,
+	)
+
+	active_cat_rules = frappe.db.sql(
+		"""SELECT prig.item_group, pr.name as rule_name, pr.title, pr.priority, pr.discount_percentage, pr.rate, pr.rate_or_discount
+		FROM `tabPricing Rule Item Group` prig
+		JOIN `tabPricing Rule` pr ON pr.name = prig.parent
+		WHERE prig.item_group = %(ig)s
+		  AND pr.disable = 0
+		  AND pr.selling = 1
+		  AND (pr.valid_from IS NULL OR pr.valid_from <= %(today)s)
+		  AND (pr.valid_upto IS NULL OR pr.valid_upto >= %(today)s)
+		ORDER BY CAST(pr.priority AS UNSIGNED) DESC, pr.modified DESC""",
+		{"ig": item.item_group, "today": today()},
+		as_dict=True,
+	)
+
+	def get_rule_badge(priority_val, title_val):
+		p = cint(priority_val)
+		if p >= 20 or "Tier 1" in (title_val or "") or "Ликвидация" in (title_val or ""):
+			return "🔴 ТОП-1 Ликвидация"
+		elif p >= 15 or "Tier 2" in (title_val or "") or "Акция на товар" in (title_val or ""):
+			return "🟠 ТОП-2 Акция"
+		elif p >= 10 or "Tier 3" in (title_val or "") or "Распродажа" in (title_val or ""):
+			return "🟡 ТОП-3 Распродажа"
+		elif p >= 5 or "Tier 4" in (title_val or "") or "Лояльность" in (title_val or ""):
+			return "🟢 ТОП-4 Лояльность"
+		return "🏷️ Акция"
+
+	item_rule_map = {}
+	for r in active_item_rules:
+		if r.item_code not in item_rule_map:
+			item_rule_map[r.item_code] = r
+
+	cat_rule = active_cat_rules[0] if active_cat_rules else None
+
 
 	# All historical sales items
 	sales_records = frappe.db.sql(
@@ -156,6 +223,38 @@ def get_product_detail(item_code):
 		c["revenue"] += item_revenue_map.get(v.name, 0.0)
 		c["profit"] += item_revenue_map.get(v.name, 0.0) - item_cost_map.get(v.name, 0.0)
 
+		# Check effective discount
+		eff_rule = item_rule_map.get(v.name) or item_rule_map.get(item_code)
+		if not eff_rule and cat_rule:
+			eff_rule = cat_rule
+		elif eff_rule and cat_rule:
+			if cint(cat_rule.priority) > cint(eff_rule.priority):
+				eff_rule = cat_rule
+
+		base_sell = sell_map.get(v.name, 0)
+		discount_info = {
+			"has_discount": False,
+			"discount_percentage": 0.0,
+			"discounted_price": base_sell,
+			"tier_badge": "",
+			"title": "",
+		}
+		if eff_rule:
+			if eff_rule.rate_or_discount == "Rate" and flt(eff_rule.rate) > 0:
+				promo = flt(eff_rule.rate)
+				pct = flt(((base_sell - promo) / base_sell) * 100.0, 1) if base_sell > promo else 0.0
+			else:
+				pct = flt(eff_rule.discount_percentage)
+				promo = flt(base_sell * (1.0 - (pct / 100.0)), 2) if pct > 0 else base_sell
+
+			discount_info = {
+				"has_discount": True,
+				"discount_percentage": pct,
+				"discounted_price": promo,
+				"tier_badge": get_rule_badge(eff_rule.priority, eff_rule.title),
+				"title": eff_rule.title,
+			}
+
 		c["sizes"].append(
 			{
 				"item_code": v.name,
@@ -165,12 +264,16 @@ def get_product_detail(item_code):
 				"stock_qty": stock,
 				"sold_qty": sold,
 				"buying_price": buy_map.get(v.name, 0),
-				"selling_price": sell_map.get(v.name, 0),
+				"selling_price": base_sell,
+				"discount": discount_info,
 			}
 		)
 
 	# Compute stats and top sizes for each color
 	for c in colors.values():
+		c_discounts = [s["discount"] for s in c["sizes"] if s["discount"]["has_discount"]]
+		c["discount"] = c_discounts[0] if c_discounts else {"has_discount": False}
+
 		c["margin_pct"] = flt((c["profit"] / c["revenue"]) * 100, 1) if c["revenue"] > 0 else 0.0
 		c["sold_last_30d"] = sum(daily_color_map.get(c["color"], {}).values())
 		c["velocity_per_day"] = round(c["sold_last_30d"] / 30.0, 1)
@@ -229,6 +332,12 @@ def get_product_detail(item_code):
 	velocity_per_day = round(sold_last_30d / 30.0, 1)
 	runway_days = round(total_stock / velocity_per_day) if velocity_per_day > 0 else (999 if total_stock > 0 else 0)
 
+	top_discount = None
+	for c in colors.values():
+		if c.get("discount", {}).get("has_discount"):
+			top_discount = c["discount"]
+			break
+
 	return {
 		"item_code": item.name,
 		"item_name": item.item_name,
@@ -238,6 +347,7 @@ def get_product_detail(item_code):
 		"has_variants": item.has_variants,
 		"supplier": get_supplier(item_code, codes),
 		"currency": frappe.db.get_default("currency") or "TJS",
+		"effective_discount": top_discount,
 		"total_stock": total_stock,
 		"total_sold": total_sold,
 		"total_revenue": total_revenue,

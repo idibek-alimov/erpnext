@@ -111,7 +111,11 @@ class ProductDetailApp {
 
 	render() {
 		const d = this.data;
-		this.page.set_title(d.item_name);
+		let pageTitle = frappe.utils.escape_html(d.item_name);
+		if (d.effective_discount && d.effective_discount.has_discount) {
+			pageTitle += ` <span class="indicator-pill red" style="font-size: 13px; font-weight: 600; vertical-align: middle; margin-left: 8px;">-${flt(d.effective_discount.discount_percentage)}% ${d.effective_discount.tier_badge}</span>`;
+		}
+		this.page.set_title(pageTitle);
 		this.page.clear_primary_action();
 		this.page.set_primary_action(this.t("restock"), () => {
 			const color = this.selected_color ? this.selected_color.color : "";
@@ -505,13 +509,18 @@ class ProductDetailApp {
 		const isReco = Boolean(this.is_reconciling);
 
 		const rows = color.sizes
-			.map(
-				(s) => `
+			.map((s) => {
+				const hasPromo = s.discount && s.discount.has_discount && flt(s.discount.discounted_price) < flt(s.selling_price);
+				const priceDisplay = hasPromo
+					? `<del class="text-muted" style="font-size: 11px;">${format_currency(s.selling_price, cur)}</del> <strong style="color: #ef4444; font-size: 13px; margin-left: 3px;">${format_currency(s.discount.discounted_price, cur)}</strong> <span class="indicator-pill red" style="font-size: 10px; padding: 1px 5px; margin-left: 3px;">-${flt(s.discount.discount_percentage)}%</span>`
+					: format_currency(s.selling_price, cur);
+
+				return `
 			<tr data-item-code="${frappe.utils.escape_html(s.item_code)}">
 				<td><b>${frappe.utils.escape_html(s.size)}</b></td>
 				<td class="text-muted">${frappe.utils.escape_html(s.short_code)}</td>
 				<td class="text-right">${format_currency(s.buying_price, cur)}</td>
-				<td class="text-right">${format_currency(s.selling_price, cur)}</td>
+				<td class="text-right">${priceDisplay}</td>
 				${
 					isReco
 						? `
@@ -533,8 +542,8 @@ class ProductDetailApp {
 				}
 				<td class="text-right">${flt(s.sold_qty)}</td>
 				<td>${this.status_pill(s.stock_qty)}</td>
-			</tr>`
-			)
+			</tr>`;
+			})
 			.join("");
 
 		$s.html(`
