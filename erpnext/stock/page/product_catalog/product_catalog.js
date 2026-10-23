@@ -18,6 +18,13 @@ frappe.pages["product-catalog"].on_page_load = function (wrapper) {
 	);
 
 	page.add_inner_button(
+		is_tg ? __("Таъминкунандагон") : __("Поставщики"),
+		() => {
+			frappe.set_route("supplier-hub");
+		}
+	);
+
+	page.add_inner_button(
 		is_tg ? __("Навсозӣ") : __("Обновить"),
 		() => {
 			if (wrapper.product_catalog_app) {

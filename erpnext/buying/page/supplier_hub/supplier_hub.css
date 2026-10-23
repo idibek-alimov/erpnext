@@ -1,0 +1,349 @@
+/* Supplier Hub - ERPNext Native Retail Table & Metric Cards Styles */
+
+.retail-supplier-layout {
+	padding: 0 0 24px 0;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* --- Top KPI Metric Cards Grid --- */
+.supplier-kpi-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: 14px;
+	margin-bottom: 16px;
+}
+
+.supplier-kpi-card {
+	background: var(--fg-color, #ffffff);
+	border: 1px solid var(--border-color, #d1d8dd);
+	border-radius: var(--border-radius-md, 8px);
+	padding: 14px 18px;
+	box-shadow: var(--card-shadow, 0 1px 3px rgba(0, 0, 0, 0.04));
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.supplier-kpi-card:hover {
+	box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+	transform: translateY(-1px);
+}
+
+.supplier-kpi-icon {
+	width: 44px;
+	height: 44px;
+	border-radius: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 22px;
+	flex-shrink: 0;
+}
+
+.icon-debt {
+	background: #ffebe9;
+	color: #cf222e;
+}
+
+.icon-stock {
+	background: #dafbe1;
+	color: #1a7f37;
+}
+
+.icon-suppliers {
+	background: #f6f8fa;
+	color: #57606a;
+}
+
+.supplier-kpi-info {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.supplier-kpi-label {
+	font-size: 12px;
+	color: var(--text-muted, #656d76);
+	font-weight: 500;
+	margin-bottom: 2px;
+	text-transform: uppercase;
+	letter-spacing: 0.3px;
+}
+
+.supplier-kpi-value {
+	font-size: 19px;
+	font-weight: 700;
+	color: var(--text-color, #1f2328);
+	line-height: 1.2;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.supplier-kpi-sub {
+	font-size: 11.5px;
+	color: var(--text-muted, #656d76);
+	margin-top: 3px;
+}
+
+/* --- ERPNext-Native Filter Bar --- */
+.supplier-filter-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 16px;
+	margin-bottom: 14px;
+	background-color: var(--fg-color, #ffffff);
+	border: 1px solid var(--border-color, #d1d8dd);
+	border-radius: var(--border-radius-md, 8px);
+	box-shadow: var(--card-shadow, 0 1px 3px rgba(0, 0, 0, 0.04));
+}
+
+.supplier-filter-bar .search-input-col {
+	flex: 1;
+	min-width: 260px;
+	max-width: 420px;
+}
+
+.supplier-filter-bar .frappe-search-box {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.supplier-filter-bar .frappe-search-icon {
+	position: absolute;
+	left: 10px;
+	color: var(--text-muted, #8d99a6);
+	pointer-events: none;
+	display: flex;
+	align-items: center;
+}
+
+.supplier-filter-bar .frappe-search-box input {
+	padding-left: 32px;
+	border-radius: var(--border-radius-sm, 6px);
+	height: 32px;
+	font-size: 13px;
+	background: var(--control-bg, #f4f5f6);
+	border: 1px solid var(--border-color, #d1d8dd);
+	transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.supplier-filter-bar .frappe-search-box input:focus {
+	background: var(--fg-color, #ffffff);
+	border-color: var(--primary-color, #171717);
+	box-shadow: none;
+}
+
+.supplier-filter-bar .select-group-col {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+}
+
+.supplier-filter-bar .filter-select {
+	height: 32px;
+	padding: 4px 10px;
+	font-size: 13px;
+	border-radius: var(--border-radius-sm, 6px);
+	background: var(--control-bg, #f4f5f6);
+	border: 1px solid var(--border-color, #d1d8dd);
+	color: var(--text-color, #1f272e);
+	font-weight: 500;
+	cursor: pointer;
+	width: auto;
+	min-width: 145px;
+}
+
+.supplier-filter-bar .filter-select:focus {
+	background: var(--fg-color, #ffffff);
+	border-color: var(--primary-color, #171717);
+	box-shadow: none;
+}
+
+/* --- Table Styles --- */
+.supplier-table-container {
+	background: var(--fg-color, #ffffff);
+	border: 1px solid var(--border-color, #d1d8dd);
+	border-radius: var(--border-radius-md, 8px);
+	box-shadow: var(--card-shadow, 0 1px 3px rgba(0, 0, 0, 0.04));
+	margin-bottom: 24px;
+}
+
+.supplier-table-wrapper {
+	margin-bottom: 0;
+	overflow-x: hidden;
+	width: 100%;
+}
+
+@media (max-width: 991px) {
+	.supplier-table-wrapper {
+		overflow-x: auto;
+	}
+}
+
+.supplier-table {
+	margin-bottom: 0;
+	font-size: 13px;
+	border-collapse: separate;
+	border-spacing: 0;
+	width: 100%;
+	table-layout: auto;
+}
+
+.supplier-table thead th {
+	background-color: var(--table-header-bg, #f8f9fa);
+	color: var(--text-muted, #52637a);
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+	padding: 10px 12px;
+	border-top: none;
+	border-bottom: 1px solid var(--border-color, #d1d8dd);
+	white-space: nowrap;
+	vertical-align: middle;
+}
+
+.supplier-table tbody td {
+	padding: 10px 12px;
+	vertical-align: middle;
+	border-top: 1px solid var(--border-color, #eceff1);
+	border-bottom: none;
+	color: var(--text-color, #1f272e);
+}
+
+.supplier-row {
+	cursor: pointer;
+	transition: background-color 0.12s ease;
+}
+
+.supplier-row:hover td {
+	background-color: var(--table-hover-bg, #fbfcfd);
+}
+
+/* Highlighting the Stock at Hand vs Current Debt columns */
+.supplier-table th.col-stock-hand,
+.supplier-table td.col-stock-hand {
+	background-color: rgba(46, 164, 79, 0.02);
+	border-left: 2px solid #dafbe1;
+}
+
+.supplier-table th.col-debt,
+.supplier-table td.col-debt {
+	background-color: rgba(207, 34, 46, 0.02);
+	border-left: 1px dashed var(--border-color, #e1e4e8);
+	border-right: 2px solid #ffebe9;
+}
+
+/* Badges and tags */
+.supplier-name-title {
+	font-size: 13.5px;
+	font-weight: 600;
+	color: var(--text-color, #1f272e);
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.supplier-contact-sub {
+	font-size: 11.5px;
+	color: var(--text-muted, #8d99a6);
+	margin-top: 3px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+/* Debt Pills */
+.debt-pill-owed {
+	background: #ffebe9;
+	color: #cf222e;
+	font-weight: 700;
+	padding: 4px 9px;
+	border-radius: 6px;
+	font-size: 13px;
+	display: inline-block;
+	border: 1px solid #ffcecb;
+}
+
+.debt-pill-settled {
+	background: #dafbe1;
+	color: #1a7f37;
+	font-weight: 600;
+	padding: 3px 8px;
+	border-radius: 6px;
+	font-size: 12px;
+	display: inline-block;
+	border: 1px solid #aceebb;
+}
+
+/* Pay Button */
+.btn-quick-pay {
+	font-size: 12px;
+	font-weight: 600;
+	padding: 5px 12px;
+	border-radius: 6px;
+	background-color: var(--primary-color, #171717);
+	color: #ffffff !important;
+	border: none;
+	transition: background-color 0.15s ease, transform 0.1s ease;
+	white-space: nowrap;
+}
+
+.btn-quick-pay:hover {
+	background-color: #333333;
+	transform: translateY(-1px);
+}
+
+.btn-quick-pay:active {
+	transform: translateY(0);
+}
+
+/* Totals Footer */
+.supplier-totals-row {
+	background-color: var(--table-header-bg, #f8f9fa);
+	font-weight: 600;
+	border-top: 2px solid var(--border-color, #d1d8dd);
+}
+
+.supplier-totals-row td {
+	padding: 12px 14px !important;
+	vertical-align: middle;
+}
+
+/* Detail Modal Styles */
+.supplier-modal-tabs {
+	border-bottom: 1px solid var(--border-color, #d1d8dd);
+	display: flex;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+
+.supplier-modal-tab {
+	padding: 8px 14px;
+	cursor: pointer;
+	font-weight: 600;
+	font-size: 13px;
+	color: var(--text-muted, #656d76);
+	border-bottom: 2px solid transparent;
+	transition: color 0.15s, border-color 0.15s;
+}
+
+.supplier-modal-tab.active {
+	color: var(--text-color, #1f272e);
+	border-bottom-color: var(--primary-color, #171717);
+}
+
+.supplier-product-thumb {
+	width: 36px;
+	height: 36px;
+	object-fit: cover;
+	border-radius: 4px;
+	border: 1px solid var(--border-color, #e1e4e8);
+}
