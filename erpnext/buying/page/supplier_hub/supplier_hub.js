@@ -418,10 +418,10 @@ class SupplierHubApp {
 			this.show_quick_payment_dialog(supp, debt);
 		});
 
-		// Bind Row click for Supplier Details Modal
+		// Bind Row click to navigate to Supplier Detail page
 		$area.find(".supplier-row").on("click", (e) => {
 			const supp = decodeURIComponent($(e.currentTarget).attr("data-supplier-name"));
-			this.show_supplier_detail_modal(supp);
+			frappe.set_route("supplier-detail", supp);
 		});
 	}
 
