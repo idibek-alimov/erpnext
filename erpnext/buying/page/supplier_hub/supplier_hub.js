@@ -142,32 +142,60 @@ class SupplierHubApp {
 					</div>
 				</div>
 
-				<!-- ERPNext-Native Filter Bar -->
-				<div class="supplier-filter-bar">
-					<div class="filter-col search-input-col">
-						<div class="frappe-search-box">
-							<span class="frappe-search-icon">
-								<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-search"></use></svg>
-							</span>
-							<input type="text" id="supplier-search" class="form-control form-control-sm" placeholder="${this.t("search_placeholder")}">
-						</div>
+				<!-- ERP Standard Filter Toolbar for Suppliers -->
+				<div class="sd-filter-toolbar">
+					<div class="sd-filter-group" style="flex: 1; min-width: 220px;">
+						<input type="text" id="supplier-filter-search" class="sd-filter-input" style="width: 100%;" placeholder="🔍 ${this.t("search_placeholder")}">
 					</div>
 
-					<div class="filter-col select-group-col">
-						<select id="supplier-debt-filter" class="form-control form-control-sm filter-select">
+					<div class="sd-filter-group">
+						<label class="sd-filter-label">Группа:</label>
+						<select id="supplier-filter-group" class="sd-filter-input">
+							<option value="all">${this.t("all_groups")}</option>
+						</select>
+					</div>
+
+					<div class="sd-filter-group">
+						<label class="sd-filter-label">Долг:</label>
+						<select id="supplier-filter-debt" class="sd-filter-input">
 							<option value="all">${this.t("filter_all")}</option>
 							<option value="with_debt">${this.t("filter_with_debt")}</option>
 							<option value="settled">${this.t("filter_settled")}</option>
-							<option value="in_stock">${this.t("filter_in_stock")}</option>
 						</select>
+					</div>
 
-						<select id="supplier-sort-filter" class="form-control form-control-sm filter-select">
+					<div class="sd-filter-group">
+						<label class="sd-filter-label">Товар:</label>
+						<select id="supplier-filter-stock-op" class="sd-filter-input" style="width: 145px;">
+							<option value="all">Все остатки</option>
+							<option value="gte">≥ (Остаток на складе)</option>
+							<option value="lte">≤ (Меньше или равно)</option>
+							<option value="zero">= 0 (Нет на складе)</option>
+						</select>
+						<input type="number" id="supplier-filter-stock-qty" class="sd-filter-input" style="width: 70px; display: none;" value="5" min="0" step="1">
+					</div>
+
+					<div class="sd-filter-group">
+						<label class="sd-filter-label">Сортировка:</label>
+						<select id="supplier-sort-filter" class="sd-filter-input">
 							<option value="debt_desc">${this.t("sort_debt_desc")}</option>
 							<option value="stock_val_desc">${this.t("sort_stock_val_desc")}</option>
 							<option value="purchased_desc">${this.t("sort_purchased_desc")}</option>
 							<option value="name_asc">${this.t("sort_name_asc")}</option>
 						</select>
 					</div>
+
+					<button type="button" class="btn btn-xs btn-default font-weight-bold" id="supplier-filter-reset" title="Сбросить все фильтры" style="height: 32px; padding: 0 10px;">
+						✕ Сбросить
+					</button>
+				</div>
+
+				<!-- Dynamic Live Calculation Strip -->
+				<div class="sd-filter-summary" id="supplier-filter-summary">
+					<div class="sd-filter-stat">Поставщиков показано: <b id="hub-flt-count">0</b></div>
+					<div class="sd-filter-stat">С долгом: <b class="text-danger" id="hub-flt-debt-count">0</b></div>
+					<div class="sd-filter-stat">Общий долг: <b class="text-danger font-weight-bold" id="hub-flt-debt">0.00 ${this.currency}</b></div>
+					<div class="sd-filter-stat">Остаток товаров: <b id="hub-flt-qty">0</b> шт (<b class="text-success" id="hub-flt-val">0.00 ${this.currency}</b>)</div>
 				</div>
 
 				<!-- Main Supplier Table with Sticky Totals Footer -->
@@ -179,22 +207,22 @@ class SupplierHubApp {
 	}
 
 	bind_events() {
-		let timeout = null;
-		this.wrapper.find("#supplier-search").on("input", (e) => {
-			clearTimeout(timeout);
-			timeout = setTimeout(() => {
-				this.search_query = e.target.value.trim();
-				this.load_data();
-			}, 300);
-		});
-
-		this.wrapper.find("#supplier-debt-filter").on("change", (e) => {
-			this.debt_filter = e.target.value;
-			this.load_data();
-		});
+		this.wrapper.find("#supplier-filter-search, #supplier-filter-stock-qty").on("input", () => this.filter_suppliers());
+		this.wrapper.find("#supplier-filter-group, #supplier-filter-debt, #supplier-filter-stock-op").on("change", () => this.filter_suppliers());
 
 		this.wrapper.find("#supplier-sort-filter").on("change", (e) => {
 			this.sort_by = e.target.value;
+			this.sort_and_render();
+		});
+
+		this.wrapper.find("#supplier-filter-reset").on("click", () => {
+			this.wrapper.find("#supplier-filter-search").val("");
+			this.wrapper.find("#supplier-filter-group").val("all");
+			this.wrapper.find("#supplier-filter-debt").val("all");
+			this.wrapper.find("#supplier-filter-stock-op").val("all");
+			this.wrapper.find("#supplier-filter-stock-qty").val("5").hide();
+			this.wrapper.find("#supplier-sort-filter").val("debt_desc");
+			this.sort_by = "debt_desc";
 			this.sort_and_render();
 		});
 	}
@@ -213,20 +241,123 @@ class SupplierHubApp {
 	load_data() {
 		frappe.call({
 			method: "erpnext.buying.page.supplier_hub.supplier_hub.get_supplier_hub_data",
-			args: {
-				search: this.search_query,
-				debt_filter: this.debt_filter,
-			},
 			callback: (r) => {
 				if (r.message) {
 					this.suppliers_data = r.message.suppliers || [];
 					this.summary_data = r.message.summary || {};
 					this.currency = r.message.currency || "TJS";
+					this.supplier_groups = r.message.supplier_groups || [];
+					this.populate_groups_filter();
 					this.update_kpi_cards();
 					this.sort_and_render();
 				}
 			},
 		});
+	}
+
+	populate_groups_filter() {
+		const groups = this.supplier_groups || [];
+		let opts = `<option value="all">${this.t("all_groups")}</option>`;
+		groups.forEach((g) => {
+			opts += `<option value="${frappe.utils.escape_html(g)}">${frappe.utils.escape_html(g)}</option>`;
+		});
+		this.wrapper.find("#supplier-filter-group").html(opts);
+	}
+
+	filter_suppliers() {
+		const q = (this.wrapper.find("#supplier-filter-search").val() || "").trim().toLowerCase();
+		const group = this.wrapper.find("#supplier-filter-group").val() || "all";
+		const debt_filter = this.wrapper.find("#supplier-filter-debt").val() || "all";
+		const stock_op = this.wrapper.find("#supplier-filter-stock-op").val() || "all";
+		const target_qty = flt(this.wrapper.find("#supplier-filter-stock-qty").val() || 0);
+
+		if (stock_op === "all" || stock_op === "zero") {
+			this.wrapper.find("#supplier-filter-stock-qty").hide();
+		} else {
+			this.wrapper.find("#supplier-filter-stock-qty").show();
+		}
+
+		let matched_count = 0;
+		let matched_debt_count = 0;
+		let matched_stock_qty = 0;
+		let matched_stock_val = 0;
+		let matched_debt = 0;
+		let matched_purchased = 0;
+		let matched_paid = 0;
+
+		this.wrapper.find(".hub-supplier-row").each((_, el) => {
+			const $row = $(el);
+			const name = $row.attr("data-name") || "";
+			const title = $row.attr("data-title") || "";
+			const grp = $row.attr("data-group") || "";
+			const phone = $row.attr("data-phone") || "";
+			const email = $row.attr("data-email") || "";
+			const debt = flt($row.attr("data-debt"));
+			const qty = flt($row.attr("data-stock-qty"));
+			const val = flt($row.attr("data-stock-val"));
+			const purchased = flt($row.attr("data-purchased"));
+			const paid = flt($row.attr("data-paid"));
+
+			let match = true;
+
+			if (q && !name.includes(q) && !title.includes(q) && !phone.includes(q) && !email.includes(q)) {
+				match = false;
+			}
+
+			if (match && group !== "all" && grp !== group) {
+				match = false;
+			}
+
+			if (match) {
+				if (debt_filter === "with_debt" && debt <= 0) {
+					match = false;
+				} else if (debt_filter === "settled" && debt > 0) {
+					match = false;
+				}
+			}
+
+			if (match) {
+				if (stock_op === "gte" && qty < target_qty) {
+					match = false;
+				} else if (stock_op === "lte" && qty > target_qty) {
+					match = false;
+				} else if (stock_op === "zero" && qty > 0) {
+					match = false;
+				}
+			}
+
+			if (match) {
+				$row.show();
+				matched_count += 1;
+				if (debt > 0) matched_debt_count += 1;
+				matched_stock_qty += qty;
+				matched_stock_val += val;
+				matched_debt += debt;
+				matched_purchased += purchased;
+				matched_paid += paid;
+			} else {
+				$row.hide();
+			}
+		});
+
+		this.wrapper.find("#hub-flt-count").text(matched_count);
+		this.wrapper.find("#hub-flt-debt-count").text(matched_debt_count);
+		this.wrapper.find("#hub-flt-debt").text(this.format_curr(matched_debt));
+		this.wrapper.find("#hub-flt-qty").text(this.format_num(matched_stock_qty, 0));
+		this.wrapper.find("#hub-flt-val").text(this.format_curr(matched_stock_val));
+
+		this.wrapper.find("#hub-foot-count").text(matched_count);
+		this.wrapper.find("#hub-foot-qty").text(this.format_num(matched_stock_qty, 0));
+		this.wrapper.find("#hub-foot-val").text(this.format_curr(matched_stock_val));
+		this.wrapper.find("#hub-foot-debt").text(this.format_curr(matched_debt));
+		this.wrapper.find("#hub-foot-purchased").text(this.format_curr(matched_purchased));
+		this.wrapper.find("#hub-foot-paid").text(this.format_curr(matched_paid));
+
+		if (matched_count === 0) {
+			this.wrapper.find(".hub-suppliers-no-match").show();
+		} else {
+			this.wrapper.find(".hub-suppliers-no-match").hide();
+		}
 	}
 
 	update_kpi_cards() {
@@ -334,7 +465,18 @@ class SupplierHubApp {
 			`;
 
 			rows_html += `
-				<tr class="supplier-row" data-supplier-name="${encodeURIComponent(s.name)}">
+				<tr class="supplier-row hub-supplier-row" 
+					data-supplier-name="${encodeURIComponent(s.name)}"
+					data-name="${frappe.utils.escape_html((s.name || "").toLowerCase())}"
+					data-title="${frappe.utils.escape_html((s.supplier_name || "").toLowerCase())}"
+					data-group="${frappe.utils.escape_html(s.supplier_group || "")}"
+					data-phone="${frappe.utils.escape_html((s.mobile_no || "").toLowerCase())}"
+					data-email="${frappe.utils.escape_html((s.email_id || "").toLowerCase())}"
+					data-debt="${flt(s.current_debt)}"
+					data-stock-qty="${flt(s.stock_qty)}"
+					data-stock-val="${flt(s.stock_value)}"
+					data-purchased="${flt(s.total_purchased)}"
+					data-paid="${flt(s.total_paid)}">
 					<td class="col-supplier">
 						<div class="supplier-name-title">
 							<span>${s.supplier_name || s.name}</span>
@@ -375,26 +517,32 @@ class SupplierHubApp {
 							<th class="col-paid text-right" style="width: 150px;">${this.t("col_total_paid")}</th>
 						</tr>
 					</thead>
-					<tbody>
+					<tbody id="hub-suppliers-tbody">
 						${rows_html}
+						<tr class="hub-suppliers-no-match text-center py-4" style="display: none;">
+							<td colspan="6" class="text-muted py-4">
+								<div style="font-size: 24px; margin-bottom: 4px;">🔍</div>
+								<div>Нет поставщиков, соответствующих выбранным фильтрам</div>
+							</td>
+						</tr>
 					</tbody>
 					<tfoot>
 						<tr class="supplier-totals-row">
 							<td class="col-totals-label text-left">
-								<strong>${this.t("total_prefix")}: ${total_suppliers} ${this.t("suppliers_suffix")}</strong>
+								<strong>${this.t("total_prefix")}: <span id="hub-foot-count">${total_suppliers}</span> ${this.t("suppliers_suffix")}</strong>
 							</td>
 							<td class="col-products text-center text-muted">—</td>
 							<td class="col-stock-hand">
-								<div class="font-weight-bold text-success">${this.format_curr(total_stock_val)}</div>
-								<div class="text-muted" style="font-size: 11px;">${this.format_num(total_stock_qty, 0)} ${this.t("pcs")}</div>
+								<div class="font-weight-bold text-success" id="hub-foot-val">${this.format_curr(total_stock_val)}</div>
+								<div class="text-muted" style="font-size: 11px;"><span id="hub-foot-qty">${this.format_num(total_stock_qty, 0)}</span> ${this.t("pcs")}</div>
 							</td>
 							<td class="col-debt text-right">
-								<div class="font-weight-bold text-danger" style="font-size: 14px;">${this.format_curr(total_debt)}</div>
+								<div class="font-weight-bold text-danger" style="font-size: 14px;" id="hub-foot-debt">${this.format_curr(total_debt)}</div>
 							</td>
-							<td class="col-purchased text-right font-weight-bold">
+							<td class="col-purchased text-right font-weight-bold" id="hub-foot-purchased">
 								${this.format_curr(total_purchased)}
 							</td>
-							<td class="col-paid text-right font-weight-bold text-muted">
+							<td class="col-paid text-right font-weight-bold text-muted" id="hub-foot-paid">
 								${this.format_curr(total_paid)}
 							</td>
 						</tr>
@@ -408,124 +556,167 @@ class SupplierHubApp {
 			const supp = decodeURIComponent($(e.currentTarget).attr("data-supplier-name"));
 			frappe.set_route("supplier-detail", supp);
 		});
+
+		this.filter_suppliers();
 	}
 
 	show_quick_payment_dialog(supplier_name, current_debt) {
-		const mops = (this.payment_options && this.payment_options.modes) || [];
-		const mop_options = mops.map((m) => m.name);
-		const default_mop = mop_options.includes("Cash") ? "Cash" : mop_options[0] || "Cash";
-
-		const d = new frappe.ui.Dialog({
-			title: `${this.t("payment_title")}: ${supplier_name}`,
-			fields: [
-				{
-					fieldtype: "HTML",
-					fieldname: "debt_summary_html",
-					options: `
-						<div class="alert alert-warning mb-3" style="display: flex; justify-content: space-between; align-items: center; border-radius: 6px;">
-							<div>
-								<div style="font-size: 11.5px; text-transform: uppercase; font-weight: 600; opacity: 0.85;">Текущий долг поставщику:</div>
-								<div style="font-size: 18px; font-weight: 700; color: #cf222e;">${this.format_curr(current_debt)}</div>
-							</div>
-							<button type="button" class="btn btn-sm btn-outline-danger font-weight-bold" id="btn-fill-full-debt" style="border-radius: 4px;">
-								⚡ ${this.t("btn_pay_all")}
-							</button>
-						</div>
-					`,
-				},
-				{
-					fieldtype: "Currency",
-					fieldname: "amount",
-					label: "Сумма к оплате (" + this.currency + ")",
-					reqd: 1,
-					default: current_debt,
-				},
-				{
-					fieldtype: "Column Break",
-				},
-				{
-					fieldtype: "Select",
-					fieldname: "mode_of_payment",
-					label: "Способ оплаты (Откуда)",
-					options: mop_options.length ? mop_options : ["Cash", "Credit Card", "Wire Transfer"],
-					default: default_mop,
-					reqd: 1,
-				},
-				{
-					fieldtype: "Section Break",
-				},
-				{
-					fieldtype: "Date",
-					fieldname: "posting_date",
-					label: "Дата оплаты",
-					default: frappe.datetime.get_today(),
-					reqd: 1,
-				},
-				{
-					fieldtype: "Column Break",
-				},
-				{
-					fieldtype: "Data",
-					fieldname: "reference_no",
-					label: "Номер чека / Расписки",
-					placeholder: "например, Чек #142",
-				},
-				{
-					fieldtype: "Section Break",
-				},
-				{
-					fieldtype: "Small Text",
-					fieldname: "remarks",
-					label: "Примечание (комментарий)",
-					placeholder: "Оплата за поставку товара...",
-				},
-			],
-			primary_action_label: "💳 Подтвердить оплату",
-			primary_action: (values) => {
-				if (!values.amount || flt(values.amount) <= 0) {
-					frappe.msgprint(__("Введите корректную сумму оплаты"));
+		frappe.call({
+			method: "erpnext.buying.page.supplier_hub.supplier_hub.get_unpaid_invoices",
+			args: { supplier: supplier_name },
+			callback: (r_inv) => {
+				const unpaid_invoices = r_inv.message || [];
+				if (unpaid_invoices.length === 0) {
+					frappe.msgprint(__("У поставщика нет неоплаченных накладных"));
 					return;
 				}
 
-				frappe.ui.form.is_saving = true;
-				d.get_primary_btn().prop("disabled", true).text("Обработка...");
+				let current_inv = unpaid_invoices[0];
+				const mops = (this.payment_options && this.payment_options.modes) || [];
+				const mop_options = mops.map((m) => m.name);
+				const default_mop = mop_options.includes("Cash") ? "Cash" : mop_options[0] || "Cash";
 
-				frappe.call({
-					method: "erpnext.buying.page.supplier_hub.supplier_hub.make_quick_supplier_payment",
-					args: {
-						supplier: supplier_name,
-						amount: values.amount,
-						mode_of_payment: values.mode_of_payment,
-						posting_date: values.posting_date,
-						reference_no: values.reference_no,
-						remarks: values.remarks,
-					},
-					callback: (r) => {
-						d.hide();
-						if (r.message && r.message.success) {
-							frappe.show_alert(
-								{
-									message: `✅ ${r.message.message}`,
-									indicator: "green",
-								},
-								6
-							);
-							this.load_data();
+				const invoice_options = unpaid_invoices.map((inv) => {
+					const bill_str = inv.bill_no ? ` | № ${inv.bill_no}` : "";
+					return {
+						value: inv.name,
+						label: `${inv.name} (${inv.posting_date}${bill_str}) — Долг: ${this.format_curr(inv.outstanding_amount)}`,
+					};
+				});
+
+				const render_banner_html = (inv) => `
+					<div class="pay-debt-banner">
+						<div class="pay-debt-banner-left">
+							<div class="pay-debt-banner-label">
+								Остаток долга по накладной <b style="color: #431407;">${frappe.utils.escape_html(inv.name)}</b>:
+							</div>
+							<div class="pay-debt-banner-amount" id="hub-inv-debt-val">
+								${this.format_curr(inv.outstanding_amount)}
+							</div>
+							${inv.bill_no ? `<div class="pay-debt-banner-sub">Чек / Накладная поставщика: <b>${frappe.utils.escape_html(inv.bill_no)}</b> (${inv.posting_date})</div>` : ""}
+						</div>
+						<button type="button" class="pay-btn-full-debt" id="hub-btn-fill-full">
+							⚡ Оплатить всю сумму
+						</button>
+					</div>
+				`;
+
+				const d = new frappe.ui.Dialog({
+					title: `${this.t("payment_title")}: ${frappe.utils.escape_html(supplier_name)}`,
+					size: "large",
+					fields: [
+						{
+							fieldtype: "HTML",
+							fieldname: "debt_summary_html",
+							options: render_banner_html(current_inv),
+						},
+						{
+							fieldtype: "Section Break",
+						},
+						{
+							fieldtype: "Currency",
+							fieldname: "amount",
+							label: "Сумма к оплате (" + this.currency + ")",
+							description: `Максимально к оплате: ${this.format_curr(current_inv.outstanding_amount)}`,
+							reqd: 1,
+							default: current_inv.outstanding_amount,
+						},
+						{
+							fieldtype: "Column Break",
+						},
+						{
+							fieldtype: "Select",
+							fieldname: "mode_of_payment",
+							label: "Способ оплаты (Касса / Счёт)",
+							options: mop_options.length ? mop_options : ["Cash", "Credit Card", "Wire Transfer"],
+							default: default_mop,
+							reqd: 1,
+						},
+						{
+							fieldtype: "Section Break",
+						},
+						{
+							fieldtype: "Date",
+							fieldname: "posting_date",
+							label: "Дата оплаты",
+							default: frappe.datetime.get_today(),
+							reqd: 1,
+						},
+						{
+							fieldtype: "Column Break",
+						},
+						{
+							fieldtype: "Data",
+							fieldname: "remarks",
+							label: "Примечание (комментарий, чек)",
+							placeholder: "например, Чек #142, через водителя...",
+						},
+					],
+					primary_action_label: "💳 Подтвердить оплату",
+					primary_action: (values) => {
+						const pay_amount = flt(values.amount);
+						if (!pay_amount || pay_amount <= 0) {
+							frappe.msgprint(__("Введите корректную сумму оплаты"));
+							return;
 						}
-					},
-					always: () => {
-						frappe.ui.form.is_saving = false;
-						d.get_primary_btn().prop("disabled", false).text("💳 Подтвердить оплату");
+
+						const max_allowed = flt(current_inv.outstanding_amount);
+						if (pay_amount > max_allowed + 0.001) {
+							frappe.msgprint(
+								__("Сумма оплаты ({0}) не может превышать остаток по накладной ({1})", [
+									this.format_curr(pay_amount),
+									this.format_curr(max_allowed),
+								])
+							);
+							return;
+						}
+
+						frappe.ui.form.is_saving = true;
+						d.get_primary_btn().prop("disabled", true).text("Обработка...");
+
+						frappe.call({
+							method: "erpnext.buying.page.supplier_hub.supplier_hub.make_quick_supplier_payment",
+							args: {
+								supplier: supplier_name,
+								purchase_invoice: current_inv.name,
+								amount: pay_amount,
+								mode_of_payment: values.mode_of_payment,
+								posting_date: values.posting_date,
+								reference_no: "",
+								remarks: values.remarks,
+							},
+							callback: (r) => {
+								d.hide();
+								if (r.message && r.message.success) {
+									frappe.show_alert(
+										{
+											message: `✅ ${r.message.message}`,
+											indicator: "green",
+										},
+										6
+									);
+									this.load_data();
+								}
+							},
+							always: () => {
+								frappe.ui.form.is_saving = false;
+								d.get_primary_btn().prop("disabled", false).text("💳 Подтвердить оплату");
+							},
+						});
 					},
 				});
+
+				const bind_banner_btn = () => {
+					d.$wrapper.find("#hub-btn-fill-full").off("click").on("click", () => {
+						d.set_value("amount", current_inv.outstanding_amount);
+					});
+				};
+
+				d.show();
+				d.$wrapper.addClass("supplier-pay-modal");
+				d.$wrapper.find(".modal-dialog").addClass("modal-dialog-centered");
+				bind_banner_btn();
 			},
-		});
-
-		d.show();
-
-		// Quick fill full debt button
-		d.$wrapper.find("#btn-fill-full-debt").on("click", () => {
-			d.set_value("amount", current_debt);
 		});
 	}
 

@@ -70,13 +70,23 @@ class SupplierDetailApp {
 			col_actions: { tg: "Амал", ru: "Действие" },
 
 			col_inv_no: { tg: "Рақами накладной", ru: "Номер накладной" },
+			col_model_product: { tg: "Модел ва номи мол", ru: "Товар / Модель" },
+			col_qty: { tg: "Миқдор", ru: "Кол-во" },
 			col_date: { tg: "Сана", ru: "Дата" },
 			col_bill_no: { tg: "Чек / Борхат", ru: "Чек / Накладная поставщика" },
 			col_amount: { tg: "Маблағ", ru: "Сумма поставки" },
 			col_debt_left: { tg: "Бақияи қарз", ru: "Остаток долга" },
 			col_status: { tg: "Ҳолат", ru: "Статус" },
 
+			filter_search_placeholder: { tg: "Ҷустуҷӯ аз рӯи модел ё номи мол...", ru: "Поиск по модели, коду или названию товара..." },
+			filter_status_all: { tg: "Ҳама поставкаҳо", ru: "Все поставки" },
+			filter_status_unpaid: { tg: "Танҳо бо қарз", ru: "Только с долгом" },
+			filter_status_paid: { tg: "Пардохтшуда", ru: "Полностью оплаченные" },
+
 			col_pay_no: { tg: "Рақами пардохт", ru: "Номер платежа" },
+			col_pay_product: { tg: "Мол / Модел", ru: "Товар / Модель" },
+			col_pay_amount: { tg: "Маблағи пардохт", ru: "Сумма оплаты" },
+			col_remarks: { tg: "Эзоҳ", ru: "Примечание" },
 			col_mode: { tg: "Усули пардохт", ru: "Способ оплаты" },
 			col_reference: { tg: "Чек / Расид", ru: "Чек / Расписка" },
 			col_user: { tg: "Масъул", ru: "Оформил" },
@@ -211,20 +221,20 @@ class SupplierDetailApp {
 
 				<!-- Card Container with 4 Modern Tabs -->
 				<div class="sd-card">
-					<!-- Tabs Navigation Bar (General Info opened by default) -->
+					<!-- Tabs Navigation Bar -->
 					<div class="sd-tabs-bar">
-						<div class="sd-tab-item active" data-tab="tab-general">
+						<div class="sd-tab-item ${(this.active_tab || "tab-general") === "tab-general" ? "active" : ""}" data-tab="tab-general">
 							${this.t("tab_general_info")}
 						</div>
-						<div class="sd-tab-item" data-tab="tab-products">
+						<div class="sd-tab-item ${(this.active_tab || "tab-general") === "tab-products" ? "active" : ""}" data-tab="tab-products">
 							${this.t("tab_products")}
 							<span class="sd-tab-badge">${(this.data.products || []).length}</span>
 						</div>
-						<div class="sd-tab-item" data-tab="tab-invoices">
+						<div class="sd-tab-item ${(this.active_tab || "tab-general") === "tab-invoices" ? "active" : ""}" data-tab="tab-invoices">
 							${this.t("tab_invoices")}
 							<span class="sd-tab-badge">${(this.data.invoices || []).length}</span>
 						</div>
-						<div class="sd-tab-item" data-tab="tab-payments">
+						<div class="sd-tab-item ${(this.active_tab || "tab-general") === "tab-payments" ? "active" : ""}" data-tab="tab-payments">
 							${this.t("tab_payments")}
 							<span class="sd-tab-badge">${(this.data.payments || []).length}</span>
 						</div>
@@ -232,23 +242,23 @@ class SupplierDetailApp {
 
 					<!-- Tab Panes -->
 					<div class="sd-tab-panes">
-						<!-- Tab 1: General Info (Active by default) -->
-						<div id="tab-general" class="sd-tab-pane" style="display: block;">
+						<!-- Tab 1: General Info -->
+						<div id="tab-general" class="sd-tab-pane" style="display: ${(this.active_tab || "tab-general") === "tab-general" ? "block" : "none"};">
 							${this.render_general_info_tab()}
 						</div>
 
 						<!-- Tab 2: Products Table (Catalog Style) -->
-						<div id="tab-products" class="sd-tab-pane" style="display: none;">
+						<div id="tab-products" class="sd-tab-pane" style="display: ${(this.active_tab || "tab-general") === "tab-products" ? "block" : "none"};">
 							${this.render_products_tab()}
 						</div>
 
 						<!-- Tab 3: Invoices Table -->
-						<div id="tab-invoices" class="sd-tab-pane" style="display: none;">
+						<div id="tab-invoices" class="sd-tab-pane" style="display: ${(this.active_tab || "tab-general") === "tab-invoices" ? "block" : "none"};">
 							${this.render_invoices_tab()}
 						</div>
 
 						<!-- Tab 4: Payments Table -->
-						<div id="tab-payments" class="sd-tab-pane" style="display: none;">
+						<div id="tab-payments" class="sd-tab-pane" style="display: ${(this.active_tab || "tab-general") === "tab-payments" ? "block" : "none"};">
 							${this.render_payments_tab()}
 						</div>
 					</div>
@@ -264,6 +274,7 @@ class SupplierDetailApp {
 	bind_tab_events() {
 		this.wrapper.find(".sd-tab-item").on("click", (e) => {
 			const target = $(e.currentTarget).attr("data-tab");
+			this.active_tab = target;
 			this.wrapper.find(".sd-tab-item").removeClass("active");
 			$(e.currentTarget).addClass("active");
 			this.wrapper.find(".sd-tab-pane").hide();
@@ -364,6 +375,8 @@ class SupplierDetailApp {
 		let total_val = 0;
 		let rows_html = "";
 
+		const categories = Array.from(new Set(prods.map((p) => p.item_group).filter(Boolean))).sort();
+
 		prods.forEach((p) => {
 			total_qty += flt(p.stock_qty);
 			total_val += flt(p.stock_value);
@@ -387,7 +400,13 @@ class SupplierDetailApp {
 			else if (p.stock_qty <= 5) indicator = "indicator-orange";
 
 			rows_html += `
-				<tr class="sd-table-row" data-item-code="${encodeURIComponent(p.item_code)}">
+				<tr class="sd-table-row sd-prod-row" 
+					data-item-code="${encodeURIComponent(p.item_code)}"
+					data-product="${frappe.utils.escape_html((p.item_name || "").toLowerCase())}"
+					data-code="${frappe.utils.escape_html((p.custom_short_code || p.item_code || "").toLowerCase())}"
+					data-category="${frappe.utils.escape_html(p.item_group || "")}"
+					data-qty="${p.stock_qty}"
+					data-val="${p.stock_value}">
 					<td class="text-center" style="width: 50px;">${thumb}</td>
 					<td class="text-center" style="width: 80px;">${short_code}</td>
 					<td>
@@ -426,7 +445,46 @@ class SupplierDetailApp {
 			`;
 		});
 
+		const category_options = categories
+			.map((c) => `<option value="${frappe.utils.escape_html(c)}">${frappe.utils.escape_html(c)}</option>`)
+			.join("");
+
 		return `
+			<!-- ERP Standard Filters Toolbar for Products -->
+			<div class="sd-filter-toolbar">
+				<div class="sd-filter-group" style="flex: 1; min-width: 220px;">
+					<input type="text" id="sd-prod-filter-search" class="sd-filter-input" style="width: 100%;" placeholder="🔍 Поиск по модели, коду или названию...">
+				</div>
+				<div class="sd-filter-group">
+					<label class="sd-filter-label">Категория:</label>
+					<select id="sd-prod-filter-category" class="sd-filter-input">
+						<option value="all">Все категории</option>
+						${category_options}
+					</select>
+				</div>
+				<div class="sd-filter-group">
+					<label class="sd-filter-label">Остаток:</label>
+					<select id="sd-prod-filter-op" class="sd-filter-input" style="width: 145px;">
+						<option value="all">Все остатки</option>
+						<option value="gte">≥ (Больше или равно)</option>
+						<option value="lte">≤ (Меньше или равно)</option>
+						<option value="eq">= (Точно равно)</option>
+						<option value="zero">= 0 (Закончился)</option>
+					</select>
+					<input type="number" id="sd-prod-filter-qty" class="sd-filter-input" style="width: 70px; display: none;" value="5" min="0" step="1">
+				</div>
+				<button type="button" class="btn btn-xs btn-default font-weight-bold" id="sd-prod-filter-reset" title="Сбросить все фильтры" style="height: 32px; padding: 0 10px;">
+					✕ Сбросить
+				</button>
+			</div>
+
+			<!-- Dynamic Live Calculation Strip -->
+			<div class="sd-filter-summary">
+				<div class="sd-filter-stat">Моделей показано: <b id="sd-stat-prod-count">${prods.length}</b></div>
+				<div class="sd-filter-stat">Остаток на складе: <b id="sd-stat-prod-qty">${this.format_num(total_qty, 0)}</b> шт</div>
+				<div class="sd-filter-stat">Стоимость остатка: <b class="text-success font-weight-bold" id="sd-stat-prod-val">${this.format_curr(total_val)}</b></div>
+			</div>
+
 			<div class="sd-table-wrapper">
 				<table class="table table-bordered table-hover sd-catalog-table">
 					<thead>
@@ -442,20 +500,26 @@ class SupplierDetailApp {
 							<th class="text-center">${this.t("col_actions")}</th>
 						</tr>
 					</thead>
-					<tbody>
+					<tbody id="sd-products-tbody">
 						${rows_html}
+						<tr class="sd-products-no-match text-center py-4" style="display: none;">
+							<td colspan="9" class="text-muted py-4">
+								<div style="font-size: 24px; margin-bottom: 4px;">🔍</div>
+								<div>Нет товаров, соответствующих выбранным фильтрам</div>
+							</td>
+						</tr>
 					</tbody>
 					<tfoot>
 						<tr class="sd-totals-row">
 							<td colspan="4">
-								<strong>${this.t("total_prefix")}: ${prods.length} ${this.t("models_suffix")}</strong>
+								<strong>${this.t("total_prefix")}: <span id="sd-foot-prod-count">${prods.length}</span> ${this.t("models_suffix")}</strong>
 							</td>
 							<td>
-								<span class="font-weight-bold">${this.format_num(total_qty, 0)} ${this.t("pcs")}</span>
+								<span class="font-weight-bold"><span id="sd-foot-prod-qty">${this.format_num(total_qty, 0)}</span> ${this.t("pcs")}</span>
 							</td>
 							<td class="text-center text-muted">—</td>
 							<td class="text-right">
-								<span class="font-weight-bold text-success">${this.format_curr(total_val)}</span>
+								<span class="font-weight-bold text-success" id="sd-foot-prod-val">${this.format_curr(total_val)}</span>
 							</td>
 							<td colspan="2" class="text-center text-muted">—</td>
 						</tr>
@@ -479,11 +543,13 @@ class SupplierDetailApp {
 
 		let total_amount = 0;
 		let total_debt = 0;
+		let total_qty = 0;
 		let rows_html = "";
 
 		invs.forEach((inv) => {
 			total_amount += flt(inv.grand_total);
 			total_debt += flt(inv.outstanding_amount);
+			total_qty += flt(inv.total_qty || 0);
 
 			const is_unpaid = inv.outstanding_amount > 0;
 			const debt_badge = is_unpaid
@@ -494,19 +560,58 @@ class SupplierDetailApp {
 				? `<button class="btn btn-xs btn-primary btn-pay-invoice" data-invoice="${encodeURIComponent(inv.name)}" data-amount="${inv.outstanding_amount}">💳 ${this.t("btn_pay")}</button>`
 				: `<span class="text-muted" style="font-size: 11.5px;">—</span>`;
 
+			const img_html = inv.image
+				? `<img src="${inv.image}" class="sd-credit-product-img" alt="">`
+				: `<div class="sd-credit-product-img-empty">📦</div>`;
+
+			const model_pill = inv.model_id
+				? `<span class="sd-model-badge">#${frappe.utils.escape_html(inv.model_id)}</span>`
+				: "";
+
+			const bill_note_part = inv.bill_no && !inv.bill_no.startsWith("QPI-") && !inv.bill_no.startsWith("QPR-")
+				? ` · Чек: <b>${frappe.utils.escape_html(inv.bill_no)}</b>`
+				: "";
+
+			const variants_line = inv.variants_summary
+				? `<div class="sd-credit-variants">${frappe.utils.escape_html(inv.variants_summary)}</div>`
+				: "";
+
 			rows_html += `
-				<tr>
+				<tr class="sd-invoice-row" 
+					data-invoice="${frappe.utils.escape_html(inv.name)}"
+					data-product="${frappe.utils.escape_html((inv.product_name || "").toLowerCase())}"
+					data-model="${frappe.utils.escape_html((inv.model_id || "").toLowerCase())}"
+					data-date="${inv.posting_date}"
+					data-unpaid="${is_unpaid ? 1 : 0}"
+					data-amount="${inv.grand_total}"
+					data-debt="${inv.outstanding_amount}"
+					data-qty="${inv.total_qty || 0}">
 					<td>
-						<a href="/app/purchase-invoice/${encodeURIComponent(inv.name)}" target="_blank" class="sd-voucher-link">
-							${inv.name}
-						</a>
+						<div class="sd-credit-product-cell">
+							${img_html}
+							<div class="sd-credit-details">
+								<div class="sd-credit-name-row">
+									${model_pill}
+									<span class="sd-credit-name">${frappe.utils.escape_html(inv.product_name || "Товары")}</span>
+								</div>
+								<div class="sd-credit-sub">
+									<a href="/app/purchase-invoice/${encodeURIComponent(inv.name)}" target="_blank" class="sd-voucher-link text-muted" title="Открыть документ в ERP">
+										🧾 ${inv.name}
+									</a>
+									${bill_note_part}
+								</div>
+								${variants_line}
+							</div>
+						</div>
 					</td>
-					<td class="text-center" style="width: 110px;">${inv.posting_date}</td>
-					<td style="width: 180px;">${inv.bill_no || "—"}</td>
-					<td class="text-right font-weight-bold" style="width: 160px;">${this.format_curr(inv.grand_total)}</td>
-					<td class="text-right" style="width: 170px;">${debt_badge}</td>
-					<td class="text-center" style="width: 120px;">
-						<span class="badge badge-light">${inv.status}</span>
+					<td class="text-center font-weight-bold" style="width: 105px; font-size: 12.5px;">${inv.posting_date}</td>
+					<td class="text-center font-weight-bold" style="width: 85px;">
+						${inv.total_qty > 0 ? this.format_num(inv.total_qty, inv.total_qty % 1 === 0 ? 0 : 2) + " шт" : "—"}
+					</td>
+					<td class="text-right font-weight-bold" style="width: 150px;">${this.format_curr(inv.grand_total)}</td>
+					<td class="text-right" style="width: 160px;">${debt_badge}</td>
+					<td class="text-center" style="width: 110px;">
+						<span class="badge ${is_unpaid ? "badge-light" : "badge-success"}">${inv.status}</span>
 					</td>
 					<td class="text-center" style="width: 110px;">
 						${pay_btn}
@@ -516,32 +621,76 @@ class SupplierDetailApp {
 		});
 
 		return `
+			<!-- ERP Standard Filters Toolbar -->
+			<div class="sd-filter-toolbar">
+				<div class="sd-filter-group" style="flex: 1; min-width: 220px;">
+					<input type="text" id="sd-inv-filter-search" class="sd-filter-input" style="width: 100%;" placeholder="🔍 ${this.t("filter_search_placeholder")}">
+				</div>
+				<div class="sd-filter-group">
+					<label class="sd-filter-label">Статус:</label>
+					<select id="sd-inv-filter-status" class="sd-filter-input">
+						<option value="unpaid" selected>${this.t("filter_status_unpaid")}</option>
+						<option value="all">${this.t("filter_status_all")}</option>
+						<option value="paid">${this.t("filter_status_paid")}</option>
+					</select>
+				</div>
+				<div class="sd-filter-group">
+					<label class="sd-filter-label">С:</label>
+					<input type="date" id="sd-inv-filter-from" class="sd-filter-input">
+				</div>
+				<div class="sd-filter-group">
+					<label class="sd-filter-label">По:</label>
+					<input type="date" id="sd-inv-filter-to" class="sd-filter-input">
+				</div>
+				<button type="button" class="btn btn-xs btn-default font-weight-bold" id="sd-inv-filter-reset" title="Сбросить все фильтры" style="height: 32px; padding: 0 10px;">
+					✕ Сбросить
+				</button>
+			</div>
+
+			<!-- Dynamic Live Calculation Strip -->
+			<div class="sd-filter-summary">
+				<div class="sd-filter-stat">Поставок: <b id="sd-stat-inv-count">${invs.length}</b></div>
+				<div class="sd-filter-stat">Товаров: <b id="sd-stat-inv-qty">${this.format_num(total_qty, 0)}</b> шт</div>
+				<div class="sd-filter-stat">Сумма поставок: <b id="sd-stat-inv-total">${this.format_curr(total_amount)}</b></div>
+				<div class="sd-filter-stat">Остаток долга: <b class="text-danger" id="sd-stat-inv-debt">${this.format_curr(total_debt)}</b></div>
+			</div>
+
 			<div class="sd-table-wrapper">
 				<table class="table table-bordered table-hover sd-data-table">
 					<thead>
 						<tr>
-							<th>${this.t("col_inv_no")}</th>
+							<th>${this.t("col_model_product")}</th>
 							<th class="text-center">${this.t("col_date")}</th>
-							<th>${this.t("col_bill_no")}</th>
+							<th class="text-center">${this.t("col_qty")}</th>
 							<th class="text-right">${this.t("col_amount")}</th>
 							<th class="text-right">${this.t("col_debt_left")}</th>
 							<th class="text-center">${this.t("col_status")}</th>
 							<th class="text-center">${this.t("col_actions")}</th>
 						</tr>
 					</thead>
-					<tbody>
+					<tbody id="sd-invoices-tbody">
 						${rows_html}
+						<tr class="sd-invoices-no-match text-center py-4" style="display: none;">
+							<td colspan="7" class="text-muted py-4">
+								<div style="font-size: 24px; margin-bottom: 4px;">🔍</div>
+								<div>Нет поставок, соответствующих выбранным фильтрам</div>
+							</td>
+						</tr>
 					</tbody>
 					<tfoot>
 						<tr class="sd-totals-row">
-							<td colspan="3">
-								<strong>${this.t("total_prefix")}: ${invs.length} накладных</strong>
+							<td>
+								<strong>${this.t("total_prefix")}: <span id="sd-foot-count">${invs.length}</span> накладных</strong>
+							</td>
+							<td class="text-center text-muted">—</td>
+							<td class="text-center font-weight-bold">
+								<span id="sd-foot-qty">${this.format_num(total_qty, 0)}</span> шт
 							</td>
 							<td class="text-right font-weight-bold">
-								${this.format_curr(total_amount)}
+								<span id="sd-foot-total">${this.format_curr(total_amount)}</span>
 							</td>
 							<td class="text-right font-weight-bold text-danger">
-								${this.format_curr(total_debt)}
+								<span id="sd-foot-debt">${this.format_curr(total_debt)}</span>
 							</td>
 							<td colspan="2" class="text-center text-muted">—</td>
 						</tr>
@@ -566,15 +715,67 @@ class SupplierDetailApp {
 		let total_paid = 0;
 		let rows_html = "";
 
+		const modes = Array.from(new Set(payments.map((p) => p.mode_of_payment).filter(Boolean))).sort();
+		const mode_options = modes
+			.map((m) => `<option value="${frappe.utils.escape_html(m)}">${frappe.utils.escape_html(m)}</option>`)
+			.join("");
+
 		payments.forEach((p) => {
 			total_paid += flt(p.paid_amount);
 
+			const img_html = p.image
+				? `<img src="${encodeURI(p.image)}" class="sd-credit-product-img" alt="">`
+				: `<div class="sd-credit-product-img-empty">💳</div>`;
+
+			const model_pill = p.model_id
+				? `<span class="sd-model-badge">#${frappe.utils.escape_html(p.model_id)}</span>`
+				: "";
+
+			const prod_title = p.product_name || "Товары";
+
+			const invoice_sub = p.invoice_name
+				? ` · по <b>${frappe.utils.escape_html(p.invoice_name)}</b>`
+				: "";
+
+			const voucher_sub = `
+				<div class="sd-credit-sub">
+					<a href="/app/payment-entry/${encodeURIComponent(p.name)}" target="_blank" class="sd-voucher-link text-muted" title="Открыть документ в ERP">
+						💳 ${frappe.utils.escape_html(p.name)}
+					</a>
+					${invoice_sub}
+				</div>
+			`;
+
+			const note_text = p.clean_remarks || p.remarks || "";
+			const ref_badge = p.reference_no
+				? `<span class="badge badge-light border text-muted mr-1" style="font-size: 11px;">Чек: ${frappe.utils.escape_html(p.reference_no)}</span>`
+				: "";
+
+			const note_html = note_text
+				? `<span style="font-size: 12.5px; color: #24292f;">${frappe.utils.escape_html(note_text)}</span>`
+				: (ref_badge ? "" : `<span class="text-muted">—</span>`);
+
 			rows_html += `
-				<tr>
-					<td>
-						<a href="/app/payment-entry/${encodeURIComponent(p.name)}" target="_blank" class="sd-voucher-link">
-							${p.name}
-						</a>
+				<tr class="sd-payment-row"
+					data-pay="${frappe.utils.escape_html(p.name.toLowerCase())}"
+					data-prod="${frappe.utils.escape_html(((p.product_name || "") + " " + (p.model_id || "")).toLowerCase())}"
+					data-inv="${frappe.utils.escape_html((p.invoice_name || "").toLowerCase())}"
+					data-rem="${frappe.utils.escape_html(((p.clean_remarks || p.remarks || "") + " " + (p.reference_no || "")).toLowerCase())}"
+					data-user="${frappe.utils.escape_html((p.owner || "").toLowerCase())}"
+					data-mode="${frappe.utils.escape_html(p.mode_of_payment || "")}"
+					data-date="${p.posting_date}"
+					data-amount="${p.paid_amount}">
+					<td style="min-width: 240px;">
+						<div class="sd-credit-product-cell">
+							${img_html}
+							<div class="sd-credit-details">
+								<div class="sd-credit-name-row">
+									${model_pill}
+									<span class="sd-credit-name">${frappe.utils.escape_html(prod_title)}</span>
+								</div>
+								${voucher_sub}
+							</div>
+						</div>
 					</td>
 					<td class="text-center" style="width: 120px;">${p.posting_date}</td>
 					<td class="text-right font-weight-bold text-success" style="width: 170px;">
@@ -583,35 +784,74 @@ class SupplierDetailApp {
 					<td class="text-center" style="width: 140px;">
 						<span class="badge badge-light" style="font-size: 12px;">${p.mode_of_payment}</span>
 					</td>
-					<td style="width: 180px;">${p.reference_no || "—"}</td>
+					<td style="min-width: 180px;">
+						${ref_badge}${note_html}
+					</td>
 					<td class="text-muted" style="width: 160px; font-size: 12px;">${p.owner}</td>
 				</tr>
 			`;
 		});
 
 		return `
+			<!-- ERP Standard Filters Toolbar for Payments -->
+			<div class="sd-filter-toolbar">
+				<div class="sd-filter-group" style="flex: 1; min-width: 240px;">
+					<input type="text" id="sd-pay-filter-search" class="sd-filter-input" style="width: 100%;" placeholder="🔍 Поиск по товару, модели, примечанию или сотруднику...">
+				</div>
+				<div class="sd-filter-group">
+					<label class="sd-filter-label">Способ:</label>
+					<select id="sd-pay-filter-mode" class="sd-filter-input">
+						<option value="all">Все способы оплаты</option>
+						${mode_options}
+					</select>
+				</div>
+				<div class="sd-filter-group">
+					<label class="sd-filter-label">С:</label>
+					<input type="date" id="sd-pay-filter-from" class="sd-filter-input">
+				</div>
+				<div class="sd-filter-group">
+					<label class="sd-filter-label">По:</label>
+					<input type="date" id="sd-pay-filter-to" class="sd-filter-input">
+				</div>
+				<button type="button" class="btn btn-xs btn-default font-weight-bold" id="sd-pay-filter-reset" title="Сбросить все фильтры" style="height: 32px; padding: 0 10px;">
+					✕ Сбросить
+				</button>
+			</div>
+
+			<!-- Dynamic Live Calculation Strip -->
+			<div class="sd-filter-summary">
+				<div class="sd-filter-stat">Платежей показано: <b id="sd-stat-pay-count">${payments.length}</b></div>
+				<div class="sd-filter-stat">Всего выплачено: <b class="text-success font-weight-bold" id="sd-stat-pay-total">${this.format_curr(total_paid)}</b></div>
+			</div>
+
 			<div class="sd-table-wrapper">
 				<table class="table table-bordered table-hover sd-data-table">
 					<thead>
 						<tr>
-							<th>${this.t("col_pay_no")}</th>
+							<th>${this.t("col_pay_product")}</th>
 							<th class="text-center">${this.t("col_date")}</th>
-							<th class="text-right">${this.t("col_amount")}</th>
+							<th class="text-right">${this.t("col_pay_amount")}</th>
 							<th class="text-center">${this.t("col_mode")}</th>
-							<th>${this.t("col_reference")}</th>
+							<th>${this.t("col_remarks")}</th>
 							<th>${this.t("col_user")}</th>
 						</tr>
 					</thead>
-					<tbody>
+					<tbody id="sd-payments-tbody">
 						${rows_html}
+						<tr class="sd-payments-no-match text-center py-4" style="display: none;">
+							<td colspan="6" class="text-muted py-4">
+								<div style="font-size: 24px; margin-bottom: 4px;">🔍</div>
+								<div>Нет платежей, соответствующих выбранным фильтрам</div>
+							</td>
+						</tr>
 					</tbody>
 					<tfoot>
 						<tr class="sd-totals-row">
 							<td colspan="2">
-								<strong>${this.t("total_prefix")}: ${payments.length} платежей</strong>
+								<strong>${this.t("total_prefix")}: <span id="sd-foot-pay-count">${payments.length}</span> платежей</strong>
 							</td>
 							<td class="text-right font-weight-bold text-success">
-								${this.format_curr(total_paid)}
+								<span id="sd-foot-pay-total">${this.format_curr(total_paid)}</span>
 							</td>
 							<td colspan="3" class="text-center text-muted">—</td>
 						</tr>
@@ -633,52 +873,348 @@ class SupplierDetailApp {
 		// Paying a specific invoice
 		this.wrapper.find(".btn-pay-invoice").on("click", (e) => {
 			const amount = flt($(e.currentTarget).attr("data-amount"));
-			this.show_payment_dialog(amount);
+			const invoice = decodeURIComponent($(e.currentTarget).attr("data-invoice") || "");
+			this.show_payment_dialog(amount, invoice);
 		});
+
+		// 1. Live ERP Filters for Products Tab
+		const filter_products = () => {
+			const q = (this.wrapper.find("#sd-prod-filter-search").val() || "").trim().toLowerCase();
+			const cat = this.wrapper.find("#sd-prod-filter-category").val() || "all";
+			const op = this.wrapper.find("#sd-prod-filter-op").val() || "all";
+			const target_qty = flt(this.wrapper.find("#sd-prod-filter-qty").val() || 0);
+
+			if (op === "all" || op === "zero") {
+				this.wrapper.find("#sd-prod-filter-qty").hide();
+			} else {
+				this.wrapper.find("#sd-prod-filter-qty").show();
+			}
+
+			let matched_count = 0;
+			let matched_qty = 0;
+			let matched_val = 0;
+
+			this.wrapper.find(".sd-prod-row").each((_, el) => {
+				const $row = $(el);
+				const prod = $row.attr("data-product") || "";
+				const code = $row.attr("data-code") || "";
+				const category = $row.attr("data-category") || "";
+				const qty = flt($row.attr("data-qty"));
+				const val = flt($row.attr("data-val"));
+
+				let match = true;
+
+				if (q && !prod.includes(q) && !code.includes(q)) {
+					match = false;
+				}
+
+				if (match && cat !== "all" && category !== cat) {
+					match = false;
+				}
+
+				if (match) {
+					if (op === "gte" && qty < target_qty) {
+						match = false;
+					} else if (op === "lte" && qty > target_qty) {
+						match = false;
+					} else if (op === "eq" && qty !== target_qty) {
+						match = false;
+					} else if (op === "zero" && qty > 0) {
+						match = false;
+					}
+				}
+
+				if (match) {
+					$row.show();
+					matched_count += 1;
+					matched_qty += qty;
+					matched_val += val;
+				} else {
+					$row.hide();
+				}
+			});
+
+			this.wrapper.find("#sd-stat-prod-count").text(matched_count);
+			this.wrapper.find("#sd-stat-prod-qty").text(this.format_num(matched_qty, matched_qty % 1 === 0 ? 0 : 2));
+			this.wrapper.find("#sd-stat-prod-val").text(this.format_curr(matched_val));
+
+			this.wrapper.find("#sd-foot-prod-count").text(matched_count);
+			this.wrapper.find("#sd-foot-prod-qty").text(this.format_num(matched_qty, matched_qty % 1 === 0 ? 0 : 2));
+			this.wrapper.find("#sd-foot-prod-val").text(this.format_curr(matched_val));
+
+			if (matched_count === 0) {
+				this.wrapper.find(".sd-products-no-match").show();
+			} else {
+				this.wrapper.find(".sd-products-no-match").hide();
+			}
+		};
+
+		this.wrapper.find("#sd-prod-filter-search, #sd-prod-filter-qty").on("input", filter_products);
+		this.wrapper.find("#sd-prod-filter-category, #sd-prod-filter-op").on("change", filter_products);
+		this.wrapper.find("#sd-prod-filter-reset").on("click", () => {
+			this.wrapper.find("#sd-prod-filter-search").val("");
+			this.wrapper.find("#sd-prod-filter-category").val("all");
+			this.wrapper.find("#sd-prod-filter-op").val("all");
+			this.wrapper.find("#sd-prod-filter-qty").val("5").hide();
+			filter_products();
+		});
+
+		// 2. Live ERP Filters for Invoices Tab
+		const filter_invoices = () => {
+			const q = (this.wrapper.find("#sd-inv-filter-search").val() || "").trim().toLowerCase();
+			const status = this.wrapper.find("#sd-inv-filter-status").val() || "all";
+			const from_d = this.wrapper.find("#sd-inv-filter-from").val();
+			const to_d = this.wrapper.find("#sd-inv-filter-to").val();
+
+			let matched_count = 0;
+			let matched_qty = 0;
+			let matched_total = 0;
+			let matched_debt = 0;
+
+			this.wrapper.find(".sd-invoice-row").each((_, el) => {
+				const $row = $(el);
+				const inv_name = ($row.attr("data-invoice") || "").toLowerCase();
+				const prod = $row.attr("data-product") || "";
+				const model = $row.attr("data-model") || "";
+				const row_date = $row.attr("data-date") || "";
+				const is_unpaid = $row.attr("data-unpaid") === "1";
+				const amt = flt($row.attr("data-amount"));
+				const debt = flt($row.attr("data-debt"));
+				const qty = flt($row.attr("data-qty"));
+
+				let match = true;
+
+				if (q && !prod.includes(q) && !model.includes(q) && !inv_name.includes(q)) {
+					match = false;
+				}
+
+				if (match && status === "unpaid" && !is_unpaid) {
+					match = false;
+				} else if (match && status === "paid" && is_unpaid) {
+					match = false;
+				}
+
+				if (match && from_d && row_date < from_d) {
+					match = false;
+				}
+				if (match && to_d && row_date > to_d) {
+					match = false;
+				}
+
+				if (match) {
+					$row.show();
+					matched_count += 1;
+					matched_qty += qty;
+					matched_total += amt;
+					matched_debt += debt;
+				} else {
+					$row.hide();
+				}
+			});
+
+			this.wrapper.find("#sd-stat-inv-count").text(matched_count);
+			this.wrapper.find("#sd-stat-inv-qty").text(this.format_num(matched_qty, matched_qty % 1 === 0 ? 0 : 2));
+			this.wrapper.find("#sd-stat-inv-total").text(this.format_curr(matched_total));
+			this.wrapper.find("#sd-stat-inv-debt").text(this.format_curr(matched_debt));
+
+			this.wrapper.find("#sd-foot-count").text(matched_count);
+			this.wrapper.find("#sd-foot-qty").text(this.format_num(matched_qty, matched_qty % 1 === 0 ? 0 : 2));
+			this.wrapper.find("#sd-foot-total").text(this.format_curr(matched_total));
+			this.wrapper.find("#sd-foot-debt").text(this.format_curr(matched_debt));
+
+			if (matched_count === 0) {
+				this.wrapper.find(".sd-invoices-no-match").show();
+			} else {
+				this.wrapper.find(".sd-invoices-no-match").hide();
+			}
+		};
+
+		this.wrapper.find("#sd-inv-filter-search").on("input", filter_invoices);
+		this.wrapper.find("#sd-inv-filter-status, #sd-inv-filter-from, #sd-inv-filter-to").on("change", filter_invoices);
+		this.wrapper.find("#sd-inv-filter-reset").on("click", () => {
+			this.wrapper.find("#sd-inv-filter-search").val("");
+			this.wrapper.find("#sd-inv-filter-status").val("all");
+			this.wrapper.find("#sd-inv-filter-from").val("");
+			this.wrapper.find("#sd-inv-filter-to").val("");
+			filter_invoices();
+		});
+
+		// 3. Live ERP Filters for Payments Tab
+		const filter_payments = () => {
+			const q = (this.wrapper.find("#sd-pay-filter-search").val() || "").trim().toLowerCase();
+			const mode = this.wrapper.find("#sd-pay-filter-mode").val() || "all";
+			const from_d = this.wrapper.find("#sd-pay-filter-from").val();
+			const to_d = this.wrapper.find("#sd-pay-filter-to").val();
+
+			let matched_count = 0;
+			let matched_total = 0;
+
+			this.wrapper.find(".sd-payment-row").each((_, el) => {
+				const $row = $(el);
+				const pay = $row.attr("data-pay") || "";
+				const prod = $row.attr("data-prod") || "";
+				const inv = $row.attr("data-inv") || "";
+				const rem = $row.attr("data-rem") || "";
+				const user = $row.attr("data-user") || "";
+				const pay_mode = $row.attr("data-mode") || "";
+				const pay_date = $row.attr("data-date") || "";
+				const amt = flt($row.attr("data-amount"));
+
+				let match = true;
+
+				if (q && !prod.includes(q) && !rem.includes(q) && !pay.includes(q) && !inv.includes(q) && !user.includes(q)) {
+					match = false;
+				}
+
+				if (match && mode !== "all" && pay_mode !== mode) {
+					match = false;
+				}
+
+				if (match && from_d && pay_date < from_d) {
+					match = false;
+				}
+				if (match && to_d && pay_date > to_d) {
+					match = false;
+				}
+
+				if (match) {
+					$row.show();
+					matched_count += 1;
+					matched_total += amt;
+				} else {
+					$row.hide();
+				}
+			});
+
+			this.wrapper.find("#sd-stat-pay-count").text(matched_count);
+			this.wrapper.find("#sd-stat-pay-total").text(this.format_curr(matched_total));
+
+			this.wrapper.find("#sd-foot-pay-count").text(matched_count);
+			this.wrapper.find("#sd-foot-pay-total").text(this.format_curr(matched_total));
+
+			if (matched_count === 0) {
+				this.wrapper.find(".sd-payments-no-match").show();
+			} else {
+				this.wrapper.find(".sd-payments-no-match").hide();
+			}
+		};
+
+		this.wrapper.find("#sd-pay-filter-search").on("input", filter_payments);
+		this.wrapper.find("#sd-pay-filter-mode, #sd-pay-filter-from, #sd-pay-filter-to").on("change", filter_payments);
+		this.wrapper.find("#sd-pay-filter-reset").on("click", () => {
+			this.wrapper.find("#sd-pay-filter-search").val("");
+			this.wrapper.find("#sd-pay-filter-mode").val("all");
+			this.wrapper.find("#sd-pay-filter-from").val("");
+			this.wrapper.find("#sd-pay-filter-to").val("");
+			filter_payments();
+		});
+
+		// Run initial filters
+		filter_products();
+		filter_invoices();
+		filter_payments();
 	}
 
-	show_payment_dialog(default_amount = 0) {
+	show_payment_dialog(default_amount = 0, target_invoice = null) {
+		const unpaid_invoices = (this.data.invoices || []).filter((inv) => flt(inv.outstanding_amount) > 0);
+		if (unpaid_invoices.length === 0) {
+			frappe.msgprint(__("У поставщика нет неоплаченных накладных"));
+			return;
+		}
+
+		let current_inv = unpaid_invoices.find((i) => i.name === target_invoice) || unpaid_invoices[0];
+
 		frappe.call({
 			method: "erpnext.buying.page.supplier_hub.supplier_hub.get_payment_options",
 			callback: (r) => {
 				const opts = r.message || {};
 				const mops = (opts.modes || []).map((m) => m.name);
 				const default_mop = mops.includes("Cash") ? "Cash" : mops[0] || "Cash";
-				const debt = flt(this.data.kpi.current_debt);
+
+				const invoice_options = unpaid_invoices.map((inv) => {
+					const bill_str = inv.bill_no ? ` | № ${inv.bill_no}` : "";
+					return {
+						value: inv.name,
+						label: `${inv.name} (${inv.posting_date}${bill_str}) — Долг: ${this.format_curr(inv.outstanding_amount)}`,
+					};
+				});
+
+				const render_banner_html = (inv) => {
+					const img_html = inv.image
+						? `<img src="${encodeURI(inv.image)}" class="sd-credit-product-img" alt="">`
+						: `<div class="sd-credit-product-img-empty">📦</div>`;
+
+					const model_pill = inv.model_id
+						? `<span class="sd-model-badge">#${frappe.utils.escape_html(inv.model_id)}</span>`
+						: "";
+
+					const bill_note = inv.bill_no && !inv.bill_no.startsWith("QPI-") && !inv.bill_no.startsWith("QPR-")
+						? ` · Чек: <b>${frappe.utils.escape_html(inv.bill_no)}</b>`
+						: "";
+
+					return `
+						<div class="pay-debt-banner">
+							<div class="d-flex align-items-center" style="gap: 14px;">
+								${img_html}
+								<div class="pay-debt-banner-left">
+									<div class="d-flex align-items-center" style="gap: 6px;">
+										${model_pill}
+										<span style="font-weight: 700; font-size: 15px; color: #0f172a;">
+											${frappe.utils.escape_html(inv.product_name || "Товары")}
+										</span>
+									</div>
+									<div class="pay-debt-banner-label mt-1">
+										Остаток долга: <span class="pay-debt-banner-amount" id="sd-inv-debt-val">${this.format_curr(inv.outstanding_amount)}</span>
+									</div>
+									<div class="pay-debt-banner-sub">
+										Дата поставки: ${inv.posting_date}${bill_note}
+									</div>
+								</div>
+							</div>
+							<button type="button" class="pay-btn-full-debt" id="sd-btn-fill-full">
+								⚡ Оплатить всю сумму
+							</button>
+						</div>
+					`;
+				};
+
+				const initial_amount =
+					default_amount > 0 && default_amount <= current_inv.outstanding_amount
+						? default_amount
+						: current_inv.outstanding_amount;
 
 				const d = new frappe.ui.Dialog({
-					title: `💳 Оплата поставщику: ${this.data.supplier.supplier_name}`,
+					title: `💳 Оплата: ${frappe.utils.escape_html(this.data.supplier.supplier_name)}`,
+					size: "large",
 					fields: [
 						{
 							fieldtype: "HTML",
-							fieldname: "debt_html",
-							options: `
-								<div class="alert alert-warning mb-3 d-flex justify-content-between align-items-center">
-									<div>
-										<div style="font-size: 11px; text-transform: uppercase; font-weight: 600;">Текущий долг:</div>
-										<div style="font-size: 18px; font-weight: 700; color: #cf222e;">${this.format_curr(debt)}</div>
-									</div>
-									${debt > 0 ? `<button type="button" class="btn btn-sm btn-outline-danger font-weight-bold" id="sd-btn-fill-full">⚡ Оплатить весь долг</button>` : ""}
-								</div>
-							`,
+							fieldname: "invoice_banner",
+							options: render_banner_html(current_inv),
+						},
+						{
+							fieldtype: "Section Break",
 						},
 						{
 							fieldtype: "Currency",
 							fieldname: "amount",
 							label: `Сумма к оплате (${this.data.currency || "TJS"})`,
+							description: `Максимально к оплате: ${this.format_curr(current_inv.outstanding_amount)}`,
 							reqd: 1,
-							default: default_amount > 0 ? default_amount : debt,
+							default: initial_amount,
 						},
 						{ fieldtype: "Column Break" },
 						{
 							fieldtype: "Select",
 							fieldname: "mode_of_payment",
-							label: "Способ оплаты",
+							label: "Способ оплаты (Касса / Счёт)",
 							options: mops.length ? mops : ["Cash", "Credit Card", "Wire Transfer"],
 							default: default_mop,
 							reqd: 1,
 						},
-						{ fieldtype: "Section Break" },
+						{
+							fieldtype: "Section Break",
+						},
 						{
 							fieldtype: "Date",
 							fieldname: "posting_date",
@@ -689,32 +1225,41 @@ class SupplierDetailApp {
 						{ fieldtype: "Column Break" },
 						{
 							fieldtype: "Data",
-							fieldname: "reference_no",
-							label: "Номер чека / Расписки",
-						},
-						{ fieldtype: "Section Break" },
-						{
-							fieldtype: "Small Text",
 							fieldname: "remarks",
-							label: "Примечание",
+							label: "Примечание (комментарий, чек)",
+							placeholder: "например, Чек #142, через водителя...",
 						},
 					],
 					primary_action_label: "💳 Подтвердить оплату",
 					primary_action: (values) => {
-						if (!values.amount || flt(values.amount) <= 0) {
+						const pay_amount = flt(values.amount);
+						if (!pay_amount || pay_amount <= 0) {
 							frappe.msgprint(__("Введите корректную сумму"));
 							return;
 						}
+
+						const max_allowed = flt(current_inv.outstanding_amount);
+						if (pay_amount > max_allowed + 0.001) {
+							frappe.msgprint(
+								__("Сумма оплаты ({0}) не может превышать остаток по накладной ({1})", [
+									this.format_curr(pay_amount),
+									this.format_curr(max_allowed),
+								])
+							);
+							return;
+						}
+
 						d.get_primary_btn().prop("disabled", true).text("Обработка...");
 
 						frappe.call({
 							method: "erpnext.buying.page.supplier_hub.supplier_hub.make_quick_supplier_payment",
 							args: {
 								supplier: this.supplier,
-								amount: values.amount,
+								purchase_invoice: current_inv.name,
+								amount: pay_amount,
 								mode_of_payment: values.mode_of_payment,
 								posting_date: values.posting_date,
-								reference_no: values.reference_no,
+								reference_no: "",
 								remarks: values.remarks,
 							},
 							callback: (res) => {
@@ -731,10 +1276,16 @@ class SupplierDetailApp {
 					},
 				});
 
+				const bind_banner_btn = () => {
+					d.$wrapper.find("#sd-btn-fill-full").off("click").on("click", () => {
+						d.set_value("amount", current_inv.outstanding_amount);
+					});
+				};
+
 				d.show();
-				d.$wrapper.find("#sd-btn-fill-full").on("click", () => {
-					d.set_value("amount", debt);
-				});
+				d.$wrapper.addClass("supplier-pay-modal");
+				d.$wrapper.find(".modal-dialog").addClass("modal-dialog-centered");
+				bind_banner_btn();
 			},
 		});
 	}

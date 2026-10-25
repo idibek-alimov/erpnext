@@ -494,10 +494,36 @@ def get_payment_options(company=None):
 
 
 @frappe.whitelist()
-def make_quick_supplier_payment(supplier, amount, mode_of_payment="Cash", posting_date=None, reference_no=None, remarks=None, company=None):
-	"""Fast, 1-click payment creation to a supplier, auto-allocating to oldest Purchase Invoices FIFO."""
+def get_unpaid_invoices(supplier, company=None):
+	"""Returns list of submitted purchase invoices with outstanding debt for a supplier."""
+	if not supplier:
+		return []
+
+	company = company or get_default_company()
+	invoices = frappe.db.sql(
+		"""
+		SELECT name, posting_date, bill_no, grand_total, outstanding_amount
+		FROM `tabPurchase Invoice`
+		WHERE supplier = %(supplier)s AND docstatus = 1 AND company = %(company)s AND outstanding_amount > 0
+		ORDER BY posting_date DESC, creation DESC
+		""",
+		{"supplier": supplier, "company": company},
+		as_dict=True,
+	)
+	for inv in invoices:
+		inv["grand_total"] = flt(inv["grand_total"], 2)
+		inv["outstanding_amount"] = flt(inv["outstanding_amount"], 2)
+	return invoices
+
+
+@frappe.whitelist()
+def make_quick_supplier_payment(supplier, amount, purchase_invoice, mode_of_payment="Cash", posting_date=None, reference_no=None, remarks=None, company=None):
+	"""Explicit payment creation to a supplier against a chosen Purchase Invoice credit."""
 	if not supplier:
 		frappe.throw(_("Supplier is required"))
+
+	if not purchase_invoice:
+		frappe.throw(_("Пожалуйста, выберите накладную для оплаты"))
 
 	amount = flt(amount)
 	if amount <= 0:
@@ -505,6 +531,34 @@ def make_quick_supplier_payment(supplier, amount, mode_of_payment="Cash", postin
 
 	company = company or get_default_company()
 	posting_date = posting_date or today()
+
+	# Validate specific Purchase Invoice
+	inv = frappe.db.get_value(
+		"Purchase Invoice",
+		{"name": purchase_invoice, "supplier": supplier, "company": company, "docstatus": 1},
+		["name", "grand_total", "outstanding_amount", "bill_no"],
+		as_dict=True,
+	)
+	if not inv:
+		frappe.throw(_("Накладная {0} не найдена или не принадлежит поставщику {1}").format(purchase_invoice, supplier))
+
+	outstanding = flt(inv.outstanding_amount, 2)
+	if outstanding <= 0:
+		frappe.throw(_("Накладная {0} уже полностью оплачена").format(purchase_invoice))
+
+	# User cannot pay more than the outstanding debt on this invoice
+	if amount > (outstanding + 0.001):
+		frappe.throw(
+			_("Сумма оплаты ({0}) не может превышать остаток по накладной {1} ({2})").format(
+				frappe.format(amount, {"fieldtype": "Currency"}),
+				purchase_invoice,
+				frappe.format(outstanding, {"fieldtype": "Currency"}),
+			)
+		)
+
+	# Cap amount to exact outstanding if small float rounding discrepancy
+	if amount > outstanding:
+		amount = outstanding
 
 	# Resolve Accounts
 	paid_from = None
@@ -537,47 +591,29 @@ def make_quick_supplier_payment(supplier, amount, mode_of_payment="Cash", postin
 	pe.received_amount = amount
 	pe.reference_no = reference_no
 	pe.reference_date = posting_date
-	pe.remarks = remarks or _("Quick Supplier Payment to {0}").format(supplier)
+	pe.custom_remarks = 1
+	pe.remarks = (remarks or "").strip() or _("Оплата по накладной {0}").format(purchase_invoice)
 
 	pe.setup_party_account_field()
 	pe.set_missing_values()
 
-	# FIFO Allocation against oldest unpaid Purchase Invoices
-	unpaid_invoices = frappe.db.sql(
-		"""
-		SELECT name, grand_total, outstanding_amount
-		FROM `tabPurchase Invoice`
-		WHERE supplier = %(supplier)s AND docstatus = 1 AND company = %(company)s AND outstanding_amount > 0
-		ORDER BY posting_date ASC, creation ASC
-		""",
-		{"supplier": supplier, "company": company},
-		as_dict=True,
+	# Explicit allocation strictly to the chosen Purchase Invoice
+	pe.append(
+		"references",
+		{
+			"reference_doctype": "Purchase Invoice",
+			"reference_name": inv.name,
+			"total_amount": inv.grand_total,
+			"outstanding_amount": inv.outstanding_amount,
+			"allocated_amount": amount,
+		},
 	)
-
-	rem_alloc = amount
-	allocated_count = 0
-	for inv in unpaid_invoices:
-		if rem_alloc <= 0:
-			break
-		alloc = min(flt(inv.outstanding_amount), rem_alloc)
-		pe.append(
-			"references",
-			{
-				"reference_doctype": "Purchase Invoice",
-				"reference_name": inv.name,
-				"total_amount": inv.grand_total,
-				"outstanding_amount": inv.outstanding_amount,
-				"allocated_amount": alloc,
-			},
-		)
-		rem_alloc -= alloc
-		allocated_count += 1
 
 	pe.flags.ignore_permissions = True
 	pe.insert()
 	pe.submit()
 
-	# Calculate new updated debt
+	# Calculate new updated debt for supplier
 	updated_debt = frappe.db.sql(
 		"""
 		SELECT COALESCE(SUM(outstanding_amount), 0)
@@ -587,15 +623,17 @@ def make_quick_supplier_payment(supplier, amount, mode_of_payment="Cash", postin
 		(supplier, company),
 	)[0][0]
 
+	new_inv_outstanding = max(0.0, flt(outstanding - amount, 2))
+
 	return {
 		"success": True,
 		"payment_entry": pe.name,
 		"paid_amount": amount,
-		"allocated_invoices": allocated_count,
-		"unallocated_amount": flt(pe.unallocated_amount, 2),
+		"purchase_invoice": purchase_invoice,
+		"invoice_remaining_debt": new_inv_outstanding,
 		"updated_debt": flt(updated_debt, 2),
-		"message": _("Payment {0} of {1} successfully recorded for {2}").format(
-			pe.name, frappe.format(amount, {"fieldtype": "Currency"}), supplier
+		"message": _("Оплата {0} на сумму {1} по накладной {2} успешно проведена").format(
+			pe.name, frappe.format(amount, {"fieldtype": "Currency"}), purchase_invoice
 		),
 	}
 

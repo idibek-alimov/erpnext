@@ -246,28 +246,88 @@ def get_supplier_detail(supplier, company=None):
 		# Sort: highest stock quantity first, then item name
 		products.sort(key=lambda x: (-x["stock_qty"], x["item_name"]))
 
-	# 5. Invoices List
+	# 5. Invoices List with Product & Model Breakdown
 	invoices = frappe.db.sql(
 		"""
 		SELECT 
-			name, posting_date, bill_no, grand_total, outstanding_amount, status
+			name, posting_date, bill_no, grand_total, outstanding_amount, status, remarks
 		FROM `tabPurchase Invoice`
 		WHERE supplier = %(supplier)s AND docstatus = 1 AND company = %(company)s
 		ORDER BY posting_date DESC, creation DESC
-		LIMIT 100
+		LIMIT 150
 		""",
 		{"supplier": supplier, "company": company},
 		as_dict=True,
 	)
-	for inv in invoices:
-		inv["grand_total"] = flt(inv["grand_total"], 2)
-		inv["outstanding_amount"] = flt(inv["outstanding_amount"], 2)
+
+	if invoices:
+		inv_names = [inv.name for inv in invoices]
+		items_raw = frappe.db.sql(
+			"""
+			SELECT pii.parent, pii.item_code, pii.item_name, pii.qty, pii.rate, pii.amount,
+			       i.custom_short_code, i.variant_of, i.image
+			FROM `tabPurchase Invoice Item` pii
+			LEFT JOIN `tabItem` i ON i.name = pii.item_code
+			WHERE pii.parent IN %(invs)s
+			""",
+			{"invs": inv_names},
+			as_dict=True,
+		)
+
+		parents_set = {r.variant_of for r in items_raw if r.variant_of}
+		parents_meta = {}
+		if parents_set:
+			p_rows = frappe.db.sql(
+				"SELECT name, item_name, custom_short_code, image FROM `tabItem` WHERE name IN %(parents)s",
+				{"parents": list(parents_set)},
+				as_dict=True,
+			)
+			parents_meta = {p.name: p for p in p_rows}
+
+		items_by_inv = {}
+		for r in items_raw:
+			items_by_inv.setdefault(r.parent, []).append(r)
+
+		for inv in invoices:
+			inv["grand_total"] = flt(inv["grand_total"], 2)
+			inv["outstanding_amount"] = flt(inv["outstanding_amount"], 2)
+
+			inv_items = items_by_inv.get(inv.name, [])
+			inv["total_qty"] = sum(flt(it.qty) for it in inv_items)
+
+			first_it = inv_items[0] if inv_items else None
+			parent = parents_meta.get(first_it.variant_of) if first_it and first_it.variant_of else None
+
+			if parent:
+				inv["model_id"] = parent.custom_short_code or parent.name
+				inv["product_name"] = parent.item_name
+				inv["image"] = parent.image or (first_it.image if first_it else "") or ""
+			elif first_it:
+				inv["model_id"] = first_it.custom_short_code or first_it.item_code
+				inv["product_name"] = first_it.item_name
+				inv["image"] = first_it.image or ""
+			else:
+				inv["model_id"] = ""
+				inv["product_name"] = "Товары"
+				inv["image"] = ""
+
+			# Build variant summary string
+			variants_list = []
+			for it in inv_items[:6]:
+				v_name = it.item_name or it.item_code
+				q_val = cint(it.qty) if it.qty % 1 == 0 else it.qty
+				variants_list.append(f"{v_name} × {q_val}")
+			if len(inv_items) > 6:
+				variants_list.append(f"+еще {len(inv_items) - 6}")
+			inv["variants_summary"] = ", ".join(variants_list)
+	else:
+		invoices = []
 
 	# 6. Payments List
 	payments = frappe.db.sql(
 		"""
 		SELECT 
-			name, posting_date, mode_of_payment, paid_amount, reference_no, reference_date, status, owner
+			name, posting_date, mode_of_payment, paid_amount, reference_no, reference_date, status, owner, remarks
 		FROM `tabPayment Entry`
 		WHERE party_type = 'Supplier' AND party = %(supplier)s AND docstatus = 1 AND company = %(company)s
 		ORDER BY posting_date DESC, creation DESC
@@ -276,8 +336,109 @@ def get_supplier_detail(supplier, company=None):
 		{"supplier": supplier, "company": company},
 		as_dict=True,
 	)
-	for p in payments:
-		p["paid_amount"] = flt(p["paid_amount"], 2)
+
+	if payments:
+		pay_names = [p.name for p in payments]
+		pay_refs = frappe.db.sql(
+			"""
+			SELECT parent, reference_doctype, reference_name, allocated_amount
+			FROM `tabPayment Entry Reference`
+			WHERE parent IN %(pays)s AND reference_doctype = 'Purchase Invoice'
+			""",
+			{"pays": pay_names},
+			as_dict=True,
+		)
+		pay_refs_map = {}
+		referenced_inv_names = set()
+		for r in pay_refs:
+			pay_refs_map.setdefault(r.parent, []).append(r)
+			if r.reference_name:
+				referenced_inv_names.add(r.reference_name)
+
+		inv_meta_map = {}
+		for inv in invoices:
+			inv_meta_map[inv["name"]] = {
+				"model_id": inv.get("model_id") or "",
+				"product_name": inv.get("product_name") or "",
+				"image": inv.get("image") or "",
+				"bill_no": inv.get("bill_no") or "",
+			}
+
+		missing_inv_names = list(referenced_inv_names - set(inv_meta_map.keys()))
+		if missing_inv_names:
+			m_items_raw = frappe.db.sql(
+				"""
+				SELECT pii.parent, pii.item_code, pii.item_name,
+				       i.custom_short_code, i.variant_of, i.image
+				FROM `tabPurchase Invoice Item` pii
+				LEFT JOIN `tabItem` i ON i.name = pii.item_code
+				WHERE pii.parent IN %(invs)s
+				""",
+				{"invs": missing_inv_names},
+				as_dict=True,
+			)
+			m_parents_set = {r.variant_of for r in m_items_raw if r.variant_of}
+			m_parents_meta = {}
+			if m_parents_set:
+				p_rows = frappe.db.sql(
+					"SELECT name, item_name, custom_short_code, image FROM `tabItem` WHERE name IN %(parents)s",
+					{"parents": list(m_parents_set)},
+					as_dict=True,
+				)
+				m_parents_meta = {p.name: p for p in p_rows}
+
+			m_items_by_inv = {}
+			for r in m_items_raw:
+				m_items_by_inv.setdefault(r.parent, []).append(r)
+
+			for inv_name in missing_inv_names:
+				m_items = m_items_by_inv.get(inv_name, [])
+				first_it = m_items[0] if m_items else None
+				parent = m_parents_meta.get(first_it.variant_of) if first_it and first_it.variant_of else None
+				if parent:
+					inv_meta_map[inv_name] = {
+						"model_id": parent.custom_short_code or parent.name,
+						"product_name": parent.item_name,
+						"image": parent.image or (first_it.image if first_it else "") or "",
+					}
+				elif first_it:
+					inv_meta_map[inv_name] = {
+						"model_id": first_it.custom_short_code or first_it.item_code,
+						"product_name": first_it.item_name,
+						"image": first_it.image or "",
+					}
+				else:
+					inv_meta_map[inv_name] = {
+						"model_id": "",
+						"product_name": "Товары",
+						"image": "",
+					}
+
+		for p in payments:
+			p["paid_amount"] = flt(p["paid_amount"], 2)
+			refs = pay_refs_map.get(p.name, [])
+			p["invoice_name"] = refs[0].reference_name if refs else ""
+
+			if p["invoice_name"] and p["invoice_name"] in inv_meta_map:
+				meta = inv_meta_map[p["invoice_name"]]
+				p["model_id"] = meta.get("model_id") or ""
+				p["product_name"] = meta.get("product_name") or ""
+				p["image"] = meta.get("image") or ""
+			else:
+				p["model_id"] = ""
+				p["product_name"] = "Оплата поставщику"
+				p["image"] = ""
+
+			raw_rem = (p.get("remarks") or "").strip()
+			cleaned_lines = []
+			for line in raw_rem.split("\n"):
+				l_str = line.strip()
+				if not l_str:
+					continue
+				if l_str.startswith("Amount ") or l_str.startswith("Сумма "):
+					continue
+				cleaned_lines.append(l_str)
+			p["clean_remarks"] = " ".join(cleaned_lines)
 
 	return {
 		"supplier": {
