@@ -333,9 +333,6 @@ class SupplierHubApp {
 				</div>
 			`;
 
-			// Only Pay button on every row
-			const pay_btn = `<button class="btn btn-xs btn-primary btn-quick-pay" data-supplier="${encodeURIComponent(s.name)}" data-debt="${s.current_debt}">💳 ${this.t("btn_pay")}</button>`;
-
 			rows_html += `
 				<tr class="supplier-row" data-supplier-name="${encodeURIComponent(s.name)}">
 					<td class="col-supplier">
@@ -361,9 +358,6 @@ class SupplierHubApp {
 					<td class="col-paid text-right">
 						<span class="font-weight-bold text-muted">${this.format_curr(s.total_paid)}</span>
 					</td>
-					<td class="col-actions text-center" onclick="event.stopPropagation();">
-						${pay_btn}
-					</td>
 				</tr>
 			`;
 		});
@@ -374,12 +368,11 @@ class SupplierHubApp {
 					<thead>
 						<tr>
 							<th class="col-supplier">${this.t("col_supplier")}</th>
-							<th class="col-products text-center" style="width: 100px;">${this.t("col_products")}</th>
-							<th class="col-stock-hand" style="width: 170px;">📦 ${this.t("col_stock_at_hand")}</th>
-							<th class="col-debt text-right" style="width: 160px;">💳 ${this.t("col_current_debt")}</th>
-							<th class="col-purchased text-right" style="width: 150px;">${this.t("col_total_purchased")}</th>
-							<th class="col-paid text-right" style="width: 140px;">${this.t("col_total_paid")}</th>
-							<th class="col-actions text-center" style="width: 105px;">${this.t("col_actions")}</th>
+							<th class="col-products text-center" style="width: 110px;">${this.t("col_products")}</th>
+							<th class="col-stock-hand" style="width: 180px;">📦 ${this.t("col_stock_at_hand")}</th>
+							<th class="col-debt text-right" style="width: 170px;">💳 ${this.t("col_current_debt")}</th>
+							<th class="col-purchased text-right" style="width: 160px;">${this.t("col_total_purchased")}</th>
+							<th class="col-paid text-right" style="width: 150px;">${this.t("col_total_paid")}</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -404,19 +397,11 @@ class SupplierHubApp {
 							<td class="col-paid text-right font-weight-bold text-muted">
 								${this.format_curr(total_paid)}
 							</td>
-							<td class="col-actions text-center text-muted">—</td>
 						</tr>
 					</tfoot>
 				</table>
 			</div>
 		`);
-
-		// Bind Pay button click
-		$area.find(".btn-quick-pay").on("click", (e) => {
-			const supp = decodeURIComponent($(e.currentTarget).attr("data-supplier"));
-			const debt = flt($(e.currentTarget).attr("data-debt"));
-			this.show_quick_payment_dialog(supp, debt);
-		});
 
 		// Bind Row click to navigate to Supplier Detail page
 		$area.find(".supplier-row").on("click", (e) => {
