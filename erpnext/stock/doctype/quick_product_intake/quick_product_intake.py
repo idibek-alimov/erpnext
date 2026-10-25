@@ -193,19 +193,20 @@ class QuickProductIntake(Document):
 			next_code += 1
 
 			row.custom_short_code = variant_short_code
-			row.barcode = row.barcode or variant_short_code
 
 			attr_args = {color_attr: row.color.strip(), size_attr: row.size.strip()}
 			variant = create_variant(template.name, attr_args)
 			variant.custom_short_code = variant_short_code
 			if row.variant_title:
 				variant.item_name = row.variant_title
-			variant.append("barcodes", {"barcode": row.barcode})
+			if row.barcode and len(str(row.barcode).strip()) >= 8:
+				variant.append("barcodes", {"barcode": str(row.barcode).strip(), "barcode_type": "EAN"})
 			variant.flags.ignore_permissions = True
 			variant.insert()
 
+			gen_barcode = frappe.db.get_value("Item Barcode", {"parent": variant.name}, "barcode") or row.barcode or variant_short_code
 			row.db_set("custom_short_code", variant_short_code)
-			row.db_set("barcode", row.barcode)
+			row.db_set("barcode", gen_barcode)
 			row.db_set("generated_item_code", variant.name)
 
 		return next_code
@@ -216,7 +217,6 @@ class QuickProductIntake(Document):
 		next_code += 1
 
 		row = self.items[0]
-		barcode = row.barcode or item_short_code
 
 		item_doc = frappe.get_doc(
 			{
@@ -230,12 +230,14 @@ class QuickProductIntake(Document):
 				"custom_short_code": item_short_code,
 			}
 		)
-		item_doc.append("barcodes", {"barcode": barcode})
+		if row.barcode and len(str(row.barcode).strip()) >= 8:
+			item_doc.append("barcodes", {"barcode": str(row.barcode).strip(), "barcode_type": "EAN"})
 		item_doc.flags.ignore_permissions = True
 		item_doc.insert()
 
+		gen_barcode = frappe.db.get_value("Item Barcode", {"parent": item_doc.name}, "barcode") or row.barcode or item_short_code
 		row.db_set("custom_short_code", item_short_code)
-		row.db_set("barcode", barcode)
+		row.db_set("barcode", gen_barcode)
 		row.db_set("generated_item_code", item_doc.name)
 
 		return next_code

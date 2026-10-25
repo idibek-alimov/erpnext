@@ -7,6 +7,35 @@ from frappe.utils import flt, cint, add_days, today, format_date, nowtime
 from erpnext.stock.page.product_catalog.product_catalog import get_default_company, get_stores_warehouse
 
 
+def _generate_ean13():
+	last = frappe.db.sql("""
+		SELECT barcode FROM `tabItem Barcode`
+		WHERE barcode LIKE '20%' AND LENGTH(barcode) = 13
+		ORDER BY barcode DESC LIMIT 1
+	""")
+	next_num = int(last[0][0][:-1]) + 1 if last and last[0][0] else 200000000000
+	base = str(next_num).zfill(12)
+	total = sum(int(d) * (1 if i % 2 == 0 else 3) for i, d in enumerate(base))
+	check = str((10 - (total % 10)) % 10)
+	return base + check
+
+
+@frappe.whitelist()
+def fix_all_legacy_barcodes():
+	rows = frappe.db.sql("""
+		SELECT name, parent, barcode FROM `tabItem Barcode`
+		WHERE LENGTH(barcode) < 12
+		ORDER BY creation ASC
+	""", as_dict=True)
+	updated = 0
+	for r in rows:
+		ean = _generate_ean13()
+		frappe.db.set_value("Item Barcode", r.name, {"barcode": ean, "barcode_type": "EAN"}, update_modified=False)
+		updated += 1
+	frappe.db.commit()
+	return {"updated": updated}
+
+
 @frappe.whitelist()
 def get_product_detail(item_code):
 	if not item_code:
@@ -58,6 +87,38 @@ def get_product_detail(item_code):
 		]
 
 	codes = [v.name for v in variants] or [item_code]
+
+	# Barcodes (Ensure all variants have real EAN-13 barcodes)
+	barcode_map = {}
+	all_item_codes = list(set(codes + [item_code]))
+
+	existing_barcodes = frappe.get_all(
+		"Item Barcode",
+		filters={"parent": ["in", all_item_codes]},
+		fields=["name", "parent", "barcode", "barcode_type"],
+		order_by="idx asc",
+	)
+
+	for b in existing_barcodes:
+		if b.parent not in barcode_map and b.barcode and len(b.barcode) >= 12:
+			barcode_map[b.parent] = b.barcode
+		elif b.parent not in barcode_map:
+			new_ean = _generate_ean13()
+			frappe.db.set_value("Item Barcode", b.name, {"barcode": new_ean, "barcode_type": "EAN"}, update_modified=False)
+			barcode_map[b.parent] = new_ean
+
+	for code in all_item_codes:
+		if code not in barcode_map:
+			new_ean = _generate_ean13()
+			frappe.get_doc({
+				"doctype": "Item Barcode",
+				"parent": code,
+				"parenttype": "Item",
+				"parentfield": "barcodes",
+				"barcode": new_ean,
+				"barcode_type": "EAN",
+			}).insert(ignore_permissions=True)
+			barcode_map[code] = new_ean
 
 	# Attributes (Colour / Size)
 	attr_map = {}
@@ -261,6 +322,7 @@ def get_product_detail(item_code):
 				"item_name": v.item_name,
 				"size": size or v.item_name,
 				"short_code": v.custom_short_code or "",
+				"barcode": barcode_map.get(v.name) or v.custom_short_code or v.name,
 				"stock_qty": stock,
 				"sold_qty": sold,
 				"buying_price": buy_map.get(v.name, 0),
@@ -344,6 +406,9 @@ def get_product_detail(item_code):
 		"item_group": item.item_group,
 		"image": item.image or "",
 		"short_code": item.custom_short_code or "",
+		"stock_uom": item.stock_uom or "шт",
+		"barcode": barcode_map.get(item.name) or item.custom_short_code or item.name,
+		"company_name": frappe.db.get_single_value("Global Defaults", "default_company") or frappe.defaults.get_user_default("company") or "Radolfa",
 		"has_variants": item.has_variants,
 		"supplier": get_supplier(item_code, codes),
 		"currency": frappe.db.get_default("currency") or "TJS",

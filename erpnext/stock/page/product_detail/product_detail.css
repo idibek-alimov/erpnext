@@ -523,3 +523,186 @@
 	background: #fee2e2;
 	color: #b91c1c;
 }
+
+/* --- Label Printing Dialog Styles --- */
+.pd-btn-print-labels {
+	font-weight: 600;
+	color: #1e293b;
+	border-color: #cbd5e1;
+}
+
+.pd-btn-print-labels:hover {
+	background-color: #f1f5f9;
+	color: #0f172a;
+	border-color: #94a3b8;
+}
+
+.pd-print-dialog-wrap {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 4px 0;
+}
+
+.pd-print-header-bar {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	background: #f8fafc;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	padding: 10px 14px;
+}
+
+.pd-print-bar-label {
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: #64748b;
+	margin-right: 6px;
+}
+
+.pd-print-format-group,
+.pd-print-presets-group {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.pd-format-btn.active {
+	background-color: #2563eb !important;
+	border-color: #1d4ed8 !important;
+	color: #ffffff !important;
+	font-weight: 700;
+}
+
+.pd-fixed-qty-wrap {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.pd-fixed-input {
+	width: 55px !important;
+	height: 30px !important;
+	padding: 2px 6px !important;
+	text-align: center !important;
+	font-weight: 700 !important;
+	border-radius: 6px !important;
+}
+
+.pd-print-color-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: center;
+}
+
+.pd-color-tab {
+	border: 1px solid #cbd5e1;
+	background: #ffffff;
+	border-radius: 20px;
+	padding: 4px 12px;
+	font-size: 12px;
+	font-weight: 600;
+	color: #475569;
+	transition: all 0.15s ease;
+}
+
+.pd-color-tab:hover {
+	background: #f1f5f9;
+	color: #0f172a;
+}
+
+.pd-color-tab.active {
+	background: #1e293b;
+	color: #ffffff;
+	border-color: #0f172a;
+}
+
+.pd-print-table-container {
+	max-height: 380px;
+	overflow-y: auto;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	background: #ffffff;
+}
+
+.pd-print-matrix-table {
+	margin-bottom: 0;
+	font-size: 13px;
+}
+
+.pd-print-matrix-table th {
+	background: #f8fafc;
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	font-weight: 700;
+	color: #334155;
+	border-bottom: 1px solid #cbd5e1 !important;
+}
+
+.pd-print-matrix-table td {
+	vertical-align: middle !important;
+}
+
+.pd-print-matrix-table tr.is-selected {
+	background-color: #f8fafc;
+}
+
+.pd-stepper-wrap {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 3px;
+}
+
+.pd-step-btn {
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 700;
+	font-size: 14px;
+	border-radius: 4px;
+	border-color: #cbd5e1;
+}
+
+.pd-step-btn:hover {
+	background-color: #e2e8f0;
+}
+
+.pd-print-qty-input {
+	width: 50px !important;
+	height: 26px !important;
+	padding: 2px 4px !important;
+	text-align: center !important;
+	font-size: 13px !important;
+	font-weight: 700 !important;
+	border-radius: 4px !important;
+}
+
+.pd-print-summary-bar {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	background: #eff6ff;
+	border: 1px solid #bfdbfe;
+	border-radius: 6px;
+	padding: 8px 14px;
+	font-size: 13px;
+	color: #1e40af;
+}
+
+.pd-summary-total-labels {
+	font-size: 15px;
+	color: #1d4ed8;
+}
+
