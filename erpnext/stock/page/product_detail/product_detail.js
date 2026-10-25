@@ -1125,15 +1125,14 @@ class ProductDetailApp {
 							<div class="sale-prices-col">
 								<div class="sale-old-row">
 									<span class="old-price-strike">${flt(item.old_price).toFixed(2)}</span>
-									<span class="sale-pct-badge">-${item.discount_pct}%</span>
+									<span class="sale-pct-text">-${item.discount_pct}%</span>
 								</div>
-								<div class="new-price-val">${flt(item.selling_price).toFixed(2)}</div>
+								<div class="new-price-badge">${flt(item.selling_price).toFixed(2)}</div>
 								${item.size ? `<div class="sale-size">Разм: <b>${frappe.utils.escape_html(item.size)}</b></div>` : ""}
 							</div>
 						</div>
 						<div class="sale-footer">
 							<div>${frappe.utils.escape_html(company)}</div>
-							<div>${today}</div>
 						</div>
 					</div>
 				</div>`;
@@ -1220,7 +1219,7 @@ class ProductDetailApp {
 					border: 1px solid #000;
 					border-radius: 1.5mm;
 					height: 100%;
-					padding: 1mm 1.5mm;
+					padding: 0.6mm 1.5mm 0.8mm 1.5mm;
 					display: flex;
 					flex-direction: column;
 					justify-content: space-between;
@@ -1235,19 +1234,19 @@ class ProductDetailApp {
 					overflow: hidden;
 					text-overflow: ellipsis;
 					border-bottom: 0.5px solid #000;
-					padding-bottom: 0.5mm;
+					padding-bottom: 0.3mm;
 				}
 				.label-title {
 					font-size: 8pt;
 					font-weight: 700;
 					line-height: 1.15;
 					text-align: center;
-					max-height: 7.5mm;
+					max-height: 6.5mm;
 					overflow: hidden;
 					display: -webkit-box;
 					-webkit-line-clamp: 2;
 					-webkit-box-orient: vertical;
-					margin: 0.5mm 0;
+					margin: 0.2mm 0 0 0;
 				}
 				.label-barcode {
 					text-align: center;
@@ -1255,17 +1254,19 @@ class ProductDetailApp {
 					justify-content: center;
 					align-items: center;
 					margin: 0 auto;
+					overflow: visible;
 				}
 				.label-barcode svg {
-					width: 44mm;
-					height: 11mm;
+					width: 48mm;
+					height: 15mm;
+					overflow: visible !important;
 				}
 				.label-bottom {
 					display: flex;
 					justify-content: space-between;
 					align-items: flex-end;
 					border-top: 0.5px solid #000;
-					padding-top: 0.5mm;
+					padding-top: 0.4mm;
 				}
 				.label-meta {
 					font-size: 6.5pt;
@@ -1285,7 +1286,7 @@ class ProductDetailApp {
 					border: 1.5px solid #000;
 					border-radius: 1.5mm;
 					height: 100%;
-					padding: 1mm 1.5mm;
+					padding: 1mm 1.5mm 0.6mm 1.5mm;
 					display: flex;
 					flex-direction: column;
 					justify-content: space-between;
@@ -1297,42 +1298,49 @@ class ProductDetailApp {
 					font-weight: 900;
 					text-align: center;
 					letter-spacing: 1px;
-					padding: 0.6mm 0;
+					padding: 0.5mm 0;
 					border-radius: 0.8mm;
-					margin-bottom: 0.5mm;
+					margin-bottom: 0.4mm;
 				}
 				.sale-title {
 					font-size: 8pt;
 					font-weight: 700;
 					line-height: 1.15;
 					text-align: center;
-					max-height: 6.8mm;
+					max-height: 6.5mm;
 					overflow: hidden;
 					display: -webkit-box;
 					-webkit-line-clamp: 2;
 					-webkit-box-orient: vertical;
+					margin-bottom: 0.3mm;
 				}
 				.sale-middle {
 					display: flex;
 					justify-content: space-between;
 					align-items: center;
-					margin: 0.5mm 0;
+					margin: 0.3mm 0;
 				}
 				.sale-barcode-col {
-					width: 29mm;
+					width: 28mm;
 					text-align: center;
+					overflow: visible;
 				}
 				.sale-barcode-col svg {
 					width: 28mm;
-					height: 11.5mm;
+					height: 13mm;
+					overflow: visible !important;
 				}
 				.sale-art {
 					font-size: 6pt;
-					margin-top: 0.5mm;
+					margin-top: 0.4mm;
 				}
 				.sale-prices-col {
-					width: 25mm;
+					width: 26mm;
 					text-align: right;
+					display: flex;
+					flex-direction: column;
+					align-items: flex-end;
+					justify-content: center;
 				}
 				.sale-old-row {
 					display: flex;
@@ -1348,72 +1356,81 @@ class ProductDetailApp {
 					font-weight: 600;
 					line-height: 1;
 				}
-				.sale-pct-badge {
-					font-size: 6.5pt;
-					font-weight: 900;
-					background: #000;
-					color: #fff;
-					padding: 0.5px 3px;
-					border-radius: 2px;
-					line-height: 1.1;
-				}
-				.new-price-val {
-					font-size: 14pt;
+				.sale-pct-text {
+					font-size: 8pt;
 					font-weight: 900;
 					color: #000;
+					background: transparent;
+					padding: 0;
+					line-height: 1;
+				}
+				.new-price-badge {
+					background: #000;
+					color: #fff !important;
+					font-size: 13.5pt;
+					font-weight: 900;
+					text-align: center;
+					padding: 0.8mm 2mm;
+					border-radius: 1mm;
 					line-height: 1;
 					margin-top: 0.8mm;
+					display: inline-block;
+					letter-spacing: -0.3px;
+					-webkit-print-color-adjust: exact;
+					print-color-adjust: exact;
 				}
 				.sale-size {
 					font-size: 6.5pt;
 					font-weight: 700;
-					margin-top: 0.5mm;
+					margin-top: 0.6mm;
 				}
 				.sale-footer {
 					display: flex;
-					justify-content: space-between;
-					font-size: 6pt;
-					font-weight: 600;
+					justify-content: center;
+					align-items: center;
+					font-size: 6.5pt;
+					font-weight: 700;
+					text-transform: uppercase;
+					letter-spacing: 0.4px;
 					border-top: 0.5px solid #000;
-					padding-top: 0.5mm;
+					padding-top: 0.4mm;
 				}
 			</style>
 		</head>
 		<body>
 			${labels_html}
 			<script>
-				var raw_items = ${JSON.stringify(items.map((it) => it.barcode || it.short_code || it.item_code))};
+				var raw_items = ${JSON.stringify(items.map((it) => ({ code: String(it.barcode || it.item_code || "").trim(), format: format })))};
 				
 				function renderBarcodes() {
-					raw_items.forEach(function(code, idx) {
-						var raw = String(code || "").trim();
+					raw_items.forEach(function(itemObj, idx) {
+						var raw = itemObj.code;
+						var isSale = itemObj.format === "sale";
 						var elem = "#bc-" + idx;
-						var format = "CODE128";
+						var bcFormat = "CODE128";
 						if (/^\\d{12,13}$/.test(raw)) {
-							format = "EAN13";
+							bcFormat = "EAN13";
 						} else if (/^\\d{7,8}$/.test(raw)) {
-							format = "EAN8";
+							bcFormat = "EAN8";
 						}
+
+						var bcOptions = {
+							format: bcFormat,
+							width: isSale ? 1.15 : 1.45,
+							height: isSale ? 30 : 35,
+							displayValue: true,
+							fontSize: isSale ? 9 : 10.5,
+							textMargin: 1,
+							margin: 0
+						};
+
 						try {
-							JsBarcode(elem, raw, {
-								format: format,
-								width: 1.35,
-								height: 38,
-								displayValue: true,
-								fontSize: 10,
-								textMargin: 1,
-								margin: 0
-							});
+							JsBarcode(elem, raw, bcOptions);
 						} catch(e) {
 							try {
-								JsBarcode(elem, raw, {
-									format: "CODE128",
-									width: 1.25,
-									height: 38,
-									displayValue: true,
-									fontSize: 10,
-									margin: 0
-								});
+								bcOptions.format = "CODE128";
+								bcOptions.width = isSale ? 1.1 : 1.3;
+								JsBarcode(elem, raw, bcOptions);
 							} catch(e2) {
 								console.error("Barcode rendering error:", e2);
 							}
