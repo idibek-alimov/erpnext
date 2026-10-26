@@ -36,7 +36,8 @@ class StaffDetailApp {
 		const dict = {
 			back_to_hub: { tg: "⬅️ Хаби кормандон", ru: "⬅️ Назад в Хаб" },
 			btn_add_expense: { tg: "🍔 + Хароҷот (Хӯрок/Такси)", ru: "🍔 + Расход (Обед/Такси)" },
-			btn_add_incentive: { tg: "🎁 + Бонус / Ҷарима", ru: "🎁 + Бонус / Штраф" },
+			btn_add_bonus: { tg: "🎁 + Бонус (Премия)", ru: "🎁 + Бонус (Премия)" },
+			btn_add_penalty: { tg: "⚠️ - Ҷарима", ru: "⚠️ - Штраф" },
 			btn_add_advance: { tg: "💸 + Аванс", ru: "💸 + Выдать аванс" },
 			btn_settle: { tg: "💰 Ҳисоббаробаркунӣ (Пардохт)", ru: "💰 Рассчитать и выплатить" },
 			btn_refresh: { tg: "Навсозӣ", ru: "Обновить" },
@@ -45,6 +46,7 @@ class StaffDetailApp {
 			kpi_sales: { tg: "Фурӯши корманд", ru: "Продажи сотрудника" },
 			kpi_commission: { tg: "Комиссия", ru: "Комиссия" },
 			kpi_bonuses: { tg: "Бонусҳо (+)", ru: "Бонусы (+)" },
+			kpi_penalties: { tg: "Ҷаримаҳо (-)", ru: "Штрафы (-)" },
 			kpi_advances: { tg: "Авансҳо (-)", ru: "Авансы (-)" },
 			kpi_expenses: { tg: "Хароҷот (Ширкат)", ru: "Расходы (Компания)" },
 			kpi_payable: { tg: "Бақияи пардохт", ru: "Итого к выплате" },
@@ -137,7 +139,8 @@ class StaffDetailApp {
 
 				<div class="staff-profile-actions">
 					<button type="button" class="btn-action" id="btn-modal-expense">${this.t("btn_add_expense")}</button>
-					<button type="button" class="btn-action" id="btn-modal-incentive">${this.t("btn_add_incentive")}</button>
+					<button type="button" class="btn-action btn-bonus" id="btn-modal-bonus">${this.t("btn_add_bonus")}</button>
+					<button type="button" class="btn-action btn-penalty" id="btn-modal-penalty">${this.t("btn_add_penalty")}</button>
 					<button type="button" class="btn-action" id="btn-modal-advance">${this.t("btn_add_advance")}</button>
 					<button type="button" class="btn-action btn-settle" id="btn-modal-settle">${this.t("btn_settle")}</button>
 				</div>
@@ -175,8 +178,14 @@ class StaffDetailApp {
 
 				<div class="detail-kpi-card">
 					<span class="detail-kpi-label">${this.t("kpi_bonuses")}</span>
-					<span class="detail-kpi-value ${s.bonuses_total > 0 ? "val-positive" : ""}">+${this.format_currency(s.bonuses_total, curr)}</span>
-					<span class="detail-kpi-sub">${s.penalties_total > 0 ? `-${this.format_currency(s.penalties_total, curr)}` : "0"}</span>
+					<span class="detail-kpi-value ${s.bonuses_total > 0 ? "val-positive" : ""}">${s.bonuses_total > 0 ? "+" : ""}${this.format_currency(s.bonuses_total, curr)}</span>
+					<span class="detail-kpi-sub">${this.lang === "tg" ? "Илова ба маош" : "Поощрение"}</span>
+				</div>
+
+				<div class="detail-kpi-card">
+					<span class="detail-kpi-label">${this.t("kpi_penalties")}</span>
+					<span class="detail-kpi-value ${s.penalties_total > 0 ? "val-negative" : ""}">${s.penalties_total > 0 ? "-" : ""}${this.format_currency(s.penalties_total, curr)}</span>
+					<span class="detail-kpi-sub">${this.lang === "tg" ? "Тарҳ аз маош" : "Дисциплинарное удержание"}</span>
 				</div>
 
 				<div class="detail-kpi-card">
@@ -396,7 +405,10 @@ class StaffDetailApp {
 			<div class="detail-content-card">
 				<div class="detail-card-title">
 					<span>🎁 ${this.lang === "tg" ? "Бонусҳо ва ҷаримаҳо" : "Бонусы и штрафы"}</span>
-					<button type="button" class="btn-action" id="btn-tab-add-incentive">+ ${this.lang === "tg" ? "Иловаи бонус / ҷарима" : "Добавить бонус / штраф"}</button>
+					<div style="display: flex; gap: 8px;">
+						<button type="button" class="btn-action btn-bonus" id="btn-tab-add-bonus">+ ${this.lang === "tg" ? "Бонус" : "Бонус"}</button>
+						<button type="button" class="btn-action btn-penalty" id="btn-tab-add-penalty">- ${this.lang === "tg" ? "Ҷарима" : "Штраф"}</button>
+					</div>
 				</div>
 				<div class="staff-table-wrapper">
 					<table class="staff-table">
@@ -590,7 +602,8 @@ class StaffDetailApp {
 
 		// Modal Triggers
 		this.wrapper.find("#btn-modal-expense, #btn-tab-add-expense").on("click", () => this.show_expense_dialog());
-		this.wrapper.find("#btn-modal-incentive, #btn-tab-add-incentive").on("click", () => this.show_incentive_dialog());
+		this.wrapper.find("#btn-modal-bonus, #btn-tab-add-bonus").on("click", () => this.show_incentive_dialog("Bonus"));
+		this.wrapper.find("#btn-modal-penalty, #btn-tab-add-penalty").on("click", () => this.show_incentive_dialog("Penalty"));
 		this.wrapper.find("#btn-modal-advance, #btn-tab-add-advance").on("click", () => this.show_advance_dialog());
 		this.wrapper.find("#btn-modal-settle").on("click", () => this.show_settlement_dialog());
 
@@ -666,24 +679,33 @@ class StaffDetailApp {
 		d.show();
 	}
 
-	show_incentive_dialog() {
+	show_incentive_dialog(default_type = "Bonus") {
+		const isBonus = default_type === "Bonus";
+		const title = isBonus
+			? (this.lang === "tg" ? "🎁 Навиштани бонус (Премия)" : "🎁 Начислить бонус (Премию)")
+			: (this.lang === "tg" ? "⚠️ Навиштани ҷарима (Удержание)" : "⚠️ Наложить штраф / Взыскание");
+
+		const bonusCategories = "Дневной план продаж\nНедельный план продаж\nНаграда месяца\nЗа пунктуальность / График\nБлагодарность клиента\nПрочее";
+		const penaltyCategories = "Опоздание / Невыход\nПорча товара / Брак\nНарушение кассовой дисциплины\nЖалоба покупателя\nНевыполнение стандарта\nПрочее";
+
 		const d = new frappe.ui.Dialog({
-			title: this.lang === "tg" ? "🎁 Иловаи бонус ё ҷарима" : "🎁 Добавить бонус или штраф",
+			title: title,
 			fields: [
 				{
 					label: this.lang === "tg" ? "Намуд" : "Тип операции",
 					fieldname: "type",
 					fieldtype: "Select",
 					options: "Bonus\nPenalty",
-					default: "Bonus",
-					reqd: 1,
+					default: default_type,
+					read_only: 1,
+					hidden: 1,
 				},
 				{
 					label: this.lang === "tg" ? "Категория" : "Категория",
 					fieldname: "category",
 					fieldtype: "Select",
-					options: "Daily Sales Target\nWeekly Performance\nMonthly Award\nAttendance / Punctuality\nCustomer Compliment\nDisciplinary\nOther",
-					default: "Daily Sales Target",
+					options: isBonus ? bonusCategories : penaltyCategories,
+					default: isBonus ? "Дневной план продаж" : "Опоздание / Невыход",
 					reqd: 1,
 				},
 				{
@@ -699,13 +721,15 @@ class StaffDetailApp {
 					reqd: 1,
 				},
 			],
-			primary_action_label: this.lang === "tg" ? "Сабт кардан" : "Сохранить",
+			primary_action_label: isBonus
+				? (this.lang === "tg" ? "Сабти бонус" : "Начислить бонус")
+				: (this.lang === "tg" ? "Сабти ҷарима" : "Удержать штраф"),
 			primary_action: (vals) => {
 				frappe.call({
 					method: "erpnext.setup.page.staff_detail.staff_detail.add_staff_incentive",
 					args: {
 						employee: this.employee,
-						type: vals.type,
+						type: default_type,
 						category: vals.category,
 						amount: vals.amount,
 						reason: vals.reason,
@@ -714,7 +738,10 @@ class StaffDetailApp {
 					callback: (r) => {
 						if (r.message && r.message.success) {
 							d.hide();
-							frappe.show_alert({ message: this.t("action_success"), indicator: "green" });
+							frappe.show_alert({
+								message: this.t("action_success"),
+								indicator: isBonus ? "green" : "orange",
+							});
 							this.load(this.employee);
 						}
 					},

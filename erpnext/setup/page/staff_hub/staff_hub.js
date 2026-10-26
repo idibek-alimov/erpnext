@@ -62,6 +62,7 @@ class StaffHubApp {
 			th_sales: { tg: "Фурӯш / Фоида", ru: "Продажи / Прибыль" },
 			th_commission: { tg: "Комиссия", ru: "Комиссия" },
 			th_bonuses: { tg: "Бонусҳо (+)", ru: "Бонусы (+)" },
+			th_penalties: { tg: "Ҷаримаҳо (-)", ru: "Штрафы (-)" },
 			th_expenses: { tg: "Хароҷот (Хӯрок/Такси)", ru: "Расходы (Обед/Такси)" },
 			th_advances: { tg: "Аванс (-)", ru: "Аванс (-)" },
 			th_net_payable: { tg: "Бақияи пардохт", ru: "К выплате (Итого)" },
@@ -148,6 +149,7 @@ class StaffHubApp {
 								<th class="text-right">${this.t("th_sales")}</th>
 								<th class="text-right">${this.t("th_commission")}</th>
 								<th class="text-right">${this.t("th_bonuses")}</th>
+								<th class="text-right">${this.t("th_penalties")}</th>
 								<th class="text-right">${this.t("th_expenses")}</th>
 								<th class="text-right">${this.t("th_advances")}</th>
 								<th class="text-right">${this.t("th_net_payable")}</th>
@@ -155,7 +157,7 @@ class StaffHubApp {
 						</thead>
 						<tbody id="staff-table-body">
 							<tr>
-								<td colspan="9" class="staff-empty-state">
+								<td colspan="10" class="staff-empty-state">
 									<div class="staff-empty-icon">⏳</div>
 									<div class="staff-empty-text">${this.lang === "tg" ? "Боргирӣ..." : "Загрузка..."}</div>
 								</td>
@@ -225,7 +227,7 @@ class StaffHubApp {
 		if (!this.data || !this.data.staff || this.data.staff.length === 0) {
 			$tbody.html(`
 				<tr>
-					<td colspan="9" class="staff-empty-state">
+					<td colspan="10" class="staff-empty-state">
 						<div class="staff-empty-icon">👥</div>
 						<div class="staff-empty-text">${this.t("empty_text")}</div>
 					</td>
@@ -287,6 +289,11 @@ class StaffHubApp {
 						</span>
 					</td>
 					<td class="text-right">
+						<span class="${emp.penalties > 0 ? "val-negative" : "val-muted"}">
+							${emp.penalties > 0 ? "-" : ""}${this.format_currency(emp.penalties, curr)}
+						</span>
+					</td>
+					<td class="text-right">
 						<span class="${emp.expenses_amount > 0 ? "val-muted" : "val-muted"}">
 							${this.format_currency(emp.expenses_amount, curr)}
 						</span>
@@ -332,6 +339,11 @@ class StaffHubApp {
 				<td class="text-right">
 					<span class="${s.total_bonuses > 0 ? "val-positive" : "val-muted"}">
 						<strong>${s.total_bonuses > 0 ? "+" : ""}${this.format_currency(s.total_bonuses, curr)}</strong>
+					</span>
+				</td>
+				<td class="text-right">
+					<span class="${s.total_penalties > 0 ? "val-negative" : "val-muted"}">
+						<strong>${s.total_penalties > 0 ? "-" : ""}${this.format_currency(s.total_penalties, curr)}</strong>
 					</span>
 				</td>
 				<td class="text-right">
