@@ -77,14 +77,13 @@
    "reqd": 1
   },
   {
-   "default": "Daily Sales Target",
+   "default": "Other",
    "fieldname": "category",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Category",
-   "options": "Daily Sales Target\nWeekly Performance\nMonthly Award\nAttendance / Punctuality\nCustomer Compliment\nDisciplinary\nOther",
-   "reqd": 1
+   "options": "Daily Sales Target\nWeekly Performance\nMonthly Award\nAttendance / Punctuality\nCustomer Compliment\nDisciplinary\nOther"
   },
   {
    "fieldname": "amount",

@@ -8,6 +8,17 @@ frappe.pages["staff-detail"].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 
+	// Ensure fresh styles even if cached in localStorage
+	frappe.call({
+		method: "frappe.desk.desk_page.getpage",
+		args: { name: "staff-detail" },
+		callback: (r) => {
+			if (r.docs && r.docs[0] && r.docs[0].style) {
+				frappe.dom.set_style(r.docs[0].style);
+			}
+		},
+	});
+
 	wrapper.staff_detail_app = new StaffDetailApp(page);
 };
 
@@ -382,7 +393,7 @@ class StaffDetailApp {
 
 		let rowsHtml = "";
 		if (incentives.length === 0) {
-			rowsHtml = `<tr><td colspan="6" class="staff-empty-state"><div class="staff-empty-text">${this.lang === "tg" ? "Бонус ё ҷарима нест" : "Бонусов или штрафов нет"}</div></td></tr>`;
+			rowsHtml = `<tr><td colspan="5" class="staff-empty-state"><div class="staff-empty-text">${this.lang === "tg" ? "Бонус ё ҷарима нест" : "Бонусов или штрафов нет"}</div></td></tr>`;
 		} else {
 			incentives.forEach((i) => {
 				const isBonus = i.type === "Bonus";
@@ -391,8 +402,7 @@ class StaffDetailApp {
 						<td><a href="/app/staff-incentive/${i.name}"><strong>${i.name}</strong></a></td>
 						<td>${i.posting_date}</td>
 						<td><span class="badge-status ${isBonus ? "active" : "inactive"}">${isBonus ? "➕ Бонус" : "➖ Штраф"}</span></td>
-						<td>${frappe.utils.escape_html(i.category)}</td>
-						<td>${frappe.utils.escape_html(i.reason)}</td>
+						<td>${frappe.utils.escape_html(i.reason || "-")}</td>
 						<td class="text-right ${isBonus ? "val-positive" : "val-negative"}">
 							<strong>${isBonus ? "+" : "-"}${this.format_currency(i.amount, curr)}</strong>
 						</td>
@@ -417,8 +427,7 @@ class StaffDetailApp {
 								<th>ID</th>
 								<th>${this.lang === "tg" ? "Сана" : "Дата"}</th>
 								<th>${this.lang === "tg" ? "Намуд" : "Тип"}</th>
-								<th>${this.lang === "tg" ? "Категория" : "Категория"}</th>
-								<th>${this.lang === "tg" ? "Сабаб" : "Причина"}</th>
+								<th>${this.lang === "tg" ? "Сабаб / Тавзеҳот" : "Причина / Заметка"}</th>
 								<th class="text-right">${this.lang === "tg" ? "Маблағ" : "Сумма"}</th>
 							</tr>
 						</thead>
@@ -685,29 +694,9 @@ class StaffDetailApp {
 			? (this.lang === "tg" ? "🎁 Навиштани бонус (Премия)" : "🎁 Начислить бонус (Премию)")
 			: (this.lang === "tg" ? "⚠️ Навиштани ҷарима (Удержание)" : "⚠️ Наложить штраф / Взыскание");
 
-		const bonusCategories = "Дневной план продаж\nНедельный план продаж\nНаграда месяца\nЗа пунктуальность / График\nБлагодарность клиента\nПрочее";
-		const penaltyCategories = "Опоздание / Невыход\nПорча товара / Брак\nНарушение кассовой дисциплины\nЖалоба покупателя\nНевыполнение стандарта\nПрочее";
-
 		const d = new frappe.ui.Dialog({
 			title: title,
 			fields: [
-				{
-					label: this.lang === "tg" ? "Намуд" : "Тип операции",
-					fieldname: "type",
-					fieldtype: "Select",
-					options: "Bonus\nPenalty",
-					default: default_type,
-					read_only: 1,
-					hidden: 1,
-				},
-				{
-					label: this.lang === "tg" ? "Категория" : "Категория",
-					fieldname: "category",
-					fieldtype: "Select",
-					options: isBonus ? bonusCategories : penaltyCategories,
-					default: isBonus ? "Дневной план продаж" : "Опоздание / Невыход",
-					reqd: 1,
-				},
 				{
 					label: this.lang === "tg" ? "Маблағ" : "Сумма",
 					fieldname: "amount",
@@ -715,7 +704,7 @@ class StaffDetailApp {
 					reqd: 1,
 				},
 				{
-					label: this.lang === "tg" ? "Сабаб" : "Причина / Обоснование",
+					label: this.lang === "tg" ? "Сабаб / Тавзеҳот" : "Причина / Обоснование",
 					fieldname: "reason",
 					fieldtype: "Small Text",
 					reqd: 1,
@@ -730,7 +719,6 @@ class StaffDetailApp {
 					args: {
 						employee: this.employee,
 						type: default_type,
-						category: vals.category,
 						amount: vals.amount,
 						reason: vals.reason,
 					},

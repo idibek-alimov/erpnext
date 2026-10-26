@@ -271,7 +271,7 @@ def add_staff_expense(employee, expense_category, amount, paid_from, description
 
 
 @frappe.whitelist()
-def add_staff_incentive(employee, type, category, amount, reason, posting_date=None, company=None):
+def add_staff_incentive(employee, type, amount, reason=None, category=None, posting_date=None, company=None):
 	company = company or get_default_company()
 	amount = flt(amount)
 	if amount <= 0:
@@ -282,7 +282,8 @@ def add_staff_incentive(employee, type, category, amount, reason, posting_date=N
 	doc.employee = employee
 	doc.posting_date = posting_date or today()
 	doc.type = type or "Bonus"
-	doc.category = category or "Daily Sales Target"
+	valid_cats = ["Daily Sales Target", "Weekly Performance", "Monthly Award", "Attendance / Punctuality", "Customer Compliment", "Disciplinary", "Other"]
+	doc.category = category if category in valid_cats else "Other"
 	doc.amount = amount
 	doc.reason = reason or ""
 

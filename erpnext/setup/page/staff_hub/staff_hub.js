@@ -8,6 +8,17 @@ frappe.pages["staff-hub"].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 
+	// Ensure fresh styles even if cached in localStorage
+	frappe.call({
+		method: "frappe.desk.desk_page.getpage",
+		args: { name: "staff-hub" },
+		callback: (r) => {
+			if (r.docs && r.docs[0] && r.docs[0].style) {
+				frappe.dom.set_style(r.docs[0].style);
+			}
+		},
+	});
+
 	wrapper.staff_hub_app = new StaffHubApp(page);
 };
 
