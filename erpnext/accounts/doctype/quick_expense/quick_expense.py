@@ -7,15 +7,35 @@ from frappe.model.document import Document
 
 
 CATEGORY_ACCOUNT_MAP = {
-	"Rent": ["Office Rent", "Rent"],
+	# Russian categories
+	"Упаковка и пакеты": ["Store Supplies and Consumables", "Print and Stationery", "Office Maintenance Expenses", "Miscellaneous Expenses"],
+	"Курьер и доставка": ["Freight and Forwarding Charges", "Travel Expenses", "Miscellaneous Expenses"],
+	"Питание и чай": ["Entertainment Expenses", "Staff Welfare", "Miscellaneous Expenses"],
+	"Уборка и хозтовары": ["Store Cleaning & Maintenance", "Office Maintenance Expenses", "Store Supplies and Consumables", "Miscellaneous Expenses"],
+	"Коммуналка и интернет": ["Electricity & Power Expense", "Utility Expenses", "Electricity Expenses", "Internet and Communications", "Telephone Expenses"],
+	"Ремонт и обслуживание": ["Office Maintenance Expenses", "Repair and Maintenance", "Miscellaneous Expenses"],
+	"Аванс сотруднику": ["Staff Bonuses and Incentives", "Salary", "Employee Advance"],
+	"Аренда помещения": ["Rent", "Office Rent", "Rent Expenses"],
+	"Такси и транспорт": ["Travel Expenses", "Miscellaneous Expenses"],
+	"Прочие расходы": ["Miscellaneous Expenses"],
+
+	# English fallback mappings
+	"Packaging & Bags": ["Store Supplies and Consumables", "Print and Stationery", "Office Maintenance Expenses", "Miscellaneous Expenses"],
+	"Courier & Delivery": ["Freight and Forwarding Charges", "Travel Expenses", "Miscellaneous Expenses"],
+	"Food & Tea": ["Entertainment Expenses", "Miscellaneous Expenses"],
+	"Cleaning & Supplies": ["Store Cleaning & Maintenance", "Office Maintenance Expenses", "Store Supplies and Consumables", "Miscellaneous Expenses"],
+	"Utilities & Internet": ["Electricity & Power Expense", "Utility Expenses", "Electricity Expenses", "Internet and Communications", "Telephone Expenses"],
+	"Repairs & Maintenance": ["Office Maintenance Expenses", "Repair and Maintenance", "Miscellaneous Expenses"],
+	"Staff Advance": ["Staff Bonuses and Incentives", "Salary", "Employee Advance"],
+	"Rent": ["Office Rent", "Rent", "Rent Expenses"],
 	"Electricity": ["Electricity Expenses", "Utility Expenses"],
 	"Internet & Phone": ["Internet and Communications", "Telephone Expenses", "Utility Expenses"],
 	"Staff Bonus": ["Staff Bonuses and Incentives", "Salary"],
 	"Store & Office Supplies": ["Store Supplies and Consumables", "Print and Stationery", "Office Maintenance Expenses"],
 	"Transportation & Taxi": ["Travel Expenses"],
-	"Repairs & Maintenance": ["Office Maintenance Expenses"],
 	"Food & Refreshments": ["Entertainment Expenses", "Miscellaneous Expenses"],
 	"Other Expense": ["Miscellaneous Expenses"],
+	"Other / Custom": ["Miscellaneous Expenses"],
 }
 
 
@@ -42,6 +62,20 @@ class QuickExpense(Document):
 	def resolve_paid_from(self):
 		if self.paid_from:
 			return
+
+		# If pos_profile is selected, resolve from POS cash mode of payment
+		if self.pos_profile and self.company:
+			cash_mop = frappe.db.get_value("POS Profile", self.pos_profile, "posa_cash_mode_of_payment") or "Cash"
+			if not self.mode_of_payment:
+				self.mode_of_payment = cash_mop
+			default_acc = frappe.db.get_value(
+				"Mode of Payment Account",
+				{"parent": cash_mop, "company": self.company},
+				"default_account",
+			)
+			if default_acc:
+				self.paid_from = default_acc
+				return
 
 		# If mode of payment is selected, get its default account
 		if self.mode_of_payment and self.company:
