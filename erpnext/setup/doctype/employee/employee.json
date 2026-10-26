@@ -73,6 +73,10 @@
   "column_break_44",
   "holiday_list",
   "salary_information",
+  "custom_base_salary",
+  "custom_salary_frequency",
+  "custom_commission_scheme",
+  "custom_default_cash_account",
   "ctc",
   "salary_currency",
   "salary_mode",
@@ -399,6 +403,33 @@
    "label": "Salary",
    "oldfieldtype": "Section Break",
    "width": "50%"
+  },
+  {
+   "fieldname": "custom_base_salary",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Base Salary"
+  },
+  {
+   "default": "Monthly",
+   "fieldname": "custom_salary_frequency",
+   "fieldtype": "Select",
+   "label": "Salary Frequency",
+   "options": "Monthly\nWeekly\nDaily"
+  },
+  {
+   "fieldname": "custom_commission_scheme",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Commission Scheme",
+   "options": "Staff Commission Scheme"
+  },
+  {
+   "description": "Default cash drawer, safe, or bank account for salary payouts and advances",
+   "fieldname": "custom_default_cash_account",
+   "fieldtype": "Link",
+   "label": "Default Cash / Drawer Account",
+   "options": "Account"
   },
   {
    "fieldname": "salary_mode",

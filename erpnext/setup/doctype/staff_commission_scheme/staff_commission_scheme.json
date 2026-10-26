@@ -1,0 +1,160 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:scheme_name",
+ "creation": "2026-10-26 20:50:00.000000",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": [
+  "scheme_name",
+  "is_active",
+  "col_break1",
+  "basis",
+  "sec_rules",
+  "calculation_type",
+  "fixed_rate",
+  "col_break2",
+  "tier_method",
+  "sec_tiers",
+  "tiers",
+  "sec_desc",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "scheme_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Scheme Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Active"
+  },
+  {
+   "fieldname": "col_break1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Total Sales Revenue",
+   "fieldname": "basis",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Commission Basis",
+   "options": "Total Sales Revenue\nGross Profit Margin",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sec_rules",
+   "fieldtype": "Section Break",
+   "label": "Calculation Rules"
+  },
+  {
+   "default": "Fixed Percentage",
+   "fieldname": "calculation_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Calculation Type",
+   "options": "Fixed Percentage\nTiered / Slab Rate",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.calculation_type=='Fixed Percentage'",
+   "fieldname": "fixed_rate",
+   "fieldtype": "Percent",
+   "label": "Fixed Commission %"
+  },
+  {
+   "fieldname": "col_break2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Progressive Bracket",
+   "depends_on": "eval:doc.calculation_type=='Tiered / Slab Rate'",
+   "description": "Progressive: slices of sales taxed per bracket. Total Volume: whole sales volume calculated at achieved tier %.",
+   "fieldname": "tier_method",
+   "fieldtype": "Select",
+   "label": "Tier Calculation Method",
+   "options": "Progressive Bracket\nTotal Volume Slab"
+  },
+  {
+   "depends_on": "eval:doc.calculation_type=='Tiered / Slab Rate'",
+   "fieldname": "sec_tiers",
+   "fieldtype": "Section Break",
+   "label": "Commission Tiers"
+  },
+  {
+   "depends_on": "eval:doc.calculation_type=='Tiered / Slab Rate'",
+   "fieldname": "tiers",
+   "fieldtype": "Table",
+   "label": "Tiers",
+   "options": "Staff Commission Tier"
+  },
+  {
+   "fieldname": "sec_desc",
+   "fieldtype": "Section Break",
+   "label": "Description"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description / Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-26 20:50:00.000000",
+ "modified_by": "Administrator",
+ "module": "Setup",
+ "name": "Staff Commission Scheme",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

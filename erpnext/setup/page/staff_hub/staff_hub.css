@@ -1,0 +1,376 @@
+/* Staff Hub - ERPNext Native Retail Table & Metric Cards Styles */
+
+.retail-staff-layout {
+	padding: 0 0 24px 0;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* --- Top KPI Metric Cards Grid --- */
+.staff-kpi-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 14px;
+	margin-bottom: 16px;
+}
+
+.staff-kpi-card {
+	background: var(--fg-color, #ffffff);
+	border: 1px solid var(--border-color, #d1d8dd);
+	border-radius: var(--border-radius-md, 8px);
+	padding: 14px 18px;
+	box-shadow: var(--card-shadow, 0 1px 3px rgba(0, 0, 0, 0.04));
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.staff-kpi-card:hover {
+	box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+	transform: translateY(-1px);
+}
+
+.staff-kpi-icon {
+	width: 44px;
+	height: 44px;
+	border-radius: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 22px;
+	flex-shrink: 0;
+}
+
+.icon-staff {
+	background: #eef2ff;
+	color: #4f46e5;
+}
+
+.icon-sales {
+	background: #ecfdf5;
+	color: #059669;
+}
+
+.icon-commission {
+	background: #fdf4ff;
+	color: #c026d3;
+}
+
+.icon-expenses {
+	background: #fffbeb;
+	color: #d97706;
+}
+
+.icon-advances {
+	background: #fef2f2;
+	color: #dc2626;
+}
+
+.icon-payable {
+	background: #eff6ff;
+	color: #2563eb;
+}
+
+.staff-kpi-info {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.staff-kpi-label {
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text-muted, #6c757d);
+	text-transform: uppercase;
+	letter-spacing: 0.3px;
+	margin-bottom: 2px;
+}
+
+.staff-kpi-value {
+	font-size: 18px;
+	font-weight: 700;
+	color: var(--text-color, #1f272e);
+	line-height: 1.2;
+}
+
+.staff-kpi-sub {
+	font-size: 11px;
+	color: var(--text-muted, #8d99a6);
+	margin-top: 2px;
+}
+
+/* --- Filter & Action Bar --- */
+.staff-filter-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 14px;
+	background: var(--fg-color, #ffffff);
+	padding: 10px 14px;
+	border: 1px solid var(--border-color, #d1d8dd);
+	border-radius: var(--border-radius-md, 8px);
+}
+
+.staff-filter-left {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	flex: 1;
+}
+
+.staff-search-input {
+	position: relative;
+	min-width: 240px;
+	max-width: 320px;
+}
+
+.staff-search-input input {
+	width: 100%;
+	padding: 6px 12px 6px 32px;
+	border: 1px solid var(--border-color, #d1d8dd);
+	border-radius: 6px;
+	font-size: 13px;
+	background: var(--control-bg, #ffffff);
+	color: var(--text-color, #1f272e);
+}
+
+.staff-search-input .search-icon {
+	position: absolute;
+	left: 10px;
+	top: 50%;
+	transform: translateY(-50%);
+	color: var(--text-muted, #8d99a6);
+	pointer-events: none;
+	font-size: 13px;
+}
+
+.staff-filter-select {
+	padding: 6px 10px;
+	border: 1px solid var(--border-color, #d1d8dd);
+	border-radius: 6px;
+	font-size: 13px;
+	background: var(--control-bg, #ffffff);
+	color: var(--text-color, #1f272e);
+	cursor: pointer;
+}
+
+.period-pill-group {
+	display: flex;
+	gap: 4px;
+	background: var(--control-bg, #f3f4f6);
+	padding: 3px;
+	border-radius: 6px;
+}
+
+.period-pill {
+	border: none;
+	background: transparent;
+	padding: 4px 10px;
+	border-radius: 4px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text-muted, #4b5563);
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.period-pill.active {
+	background: var(--fg-color, #ffffff);
+	color: var(--primary, #1f272e);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+	font-weight: 600;
+}
+
+.staff-filter-right {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+/* --- Table Container --- */
+.staff-table-card {
+	background: var(--fg-color, #ffffff);
+	border: 1px solid var(--border-color, #d1d8dd);
+	border-radius: var(--border-radius-md, 8px);
+	overflow: hidden;
+	box-shadow: var(--card-shadow, 0 1px 3px rgba(0, 0, 0, 0.04));
+}
+
+.staff-table-wrapper {
+	overflow-x: auto;
+}
+
+.staff-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+	white-space: nowrap;
+}
+
+.staff-table th {
+	background: var(--control-bg, #f8f9fa);
+	padding: 10px 14px;
+	font-weight: 600;
+	color: var(--text-muted, #52525b);
+	border-bottom: 1px solid var(--border-color, #e4e4e7);
+	text-align: left;
+	font-size: 12px;
+	letter-spacing: 0.2px;
+}
+
+.staff-table th.text-right,
+.staff-table td.text-right {
+	text-align: right;
+}
+
+.staff-table th.text-center,
+.staff-table td.text-center {
+	text-align: center;
+}
+
+.staff-row {
+	border-bottom: 1px solid var(--border-color, #f4f4f5);
+	cursor: pointer;
+	transition: background 0.12s ease;
+}
+
+.staff-row:hover {
+	background: var(--control-bg, #f8fafc) !important;
+}
+
+.staff-table td {
+	padding: 12px 14px;
+	vertical-align: middle;
+	color: var(--text-color, #27272a);
+}
+
+/* Staff Cell with Avatar */
+.staff-cell {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.staff-avatar {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: #e0e7ff;
+	color: #4338ca;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 700;
+	font-size: 14px;
+	flex-shrink: 0;
+	object-fit: cover;
+}
+
+.staff-meta {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.staff-name {
+	font-weight: 600;
+	color: var(--primary, #1d4ed8);
+	font-size: 13.5px;
+}
+
+.staff-role {
+	font-size: 11.5px;
+	color: var(--text-muted, #71717a);
+}
+
+/* Badges */
+.badge-status {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 12px;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.badge-status.active {
+	background: #dcfce7;
+	color: #15803d;
+}
+
+.badge-status.inactive {
+	background: #fee2e2;
+	color: #b91c1c;
+}
+
+.badge-scheme {
+	display: inline-block;
+	padding: 2px 7px;
+	border-radius: 4px;
+	font-size: 11px;
+	font-weight: 500;
+	background: #f1f5f9;
+	color: #475569;
+	border: 1px solid #e2e8f0;
+}
+
+.badge-scheme.has-scheme {
+	background: #fae8ff;
+	color: #86198f;
+	border-color: #f0abfc;
+}
+
+/* Financial values */
+.val-positive {
+	color: #15803d;
+	font-weight: 600;
+}
+
+.val-negative {
+	color: #b91c1c;
+	font-weight: 600;
+}
+
+.val-highlight {
+	color: #1d4ed8;
+	font-weight: 700;
+	font-size: 14px;
+}
+
+.val-muted {
+	color: var(--text-muted, #71717a);
+}
+
+/* Empty State */
+.staff-empty-state {
+	padding: 48px 16px;
+	text-align: center;
+	color: var(--text-muted, #71717a);
+}
+
+.staff-empty-icon {
+	font-size: 40px;
+	margin-bottom: 12px;
+}
+
+.staff-empty-text {
+	font-size: 14px;
+	font-weight: 500;
+}
+
+/* --- Sticky / Prominent Table Total Row --- */
+.staff-total-row {
+	background: var(--control-bg, #f1f5f9) !important;
+	border-top: 2px solid var(--border-color, #cbd5e1) !important;
+	border-bottom: 2px solid var(--border-color, #cbd5e1) !important;
+	font-weight: 700;
+}
+
+.staff-total-row td {
+	padding: 12px 14px;
+	vertical-align: middle;
+	color: var(--text-color, #1e293b);
+	font-size: 13.5px;
+}

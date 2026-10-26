@@ -25,6 +25,20 @@ frappe.pages["product-catalog"].on_page_load = function (wrapper) {
 	);
 
 	page.add_inner_button(
+		is_tg ? __("Хароҷотҳо") : __("Расходы"),
+		() => {
+			frappe.set_route("expense-desk");
+		}
+	);
+
+	page.add_inner_button(
+		is_tg ? __("Хаби кормандон") : __("Сотрудники"),
+		() => {
+			frappe.set_route("staff-hub");
+		}
+	);
+
+	page.add_inner_button(
 		is_tg ? __("Навсозӣ") : __("Обновить"),
 		() => {
 			if (wrapper.product_catalog_app) {
