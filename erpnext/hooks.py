@@ -64,6 +64,8 @@ after_install = "erpnext.setup.install.after_install"
 after_app_install = "erpnext.setup.install.after_app_install"
 after_app_uninstall = "erpnext.setup.install.after_app_uninstall"
 
+after_migrate = ["erpnext.setup.retail_security.setup_retail_security"]
+
 boot_session = "erpnext.startup.boot.boot_session"
 notification_config = "erpnext.startup.notifications.get_notification_config"
 get_help_messages = "erpnext.utilities.activation.get_help_messages"
@@ -342,7 +344,10 @@ doc_events = {
 	},
 	"User": {
 		"after_insert": "frappe.contacts.doctype.contact.contact.update_contact",
-		"validate": "erpnext.setup.doctype.employee.employee.validate_employee_role",
+		"validate": [
+			"erpnext.setup.doctype.employee.employee.validate_employee_role",
+			"erpnext.setup.retail_security.apply_role_bundles",
+		],
 		"on_update": "erpnext.portal.utils.set_default_role",
 	},
 	"Communication": {

@@ -10,6 +10,13 @@ from erpnext.stock.page.product_catalog.product_catalog import get_default_compa
 EXCLUDED_EXPENSE_CATEGORIES = ("Аванс сотруднику", "Staff Advance")
 
 
+def can_see_profit():
+	"""Profit figures are hidden from retail staff who are not Retail Owner / System Manager."""
+	from erpnext.setup.retail_security import can_see_financials
+
+	return can_see_financials()
+
+
 def _range(period, from_date=None, to_date=None):
 	t = getdate(today())
 	if period == "yesterday":
@@ -88,6 +95,8 @@ def _pnl(company, start, end):
 
 @frappe.whitelist()
 def get_pnl(period="month", from_date=None, to_date=None, company=None):
+	if not can_see_profit():
+		frappe.throw(frappe._("Only the Retail Owner can view profit."), frappe.PermissionError)
 	company = company or get_default_company()
 	start, end = _range(period, from_date, to_date)
 	out = _pnl(company, start, end)
@@ -179,7 +188,10 @@ def get_business_pulse(company=None):
 	if rev_yday:
 		delta = round((rev_today - rev_yday) / rev_yday * 100, 1)
 
+	show_profit = can_see_profit()
+
 	return {
+		"hide_profit": not show_profit,
 		"company": company,
 		"currency": currency,
 		"revenue_today": rev_today,
@@ -187,9 +199,9 @@ def get_business_pulse(company=None):
 		"revenue_delta_percent": delta,
 		"checks": checks,
 		"avg_check": round(rev_today / checks, 2) if checks else 0,
-		"net_profit_today": pnl_today["net"],
-		"net_profit_month": pnl_month["net"],
-		"money": {"cash": money["cash"], "non_cash": money["non_cash"], "total": money["total"]},
+		"net_profit_today": pnl_today["net"] if show_profit else None,
+		"net_profit_month": pnl_month["net"] if show_profit else None,
+		"money": {"cash": money["cash"], "non_cash": money["non_cash"], "total": money["total"]} if show_profit else None,
 		"alerts": _alerts(company),
-		"pnl": get_pnl("month", company=company),
+		"pnl": get_pnl("month", company=company) if show_profit else None,
 	}

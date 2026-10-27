@@ -105,8 +105,8 @@ class RetailHomeApp {
 				<div class="rh-pulse">
 					${pulse("💵", this.t("Выручка сегодня", "Фурӯши имрӯза"), `${this.fmt(d.revenue_today)} <small>${cur}</small>`, delta, "rh-card-main")}
 					${pulse("🛍️", this.t("Чеков пробито", "Чекҳо"), d.checks, `${this.t("Средний чек", "Чеки миёна")}: ${this.fmt(d.avg_check)} ${cur}`)}
-					${pulse("📈", this.t("Чистая прибыль сегодня", "Фоидаи софи"), `${this.fmt(d.net_profit_today)} <small>${cur}</small>`, `${this.t("За месяц", "Дар моҳ")}: ${this.fmt(d.net_profit_month)} ${cur}`, d.net_profit_today < 0 ? "rh-neg" : "")}
-					${pulse("💰", this.t("Всего денег", "Маблағи умумӣ"), `${this.fmt(d.money.total)} <small>${cur}</small>`, `${this.t("Нал", "Нақд")}: ${this.fmt(d.money.cash)} · ${this.t("Безнал", "Ғайринақд")}: ${this.fmt(d.money.non_cash)}`)}
+					${d.hide_profit ? pulse("🔒", this.t("Только для владельца", "Танҳо барои соҳиб"), "—", "") : pulse("📈", this.t("Чистая прибыль сегодня", "Фоидаи софи"), `${this.fmt(d.net_profit_today)} <small>${cur}</small>`, `${this.t("За месяц", "Дар моҳ")}: ${this.fmt(d.net_profit_month)} ${cur}`, d.net_profit_today < 0 ? "rh-neg" : "")}
+					${d.hide_profit ? "" : pulse("💰", this.t("Всего денег", "Маблағи умумӣ"), `${this.fmt(d.money.total)} <small>${cur}</small>`, `${this.t("Нал", "Нақд")}: ${this.fmt(d.money.cash)} · ${this.t("Безнал", "Ғайринақд")}: ${this.fmt(d.money.non_cash)}`)}
 				</div>
 
 				<div class="rh-title">${this.t("Быстрые действия", "Амалҳои зуд")}</div>
@@ -115,7 +115,7 @@ class RetailHomeApp {
 				<div class="rh-title">${this.t("Требует внимания", "Диққат талаб")}</div>
 				<div class="rh-alerts">${alerts}</div>
 
-				<div class="rh-title">${this.t("Прибыль", "Фоида")}
+				${d.hide_profit ? "" : `				<div class="rh-title">${this.t("Прибыль", "Фоида")}
 					<select id="rh-period" class="rh-select">
 						<option value="today">${this.t("Сегодня", "Имрӯз")}</option>
 						<option value="yesterday">${this.t("Вчера", "Дирӯз")}</option>
@@ -129,7 +129,7 @@ class RetailHomeApp {
 					</span>
 					<span class="rh-sub">${this.pnl.from} – ${this.pnl.to}</span>
 				</div>
-				${this.pnl_html(cur)}
+				${this.pnl_html(cur)}`}
 			</div>
 		`);
 		this.wrapper.append(layout);
