@@ -1,0 +1,131 @@
+/* Money Hub - wallets & balances */
+
+.mh-layout {
+	padding: 0 0 32px 0;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	color: var(--text-color, #1f272e);
+}
+
+.mh-kpi-strip {
+	display: grid;
+	grid-template-columns: 1.4fr repeat(4, 1fr);
+	gap: 14px;
+	margin-bottom: 24px;
+}
+
+@media (max-width: 1000px) {
+	.mh-kpi-strip { grid-template-columns: 1fr 1fr; }
+	.mh-kpi-main { grid-column: 1 / -1; }
+}
+
+.mh-kpi {
+	background: var(--fg-color, #fff);
+	border: 1px solid var(--border-color, #e2e8f0);
+	border-radius: 14px;
+	padding: 16px 18px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.mh-kpi-label {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+	color: var(--text-muted, #718096);
+	margin-bottom: 6px;
+}
+
+.mh-kpi-value { font-size: 20px; font-weight: 700; }
+.mh-kpi-value small { font-size: 12px; font-weight: 600; color: var(--text-muted, #718096); }
+
+.mh-kpi-main {
+	background: linear-gradient(135deg, #2b6cb0, #553c9a);
+	border: none;
+	color: #fff;
+}
+.mh-kpi-main .mh-kpi-label, .mh-kpi-main .mh-kpi-value small { color: rgba(255, 255, 255, 0.8); }
+.mh-kpi-main .mh-kpi-value { font-size: 28px; }
+.mh-kpi-in .mh-kpi-value { color: #2f855a; }
+.mh-kpi-out .mh-kpi-value { color: #c53030; }
+
+.mh-section-title {
+	font-size: 15px;
+	font-weight: 700;
+	margin-bottom: 12px;
+}
+
+.mh-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+	gap: 16px;
+}
+
+.mh-card {
+	position: relative;
+	background: var(--fg-color, #fff);
+	border: 1px solid var(--border-color, #e2e8f0);
+	border-top: 4px solid var(--mh-accent, #4a5568);
+	border-radius: 14px;
+	padding: 16px 18px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+	transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mh-card:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+.mh-card-top { display: flex; justify-content: space-between; align-items: center; }
+.mh-card-icon { font-size: 26px; }
+
+.mh-menu-btn {
+	border: none;
+	background: transparent;
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+	color: var(--text-muted, #718096);
+	padding: 2px 8px;
+	border-radius: 6px;
+}
+.mh-menu-btn:hover { background: var(--control-bg, #edf2f7); }
+
+.mh-card-name { font-size: 16px; font-weight: 700; margin-top: 6px; }
+.mh-card-type { font-size: 12px; color: var(--text-muted, #718096); margin-top: 2px; }
+
+.mh-chip {
+	display: inline-block;
+	font-size: 10px;
+	font-weight: 600;
+	padding: 1px 7px;
+	border-radius: 20px;
+	background: #e6fffa;
+	color: #2c7a7b;
+	margin-left: 4px;
+}
+.mh-chip-fee { background: #fffaf0; color: #b7791f; }
+
+.mh-card-balance { font-size: 24px; font-weight: 800; margin: 12px 0 8px; }
+.mh-card-balance small { font-size: 12px; font-weight: 600; color: var(--text-muted, #718096); }
+
+.mh-card-flow { display: flex; gap: 14px; font-size: 12px; font-weight: 600; }
+.mh-in { color: #2f855a; }
+.mh-out { color: #c53030; }
+
+.mh-card-add {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-height: 150px;
+	border: 2px dashed var(--border-color, #cbd5e0);
+	border-top: 2px dashed var(--border-color, #cbd5e0);
+	background: transparent;
+	color: var(--text-muted, #718096);
+	font-weight: 600;
+	cursor: pointer;
+}
+.mh-card-add:hover { border-color: #3182ce; color: #3182ce; }
+.mh-add-plus { font-size: 24px; }
