@@ -327,7 +327,7 @@ def get_supplier_detail(supplier, company=None):
 	payments = frappe.db.sql(
 		"""
 		SELECT 
-			name, posting_date, mode_of_payment, paid_amount, reference_no, reference_date, status, owner, remarks
+			name, posting_date, mode_of_payment, paid_from, paid_amount, reference_no, reference_date, status, owner, remarks
 		FROM `tabPayment Entry`
 		WHERE party_type = 'Supplier' AND party = %(supplier)s AND docstatus = 1 AND company = %(company)s
 		ORDER BY posting_date DESC, creation DESC
@@ -338,6 +338,13 @@ def get_supplier_detail(supplier, company=None):
 	)
 
 	if payments:
+		wallet_rows = frappe.db.get_all(
+			"Money Wallet",
+			filters={"company": company},
+			fields=["name", "wallet_name", "wallet_type", "account", "icon"],
+		)
+		acc_to_wallet = {w.account: w for w in wallet_rows if w.account}
+
 		pay_names = [p.name for p in payments]
 		pay_refs = frappe.db.sql(
 			"""
@@ -418,6 +425,14 @@ def get_supplier_detail(supplier, company=None):
 			p["paid_amount"] = flt(p["paid_amount"], 2)
 			refs = pay_refs_map.get(p.name, [])
 			p["invoice_name"] = refs[0].reference_name if refs else ""
+
+			w = acc_to_wallet.get(p.get("paid_from"))
+			if w:
+				p["wallet_name"] = w.wallet_name
+				p["wallet_icon"] = w.icon or ("💵" if w.wallet_type == "Till" else "🔐" if w.wallet_type == "Safe" else "📱" if w.wallet_type == "Mobile Wallet" else "🏦")
+			else:
+				p["wallet_name"] = ""
+				p["wallet_icon"] = ""
 
 			if p["invoice_name"] and p["invoice_name"] in inv_meta_map:
 				meta = inv_meta_map[p["invoice_name"]]

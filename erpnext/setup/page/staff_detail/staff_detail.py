@@ -10,6 +10,40 @@ from erpnext.setup.page.staff_hub.staff_hub import get_date_range_for_period
 from erpnext.accounts.page.expense_desk.expense_desk import get_payment_sources
 
 
+def get_wallet_payment_sources(company):
+	"""Money Hub wallets in the same shape as get_payment_sources (account/label/balance)."""
+	from erpnext.accounts.utils import get_balance_on
+	from erpnext.accounts.page.money_hub.money_hub import import_existing_accounts
+
+	try:
+		import_existing_accounts(company)
+	except Exception:
+		pass
+
+	currency = frappe.db.get_value("Company", company, "default_currency") or "TJS"
+	wallets = frappe.db.get_all(
+		"Money Wallet",
+		filters={"company": company, "enabled": 1},
+		fields=["name", "wallet_name", "wallet_type", "account", "icon"],
+		order_by="sort_order asc, creation asc",
+	)
+	sources = []
+	for w in wallets:
+		if not w.account:
+			continue
+		bal = flt(get_balance_on(w.account, company=company))
+		icon = w.icon or ("💵" if w.wallet_type == "Till" else "🔐" if w.wallet_type == "Safe" else "📱" if w.wallet_type == "Mobile Wallet" else "🏦")
+		sources.append({
+			"id": f"wallet:{w.name}",
+			"type": "wallet",
+			"wallet": w.name,
+			"account": w.account,
+			"label": f"{icon} {w.wallet_name} · {bal:,.2f} {currency}",
+			"balance": bal,
+		})
+	return sources
+
+
 @frappe.whitelist()
 def get_staff_detail(employee, period="this_month", from_date=None, to_date=None, company=None):
 	if not employee:
@@ -203,7 +237,7 @@ def get_staff_detail(employee, period="this_month", from_date=None, to_date=None
 	net_payable = flt((emp["base_salary"] + commission_amount + bonuses_total) - (penalties_total + advances_total), 2)
 
 	# 10. Metadata for Modals
-	payment_sources = get_payment_sources(company)
+	payment_sources = get_wallet_payment_sources(company) or get_payment_sources(company)
 	categories = frappe.db.get_all(
 		"Quick Expense Category",
 		fields=["name", "category_name", "icon", "default_account"],

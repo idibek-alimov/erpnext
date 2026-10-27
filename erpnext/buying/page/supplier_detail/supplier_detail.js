@@ -782,7 +782,10 @@ class SupplierDetailApp {
 						${this.format_curr(p.paid_amount)}
 					</td>
 					<td class="text-center" style="width: 140px;">
-						<span class="badge badge-light" style="font-size: 12px;">${p.mode_of_payment}</span>
+						${p.wallet_name 
+							? `<span class="badge badge-light border" style="font-size: 11.5px; font-weight: 600; padding: 4px 7px;" title="Кошелёк Money Hub: ${frappe.utils.escape_html(p.wallet_name)}">${frappe.utils.escape_html(p.wallet_icon || "💳")} ${frappe.utils.escape_html(p.wallet_name)}</span>`
+							: `<span class="badge badge-light" style="font-size: 12px;">${frappe.utils.escape_html(p.mode_of_payment || "—")}</span>`
+						}
 					</td>
 					<td style="min-width: 180px;">
 						${ref_badge}${note_html}
@@ -1128,6 +1131,8 @@ class SupplierDetailApp {
 			method: "erpnext.buying.page.supplier_hub.supplier_hub.get_payment_options",
 			callback: (r) => {
 				const opts = r.message || {};
+				const wallets = opts.wallets || [];
+				let selected_wallet = wallets.length ? wallets[0].name : null;
 				const mops = (opts.modes || []).map((m) => m.name);
 				const default_mop = mops.includes("Cash") ? "Cash" : mops[0] || "Cash";
 
@@ -1178,58 +1183,105 @@ class SupplierDetailApp {
 					`;
 				};
 
+				const render_wallet_cards_html = (current_sel) => {
+					if (!wallets.length) return "";
+					return `
+						<div class="sd-wallet-picker-label">
+							💰 Кошелёк списания (Money Hub):
+						</div>
+						<div class="sd-wallet-grid">
+							${wallets.map((w) => {
+								const is_sel = w.name === current_sel;
+								const bal_class = w.balance > 0 ? "positive" : (w.balance < 0 ? "negative" : "zero");
+								return `
+									<div class="sd-wallet-card ${is_sel ? "active" : ""}" data-wallet="${frappe.utils.escape_html(w.name)}">
+										<div class="sd-wallet-card-icon">${frappe.utils.escape_html(w.icon || "💳")}</div>
+										<div class="sd-wallet-card-content">
+											<div class="sd-wallet-card-title">${frappe.utils.escape_html(w.wallet_name)}</div>
+											<div class="sd-wallet-card-bal ${bal_class}">${frappe.utils.escape_html(w.formatted_balance)}</div>
+										</div>
+										${is_sel ? '<div class="sd-wallet-check">✓</div>' : ''}
+									</div>
+								`;
+							}).join("")}
+						</div>
+						<div class="sd-wallet-status-box" id="sd-wallet-status-indicator"></div>
+					`;
+				};
+
 				const initial_amount =
 					default_amount > 0 && default_amount <= current_inv.outstanding_amount
 						? default_amount
 						: current_inv.outstanding_amount;
 
+				const fields = [];
+
+				if (unpaid_invoices.length > 1) {
+					fields.push({
+						fieldtype: "Select",
+						fieldname: "purchase_invoice",
+						label: "Накладная для оплаты",
+						options: invoice_options,
+						default: current_inv.name,
+						reqd: 1,
+					});
+				}
+
+				fields.push({
+					fieldtype: "HTML",
+					fieldname: "invoice_banner",
+					options: render_banner_html(current_inv),
+				});
+
+				if (wallets.length > 0) {
+					fields.push({
+						fieldtype: "HTML",
+						fieldname: "wallet_picker_html",
+						options: render_wallet_cards_html(selected_wallet),
+					});
+				} else {
+					fields.push({
+						fieldtype: "Select",
+						fieldname: "mode_of_payment",
+						label: "Способ оплаты (Касса / Счёт)",
+						options: mops.length ? mops : ["Cash", "Credit Card", "Wire Transfer"],
+						default: default_mop,
+						reqd: 1,
+					});
+				}
+
+				fields.push(
+					{
+						fieldtype: "Currency",
+						fieldname: "amount",
+						label: `Сумма к оплате (${this.data.currency || "TJS"})`,
+						description: `Максимально к оплате: ${this.format_curr(current_inv.outstanding_amount)}`,
+						reqd: 1,
+						default: initial_amount,
+					},
+					{ fieldtype: "Column Break" },
+					{
+						fieldtype: "Date",
+						fieldname: "posting_date",
+						label: "Дата оплаты",
+						default: frappe.datetime.get_today(),
+						reqd: 1,
+					},
+					{
+						fieldtype: "Section Break",
+					},
+					{
+						fieldtype: "Data",
+						fieldname: "remarks",
+						label: "Примечание (комментарий, чек)",
+						placeholder: "например, Чек #142, через водителя...",
+					}
+				);
+
 				const d = new frappe.ui.Dialog({
 					title: `💳 Оплата: ${frappe.utils.escape_html(this.data.supplier.supplier_name)}`,
 					size: "large",
-					fields: [
-						{
-							fieldtype: "HTML",
-							fieldname: "invoice_banner",
-							options: render_banner_html(current_inv),
-						},
-						{
-							fieldtype: "Section Break",
-						},
-						{
-							fieldtype: "Currency",
-							fieldname: "amount",
-							label: `Сумма к оплате (${this.data.currency || "TJS"})`,
-							description: `Максимально к оплате: ${this.format_curr(current_inv.outstanding_amount)}`,
-							reqd: 1,
-							default: initial_amount,
-						},
-						{ fieldtype: "Column Break" },
-						{
-							fieldtype: "Select",
-							fieldname: "mode_of_payment",
-							label: "Способ оплаты (Касса / Счёт)",
-							options: mops.length ? mops : ["Cash", "Credit Card", "Wire Transfer"],
-							default: default_mop,
-							reqd: 1,
-						},
-						{
-							fieldtype: "Section Break",
-						},
-						{
-							fieldtype: "Date",
-							fieldname: "posting_date",
-							label: "Дата оплаты",
-							default: frappe.datetime.get_today(),
-							reqd: 1,
-						},
-						{ fieldtype: "Column Break" },
-						{
-							fieldtype: "Data",
-							fieldname: "remarks",
-							label: "Примечание (комментарий, чек)",
-							placeholder: "например, Чек #142, через водителя...",
-						},
-					],
+					fields: fields,
 					primary_action_label: "💳 Подтвердить оплату",
 					primary_action: (values) => {
 						const pay_amount = flt(values.amount);
@@ -1251,13 +1303,16 @@ class SupplierDetailApp {
 
 						d.get_primary_btn().prop("disabled", true).text("Обработка...");
 
+						const sel_wallet_doc = wallets.find((w) => w.name === selected_wallet);
+
 						frappe.call({
 							method: "erpnext.buying.page.supplier_hub.supplier_hub.make_quick_supplier_payment",
 							args: {
 								supplier: this.supplier,
 								purchase_invoice: current_inv.name,
 								amount: pay_amount,
-								mode_of_payment: values.mode_of_payment,
+								wallet: selected_wallet,
+								mode_of_payment: sel_wallet_doc ? (sel_wallet_doc.mode_of_payment || null) : values.mode_of_payment,
 								posting_date: values.posting_date,
 								reference_no: "",
 								remarks: values.remarks,
@@ -1265,7 +1320,7 @@ class SupplierDetailApp {
 							callback: (res) => {
 								d.hide();
 								if (res.message && res.message.success) {
-									frappe.show_alert({ message: `✅ ${res.message.message}`, indicator: "green" }, 6);
+									frappe.show_alert({ message: `✅ ${res.message.message}`, indicator: "green" }, 7);
 									this.load(this.supplier);
 								}
 							},
@@ -1276,9 +1331,47 @@ class SupplierDetailApp {
 					},
 				});
 
+				const update_status = () => {
+					const sel_w = wallets.find((w) => w.name === selected_wallet);
+					const cur_amount = flt(d.get_value("amount"));
+					const $box = d.$wrapper.find("#sd-wallet-status-indicator");
+					if (!sel_w || !$box.length) return;
+
+					if (sel_w.balance >= cur_amount) {
+						const rem = sel_w.balance - cur_amount;
+						$box.html(`
+							<div class="sd-status-ok">
+								🟢 <b>Достаточно средств</b>: на балансе «${frappe.utils.escape_html(sel_w.wallet_name)}» останется <b>${this.format_curr(rem)}</b>
+							</div>
+						`);
+					} else {
+						const deficit = cur_amount - sel_w.balance;
+						$box.html(`
+							<div class="sd-status-warn">
+								⚠️ <b>Внимание</b>: на кошельке «${frappe.utils.escape_html(sel_w.wallet_name)}» остаток <b>${this.format_curr(sel_w.balance)}</b> (не хватает <b>${this.format_curr(deficit)}</b>)
+							</div>
+						`);
+					}
+				};
+
+				const bind_wallet_cards = () => {
+					d.$wrapper.find(".sd-wallet-card").off("click").on("click", (e) => {
+						const w_name = $(e.currentTarget).attr("data-wallet");
+						if (w_name) {
+							selected_wallet = w_name;
+							if (d.fields_dict.wallet_picker_html) {
+								d.fields_dict.wallet_picker_html.$wrapper.html(render_wallet_cards_html(selected_wallet));
+							}
+							bind_wallet_cards();
+							update_status();
+						}
+					});
+				};
+
 				const bind_banner_btn = () => {
 					d.$wrapper.find("#sd-btn-fill-full").off("click").on("click", () => {
 						d.set_value("amount", current_inv.outstanding_amount);
+						update_status();
 					});
 				};
 
@@ -1286,6 +1379,47 @@ class SupplierDetailApp {
 				d.$wrapper.addClass("supplier-pay-modal");
 				d.$wrapper.find(".modal-dialog").addClass("modal-dialog-centered");
 				bind_banner_btn();
+				bind_wallet_cards();
+				update_status();
+
+				// Realtime status updating on amount change
+				if (d.fields_dict.amount && d.fields_dict.amount.$input) {
+					d.fields_dict.amount.$input.on("input change", () => update_status());
+
+					// Append quick percentage pills under amount
+					const quick_html = `
+						<div class="sd-quick-amounts">
+							<button type="button" class="sd-quick-amt-btn" data-ratio="1.0">⚡ 100% (Вся сумма)</button>
+							<button type="button" class="sd-quick-amt-btn" data-ratio="0.5">50%</button>
+							<button type="button" class="sd-quick-amt-btn" data-ratio="0.25">25%</button>
+						</div>
+					`;
+					d.fields_dict.amount.$wrapper.append(quick_html);
+					d.fields_dict.amount.$wrapper.find(".sd-quick-amt-btn").on("click", (e) => {
+						const ratio = flt($(e.currentTarget).attr("data-ratio"));
+						if (ratio > 0 && current_inv.outstanding_amount > 0) {
+							const new_amt = Math.round(current_inv.outstanding_amount * ratio * 100) / 100;
+							d.set_value("amount", new_amt);
+							update_status();
+						}
+					});
+				}
+
+				// Invoice dropdown change
+				if (d.fields_dict.purchase_invoice && d.fields_dict.purchase_invoice.$input) {
+					d.fields_dict.purchase_invoice.$input.on("change", () => {
+						const sel_name = d.get_value("purchase_invoice");
+						const inv = unpaid_invoices.find((i) => i.name === sel_name);
+						if (inv) {
+							current_inv = inv;
+							d.fields_dict.invoice_banner.$wrapper.html(render_banner_html(current_inv));
+							d.set_df_property("amount", "description", `Максимально к оплате: ${this.format_curr(current_inv.outstanding_amount)}`);
+							d.set_value("amount", current_inv.outstanding_amount);
+							bind_banner_btn();
+							update_status();
+						}
+					});
+				}
 			},
 		});
 	}
