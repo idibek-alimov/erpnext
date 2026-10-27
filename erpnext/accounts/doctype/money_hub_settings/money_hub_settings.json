@@ -1,0 +1,47 @@
+{
+ "actions": [],
+ "creation": "2026-10-27 18:40:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "tax_regime",
+  "sec_rates",
+  "turnover_tax_rate",
+  "vat_rate",
+  "col_break1",
+  "patent_amount",
+  "patent_period",
+  "sec_threshold",
+  "vat_threshold",
+  "tax_account"
+ ],
+ "fields": [
+  {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company"},
+  {"fieldname": "tax_regime", "fieldtype": "Select", "label": "Tax Regime", "options": "\nTurnover Tax\nVAT\nPatent"},
+  {"fieldname": "sec_rates", "fieldtype": "Section Break", "label": "Rates"},
+  {"default": "4", "fieldname": "turnover_tax_rate", "fieldtype": "Percent", "label": "Turnover Tax Rate, %"},
+  {"default": "14", "fieldname": "vat_rate", "fieldtype": "Percent", "label": "VAT Rate, %"},
+  {"fieldname": "col_break1", "fieldtype": "Column Break"},
+  {"fieldname": "patent_amount", "fieldtype": "Currency", "label": "Patent Amount per Period"},
+  {"default": "Month", "fieldname": "patent_period", "fieldtype": "Select", "label": "Patent Period", "options": "Month\nQuarter\nYear"},
+  {"fieldname": "sec_threshold", "fieldtype": "Section Break", "label": "Threshold & Account"},
+  {"default": "1000000", "fieldname": "vat_threshold", "fieldtype": "Currency", "label": "VAT Threshold (12 months turnover)"},
+  {"fieldname": "tax_account", "fieldtype": "Link", "label": "Tax Payments Account", "options": "Account", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-27 18:40:00.000000",
+ "modified_by": "Administrator",
+ "module": "Accounts",
+ "name": "Money Hub Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "print": 1, "read": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"read": 1, "role": "Accounts Manager", "write": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

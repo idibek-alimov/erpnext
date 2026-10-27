@@ -129,3 +129,42 @@
 }
 .mh-card-add:hover { border-color: #3182ce; color: #3182ce; }
 .mh-add-plus { font-size: 24px; }
+
+/* --- Step 2: taxes, feed --- */
+.mh-section-title { margin-top: 28px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mh-layout > .mh-section-title:first-of-type { margin-top: 0; }
+.mh-section-sub { font-size: 12px; font-weight: 500; color: var(--text-muted, #718096); }
+.mh-card-active { box-shadow: 0 0 0 2px var(--mh-accent, #3182ce); }
+
+.mh-panel {
+	background: var(--fg-color, #fff);
+	border: 1px solid var(--border-color, #e2e8f0);
+	border-radius: 14px;
+	padding: 18px 20px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.mh-tax-row { display: flex; gap: 36px; align-items: center; flex-wrap: wrap; }
+.mh-tax-val { font-size: 22px; font-weight: 800; }
+.mh-tax-actions { margin-left: auto; display: flex; gap: 8px; }
+.mh-tax-detail { margin-top: 10px; font-size: 12px; color: var(--text-muted, #718096); }
+
+.mh-gauge-wrap { margin-top: 16px; }
+.mh-gauge-label { font-size: 12px; margin-bottom: 6px; }
+.mh-gauge { height: 10px; border-radius: 6px; background: var(--control-bg, #edf2f7); overflow: hidden; }
+.mh-gauge-bar { height: 100%; background: linear-gradient(90deg, #38a169, #68d391); border-radius: 6px; transition: width 0.4s ease; }
+.mh-gauge-orange { background: linear-gradient(90deg, #dd6b20, #f6ad55); }
+.mh-gauge-red { background: linear-gradient(90deg, #c53030, #fc8181); }
+.mh-warn { margin-top: 8px; font-size: 12px; font-weight: 600; color: #c05621; }
+
+.mh-period-select { margin-left: auto; font-size: 12px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; padding: 3px 8px; background: var(--fg-color, #fff); }
+
+.mh-feed { padding: 4px 20px; }
+.mh-feed-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border-color, #edf2f7); }
+.mh-feed-row:last-child { border-bottom: none; }
+.mh-feed-icon { font-size: 20px; width: 32px; text-align: center; }
+.mh-feed-main { flex: 1; min-width: 0; }
+.mh-feed-label { font-weight: 600; color: var(--text-color, #1a202c); }
+.mh-feed-meta { font-size: 11px; color: var(--text-muted, #718096); margin-top: 2px; }
+.mh-feed-amount { font-weight: 700; white-space: nowrap; }
+.mh-empty { padding: 24px; text-align: center; color: var(--text-muted, #718096); }
