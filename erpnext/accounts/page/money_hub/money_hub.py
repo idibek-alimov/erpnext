@@ -601,3 +601,19 @@ def pay_tax(wallet, amount, company=None):
 		frappe.db.set_single_value("Money Hub Settings", "tax_account", tax_account)
 	frappe.db.commit()
 	return {"hub": get_money_hub_data(company), "tax": get_tax_summary(company)}
+
+
+def tax_for_range(company, start, end):
+	"""Estimated tax accrued for an arbitrary date range under the chosen regime (0 if none chosen)."""
+	from frappe.utils import date_diff
+
+	s = _get_settings(company)
+	if not s.tax_regime:
+		return 0.0
+	if s.tax_regime == "Turnover Tax":
+		return _turnover(company, start, end) * flt(s.turnover_tax_rate) / 100
+	if s.tax_regime == "VAT":
+		rate = flt(s.vat_rate)
+		return max(0.0, _turnover(company, start, end) * rate / (100 + rate) - _input_vat(company, start, end))
+	months = {"Month": 1, "Quarter": 3, "Year": 12}.get(s.patent_period, 1)
+	return flt(s.patent_amount) / months * (date_diff(end, start) + 1) / 30.4

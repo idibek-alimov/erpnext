@@ -33,6 +33,7 @@ import "./utils/landed_taxes_and_charges_common.js";
 import "./utils/sales_common.js";
 import "./controllers/buying.js";
 import "./utils/demo.js";
+import "./retail_nav.js";
 import "./financial_statements.js";
 import "./sales_trends_filters.js";
 import "./purchase_trends_filters.js";

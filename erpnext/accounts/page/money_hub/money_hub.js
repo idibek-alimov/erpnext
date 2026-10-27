@@ -72,6 +72,10 @@ class MoneyHubApp {
 			callback: (r) => {
 				this.feed = r.message || [];
 				this.render();
+				if (frappe.route_options && frappe.route_options.open_transfer) {
+					frappe.route_options = null;
+					this.open_transfer();
+				}
 			},
 		});
 	}
