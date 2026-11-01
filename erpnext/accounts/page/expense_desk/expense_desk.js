@@ -850,66 +850,56 @@ class ExpenseDeskApp {
 		const safe_url = encodeURI(receipt_url);
 		const is_img = /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(receipt_url);
 
-		const dialog = new frappe.ui.Dialog({
-			title: this.is_tg ? "Акси чек / Ҳуҷҷат" : "Фото чека / Документ",
-			size: "large",
-			fields: [
-				{
-					fieldtype: "HTML",
-					fieldname: "receipt_preview_html",
-				},
-			],
-		});
+		// Remove any existing overlay
+		$(".expense-receipt-popup-overlay").remove();
 
-		const html = `
-			<div class="receipt-lightbox-container">
-				<div class="receipt-lightbox-meta">
-					<div class="lightbox-meta-item">
-						<span class="lightbox-meta-label">${this.is_tg ? "Категория:" : "Категория:"}</span>
-						<span class="lightbox-meta-val"><strong>${expense.icon || '🏷️'} ${expense.expense_category}</strong></span>
-					</div>
-					<div class="lightbox-meta-item">
-						<span class="lightbox-meta-label">${this.is_tg ? "Маблағ:" : "Сумма:"}</span>
-						<span class="lightbox-meta-val" style="color: #dc2626;"><strong>-${format_currency(expense.amount, curr)}</strong></span>
-					</div>
-					${expense.employee_name ? `
-						<div class="lightbox-meta-item">
-							<span class="lightbox-meta-label">${this.is_tg ? "Корманд:" : "Сотрудник:"}</span>
-							<span class="lightbox-meta-val">👤 ${expense.employee_name}</span>
+		const popup = $(`
+			<div class="expense-receipt-popup-overlay">
+				<div class="expense-receipt-popup-card">
+					<div class="expense-receipt-popup-header">
+						<div class="popup-header-title">
+							<span class="popup-cat-icon">${expense.icon || '🏷️'}</span>
+							<span class="popup-cat-name">${expense.expense_category}</span>
+							<span class="popup-amount">-${format_currency(expense.amount, curr)}</span>
+							${expense.employee_name ? `<span class="popup-emp-tag">👤 ${frappe.utils.escape_html(expense.employee_name)}</span>` : ''}
+							<span class="popup-date-tag">${expense.formatted_date} ${expense.formatted_time}</span>
 						</div>
-					` : ''}
-					<div class="lightbox-meta-item">
-						<span class="lightbox-meta-label">${this.is_tg ? "Сана:" : "Дата:"}</span>
-						<span class="lightbox-meta-val">${expense.formatted_date} ${expense.formatted_time}</span>
+						<button type="button" class="popup-close-btn" title="Закрыть">✕</button>
 					</div>
-				</div>
 
-				<div class="receipt-lightbox-media">
-					${is_img ? `
-						<a href="${safe_url}" target="_blank" title="${this.is_tg ? 'Барои андозаи аслӣ пахш кунед' : 'Нажмите для открытия оригинала'}">
-							<img src="${safe_url}" class="receipt-lightbox-img" alt="Receipt">
-						</a>
-					` : `
-						<div class="receipt-file-box">
-							<div style="font-size: 48px; margin-bottom: 8px;">📄</div>
-							<div style="color: #ffffff; font-weight: 600; margin-bottom: 12px;">${receipt_url.split('/').pop()}</div>
-							<a href="${safe_url}" target="_blank" class="btn btn-sm btn-primary">
-								${this.is_tg ? "Кушодани файл" : "Открыть файл"}
-							</a>
-						</div>
-					`}
-				</div>
-
-				<div class="receipt-lightbox-footer">
-					<a href="${safe_url}" target="_blank" class="btn btn-sm btn-default">
-						↗️ ${this.is_tg ? "Кушодани расми аслӣ" : "Открыть полный размер"}
-					</a>
+					<div class="expense-receipt-popup-body">
+						${is_img ? `
+							<img src="${safe_url}" class="expense-popup-img" alt="Receipt">
+						` : `
+							<div class="expense-popup-file">
+								<div style="font-size: 48px; margin-bottom: 8px;">📄</div>
+								<div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${receipt_url.split('/').pop()}</div>
+							</div>
+						`}
+					</div>
 				</div>
 			</div>
-		`;
+		`);
 
-		dialog.fields_dict.receipt_preview_html.$wrapper.html(html);
-		dialog.show();
+		$("body").append(popup);
+
+		const close_popup = () => {
+			popup.fadeOut(150, () => popup.remove());
+			$(document).off("keydown.receipt_popup");
+		};
+
+		popup.find(".popup-close-btn").on("click", close_popup);
+		popup.on("click", (e) => {
+			if ($(e.target).hasClass("expense-receipt-popup-overlay")) {
+				close_popup();
+			}
+		});
+
+		$(document).on("keydown.receipt_popup", (e) => {
+			if (e.key === "Escape") {
+				close_popup();
+			}
+		});
 	}
 
 	confirm_void_expense(name, amount, category) {
