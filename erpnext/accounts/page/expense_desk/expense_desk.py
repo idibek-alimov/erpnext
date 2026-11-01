@@ -13,12 +13,11 @@ DEFAULT_RETAIL_CATEGORIES = [
 	{"category_name": "Упаковка и пакеты", "icon": "📦", "default_account": None},
 	{"category_name": "Курьер и доставка", "icon": "🚚", "default_account": None},
 	{"category_name": "Питание и чай", "icon": "☕", "default_account": None},
+	{"category_name": "Такси и транспорт", "icon": "🚕", "default_account": None},
 	{"category_name": "Уборка и хозтовары", "icon": "🧹", "default_account": None},
 	{"category_name": "Коммуналка и интернет", "icon": "💡", "default_account": None},
 	{"category_name": "Ремонт и обслуживание", "icon": "🔧", "default_account": None},
-	{"category_name": "Аванс сотруднику", "icon": "👤", "default_account": None},
 	{"category_name": "Аренда помещения", "icon": "🏢", "default_account": None},
-	{"category_name": "Такси и транспорт", "icon": "🚕", "default_account": None},
 	{"category_name": "Прочие расходы", "icon": "🏷️", "default_account": None},
 ]
 
@@ -79,13 +78,19 @@ def ensure_default_payment_accounts(company):
 
 def ensure_default_categories(company):
 	"""Ensure standard retail categories in Russian exist in Quick Expense Category."""
+	# Always ensure Staff Advance / Аванс сотруднику is removed from Quick Expense Category
+	frappe.db.sql(
+		"DELETE FROM `tabQuick Expense Category` WHERE category_name IN ('Staff Advance', 'Аванс сотруднику')"
+	)
+	frappe.db.commit()
+
 	existing = frappe.db.get_all("Quick Expense Category", pluck="category_name")
 	
 	# If old English categories are present, clear them so Russian takes over
-	old_english = {"Packaging & Bags", "Courier & Delivery", "Food & Tea", "Cleaning & Supplies", "Utilities & Internet", "Repairs & Maintenance", "Staff Advance", "Rent"}
+	old_english = {"Packaging & Bags", "Courier & Delivery", "Food & Tea", "Cleaning & Supplies", "Utilities & Internet", "Repairs & Maintenance", "Rent"}
 	if any(e in old_english for e in existing):
 		frappe.db.sql(
-			"DELETE FROM `tabQuick Expense Category` WHERE category_name IN ('Packaging & Bags', 'Courier & Delivery', 'Food & Tea', 'Cleaning & Supplies', 'Utilities & Internet', 'Repairs & Maintenance', 'Staff Advance', 'Rent')"
+			"DELETE FROM `tabQuick Expense Category` WHERE category_name IN ('Packaging & Bags', 'Courier & Delivery', 'Food & Tea', 'Cleaning & Supplies', 'Utilities & Internet', 'Repairs & Maintenance', 'Rent')"
 		)
 		frappe.db.commit()
 		existing = frappe.db.get_all("Quick Expense Category", pluck="category_name")
@@ -273,6 +278,7 @@ def get_filtered_expenses(
 	to_date=None,
 	source_id="all",
 	category="all",
+	employee="all",
 	search=None,
 	company=None,
 ):
@@ -284,6 +290,7 @@ def get_filtered_expenses(
 		to_date=to_date,
 		source_id=source_id,
 		category=category,
+		employee=employee,
 		search=search,
 	)
 	return {"recent_expenses": recent_expenses, "summary": summary}
@@ -296,6 +303,7 @@ def get_expenses_and_summary(
 	to_date=None,
 	source_id="all",
 	category="all",
+	employee="all",
 	search=None,
 ):
 	from frappe.utils import add_days, get_first_day, get_last_day
@@ -331,6 +339,10 @@ def get_expenses_and_summary(
 	if category and category != "all":
 		conds.append("expense_category = %(category)s")
 		vals["category"] = category
+
+	if employee and employee != "all":
+		conds.append("party_type = 'Employee' AND party = %(employee)s")
+		vals["employee"] = employee
 
 	if source_id and source_id != "all":
 		if source_id.startswith("pos:"):
@@ -370,11 +382,17 @@ def get_expenses_and_summary(
 		frappe.db.sql("SELECT category_name, icon FROM `tabQuick Expense Category`")
 	)
 
+	employee_map = dict(
+		frappe.db.sql("SELECT name, employee_name FROM `tabEmployee` WHERE company = %s", company)
+	)
+
 	for exp in expenses:
 		exp["icon"] = icon_map.get(exp["expense_category"], "🏷️")
 		exp["formatted_time"] = exp["creation"].strftime("%H:%M") if exp.get("creation") else ""
 		exp["formatted_date"] = formatdate(exp["posting_date"], "dd.mm.yyyy")
 		exp["amount"] = flt(exp["amount"])
+		if exp.get("party_type") == "Employee" and exp.get("party"):
+			exp["employee_name"] = employee_map.get(exp["party"]) or exp.get("beneficiary_name") or exp["party"]
 
 	# Calculate summary for this filtered period
 	total_amount = sum(e["amount"] for e in expenses)
@@ -442,6 +460,11 @@ def record_quick_expense(
 	amount = flt(amount)
 	if amount <= 0:
 		frappe.throw(_("Amount must be greater than 0"))
+
+	if party and not party_type:
+		party_type = "Employee"
+	if party_type == "Employee" and party and not beneficiary_name:
+		beneficiary_name = frappe.db.get_value("Employee", party, "employee_name")
 
 	doc = frappe.new_doc("Quick Expense")
 	doc.company = company

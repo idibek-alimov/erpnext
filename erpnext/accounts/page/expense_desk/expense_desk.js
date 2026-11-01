@@ -58,6 +58,7 @@ class ExpenseDeskApp {
 		this.to_date = null;
 		this.active_source_filter = "all";
 		this.active_category_filter = "all";
+		this.active_employee_filter = "all";
 		this.search_query = "";
 		this.search_timer = null;
 
@@ -104,25 +105,28 @@ class ExpenseDeskApp {
 
 	render_form(container) {
 		const curr = this.data.currency || "TJS";
-		const sources = this.data.payment_sources || [];
-		const categories = this.data.categories || [];
 
 		const form_html = $(`
-			<div>
+			<div class="expense-form-wrapper">
 				<div class="expense-card-header">
-					<h3 class="expense-card-title">
-						<span>💸</span>
-						${this.is_tg ? "Сабти хароҷот / Баромад аз касса" : "Регистрация расхода / Выдача из кассы"}
-					</h3>
+					<div class="header-main">
+						<h3 class="expense-card-title">
+							<span class="header-icon">💸</span>
+							<span>${this.is_tg ? "Сабти хароҷот / Баромад аз касса" : "Регистрация расхода / Выдача из кассы"}</span>
+						</h3>
+					</div>
 					<span class="expense-badge">${this.data.company}</span>
 				</div>
 
-				<!-- 1. Source (Paid From) -->
+				<!-- 1. Source (Paid From) Dropdown -->
 				<div class="expense-section">
 					<div class="expense-label">
 						<span>1. ${this.is_tg ? "Манбаи маблағ (Аз куҷо пардохт мешавад)" : "Источник средств (Откуда списать)"}</span>
+						<span class="source-live-badge" id="source-live-badge"></span>
 					</div>
-					<div class="source-grid" id="source-grid"></div>
+					<div class="select-wrapper">
+						<select id="expense-source-select" class="expense-select"></select>
+					</div>
 				</div>
 
 				<!-- 2. Category Chips -->
@@ -134,32 +138,24 @@ class ExpenseDeskApp {
 
 					<!-- Custom Category Expansion Drawer -->
 					<div class="custom-category-box" id="custom-cat-box">
-						<div style="margin-bottom: 8px;">
-							<label style="font-size: 11px; font-weight: 600; color: #718096; margin-bottom: 2px;">
+						<div class="form-group-sm">
+							<label class="sub-label">
 								${this.is_tg ? "Номи категорияи нав:" : "Название новой категории:"}
 							</label>
 							<input type="text" id="custom-cat-name" class="expense-input" placeholder="${this.is_tg ? 'Масалан: Реклама дар Instagram' : 'Например: Реклама в Instagram'}">
 						</div>
-						<div style="margin-bottom: 8px;">
-							<label style="font-size: 11px; font-weight: 600; color: #718096; margin-bottom: 2px;">
+						<div class="form-group-sm">
+							<label class="sub-label">
 								${this.is_tg ? "Ҳисоби баҳисобгирӣ (Expense Account):" : "Счет расходов (Expense Account):"}
 							</label>
 							<select id="custom-cat-account" class="expense-select"></select>
 						</div>
-						<div style="display: flex; align-items: center; gap: 6px;">
-							<input type="checkbox" id="pin-cat-check" checked style="cursor: pointer;">
-							<label for="pin-cat-check" style="font-size: 12px; font-weight: 500; cursor: pointer; margin: 0;">
+						<div class="checkbox-row">
+							<input type="checkbox" id="pin-cat-check" checked>
+							<label for="pin-cat-check">
 								⭐ ${this.is_tg ? "Барои истифодаи доимӣ сабт кунед" : "Закрепить для постоянного использования"}
 							</label>
 						</div>
-					</div>
-
-					<!-- Staff Advance Picker -->
-					<div class="custom-category-box" id="staff-advance-box">
-						<label style="font-size: 11px; font-weight: 600; color: #718096; margin-bottom: 2px;">
-							👤 ${this.is_tg ? "Интихоби корманд:" : "Выберите сотрудника:"}
-						</label>
-						<select id="staff-employee-select" class="expense-select"></select>
 					</div>
 				</div>
 
@@ -173,75 +169,106 @@ class ExpenseDeskApp {
 						<input type="number" step="any" min="0" id="expense-amount" class="amount-input" placeholder="0.00" autofocus>
 					</div>
 					<div class="quick-add-group">
-						<button class="quick-add-btn" data-add="5">+5</button>
-						<button class="quick-add-btn" data-add="10">+10</button>
-						<button class="quick-add-btn" data-add="20">+20</button>
-						<button class="quick-add-btn" data-add="50">+50</button>
-						<button class="quick-add-btn" data-add="100">+100</button>
+						<button type="button" class="quick-add-btn" data-add="10">+10</button>
+						<button type="button" class="quick-add-btn" data-add="20">+20</button>
+						<button type="button" class="quick-add-btn" data-add="50">+50</button>
+						<button type="button" class="quick-add-btn" data-add="100">+100</button>
+						<button type="button" class="quick-add-btn" data-add="200">+200</button>
 					</div>
 				</div>
 
-				<!-- 4. Notes / Description -->
+				<!-- 4. Employee / Recipient (Optional tracking for dinner, taxi, errands) -->
 				<div class="expense-section">
 					<div class="expense-label">
-						<span>4. ${this.is_tg ? "Тавсиф ва шарҳ (Ихтиёрӣ)" : "Примечание / Кому выдано (Опционально)"}</span>
+						<span>4. ${this.is_tg ? "Корманд / Гиранда (Ихтиёрӣ)" : "Сотрудник / Кому выдано (Опционально)"}</span>
 					</div>
-					<textarea id="expense-desc" class="expense-textarea" placeholder="${this.is_tg ? 'Масалан: Барои курери фармоиши веб ё чой барои кормандон...' : 'Например: За доставку заказа клиенту, чай и кофе в офис...'}"></textarea>
+					<div class="select-wrapper">
+						<select id="expense-employee-select" class="expense-select"></select>
+					</div>
+					<div class="field-hint">
+						${this.is_tg 
+							? "Барои сабти хӯрок, таксӣ ё харидҳо. Дар таърихи корманд сабт мешавад, аммо аз маош кам намешавад." 
+							: "Для обеда, такси или поручений. Записывается за сотрудником для учета, но НЕ удерживается из зарплаты."}
+					</div>
 				</div>
 
-				<!-- 5. Receipt Photo Upload -->
+				<!-- 5. Description / Note -->
 				<div class="expense-section">
 					<div class="expense-label">
-						<span>5. ${this.is_tg ? "Чек ё акс (Ихтиёрӣ)" : "Фото чека (Опционально)"}</span>
+						<span>5. ${this.is_tg ? "Тавсиф ва шарҳ (Ихтиёрӣ)" : "Примечание / Детали (Опционально)"}</span>
+					</div>
+					<textarea id="expense-desc" class="expense-textarea" rows="2" placeholder="${this.is_tg ? 'Масалан: Хӯроки нисфирӯзӣ барои смена, таксӣ то анбор...' : 'Например: Обед для смены кассиров, Яндекс.Такси до склада, закупка скотча...'}"></textarea>
+				</div>
+
+				<!-- 6. Receipt Photo / Attachment -->
+				<div class="expense-section">
+					<div class="expense-label">
+						<span>6. ${this.is_tg ? "Чек ё квитансия (Ихтиёрӣ)" : "Фото чека / Документ (Опционально)"}</span>
 					</div>
 					<div class="receipt-dropzone" id="receipt-upload-btn">
 						<div id="receipt-upload-label">
-							📷 ${this.is_tg ? "Акси чекро замима кунед (Camera / Upload)" : "Прикрепить фото чека (Камера / Файл)"}
+							<span class="upload-icon">📎</span>
+							<span>${this.is_tg ? "Замима кардани чеки харид (Камера / Файл)" : "Прикрепить фото чека (Камера / Файл)"}</span>
 						</div>
 						<div id="receipt-preview-wrap" style="display: none;"></div>
 					</div>
 				</div>
 
 				<!-- Action Submit Button -->
-				<button class="btn-record-expense" id="btn-submit-expense">
-					<span>⚡</span>
-					<span>${this.is_tg ? "Сабт ва баромад аз касса" : "Записать и списать"}</span>
+				<button type="button" class="btn-record-expense" id="btn-submit-expense">
+					<span class="btn-icon">⚡</span>
+					<span>${this.is_tg ? "Сабт ва баромад аз касса" : "Провести расход"}</span>
 				</button>
 			</div>
 		`);
 
 		container.append(form_html);
-		this.populate_sources(form_html.find("#source-grid"));
+		this.populate_sources(form_html.find("#expense-source-select"));
 		this.populate_categories(form_html.find("#category-chips"));
 		this.populate_expense_accounts(form_html.find("#custom-cat-account"));
-		this.populate_employees(form_html.find("#staff-employee-select"));
+		this.populate_employees(form_html.find("#expense-employee-select"));
 		this.bind_form_events(form_html);
 	}
 
-	populate_sources(container) {
-		container.empty();
+	populate_sources(select) {
+		select.empty();
 		const curr = this.data.currency || "TJS";
 		const sources = this.data.payment_sources || [];
 
+		if (sources.length === 0) {
+			select.append(`<option value="">-- ${this.is_tg ? "Манбаъ ёфт нашуд" : "Источники не найдены"} --</option>`);
+			return;
+		}
+
 		sources.forEach((src) => {
-			const is_active = this.selected_source && this.selected_source.id === src.id;
-			const btn = $(`
-				<div class="source-btn ${is_active ? 'active' : ''}" data-id="${src.id}">
-					<div class="source-info">
-						<span>${src.label}</span>
-					</div>
-					<span class="source-balance">${format_currency(src.balance, curr)}</span>
-				</div>
-			`);
-
-			btn.on("click", () => {
-				container.find(".source-btn").removeClass("active");
-				btn.addClass("active");
-				this.selected_source = src;
-			});
-
-			container.append(btn);
+			const is_selected = this.selected_source && this.selected_source.id === src.id;
+			select.append(
+				`<option value="${src.id}" ${is_selected ? "selected" : ""}>` +
+				`${src.label} — ${format_currency(src.balance, curr)}` +
+				`</option>`
+			);
 		});
+
+		this.update_source_live_badge();
+
+		select.off("change").on("change", (e) => {
+			const selected_id = $(e.currentTarget).val();
+			this.selected_source = sources.find((s) => s.id === selected_id) || sources[0];
+			this.update_source_live_badge();
+		});
+	}
+
+	update_source_live_badge() {
+		const curr = this.data.currency || "TJS";
+		const badge = $("#source-live-badge");
+		if (this.selected_source) {
+			badge.html(`
+				<span class="badge-label">${this.is_tg ? "Боқимонда:" : "Остаток:"}</span>
+				<strong class="badge-val">${format_currency(this.selected_source.balance, curr)}</strong>
+			`).show();
+		} else {
+			badge.hide();
+		}
 	}
 
 	populate_categories(container) {
@@ -253,7 +280,7 @@ class ExpenseDeskApp {
 			const chip = $(`
 				<div class="category-chip ${is_active ? 'active' : ''}" data-name="${cat.name}">
 					<span class="category-icon">${cat.icon || '🏷️'}</span>
-					<span>${cat.category_name}</span>
+					<span class="category-name">${cat.category_name}</span>
 				</div>
 			`);
 
@@ -263,12 +290,6 @@ class ExpenseDeskApp {
 				chip.addClass("active");
 				this.selected_category = cat;
 				$("#custom-cat-box").removeClass("show");
-
-				if (cat.category_name === "Staff Advance" || cat.category_name === "Аванс сотруднику") {
-					$("#staff-advance-box").addClass("show");
-				} else {
-					$("#staff-advance-box").removeClass("show");
-				}
 			});
 
 			container.append(chip);
@@ -278,7 +299,7 @@ class ExpenseDeskApp {
 		const custom_chip = $(`
 			<div class="category-chip category-chip-custom ${this.is_custom_category ? 'active' : ''}" id="btn-custom-chip">
 				<span class="category-icon">➕</span>
-				<span>${this.is_tg ? "Дигар хароҷот..." : "Другой расход..."}</span>
+				<span class="category-name">${this.is_tg ? "Дигар хароҷот..." : "Другой расход..."}</span>
 			</div>
 		`);
 
@@ -287,7 +308,6 @@ class ExpenseDeskApp {
 			container.find(".category-chip").removeClass("active");
 			custom_chip.addClass("active");
 			$("#custom-cat-box").addClass("show");
-			$("#staff-advance-box").removeClass("show");
 			$("#custom-cat-name").focus();
 		});
 
@@ -305,10 +325,10 @@ class ExpenseDeskApp {
 
 	populate_employees(select) {
 		select.empty();
-		select.append(`<option value="">-- ${this.is_tg ? "Кормандро интихоб кунед" : "Выберите сотрудника"} --</option>`);
+		select.append(`<option value="">-- ${this.is_tg ? "Бе корманд (Хароҷоти умумии ширкат)" : "Без сотрудника (Общий расход компании)"} --</option>`);
 		const emps = this.data.employees || [];
 		emps.forEach((emp) => {
-			select.append(`<option value="${emp.name}">${emp.employee_name} (${emp.name})</option>`);
+			select.append(`<option value="${emp.name}">👤 ${emp.employee_name} (${emp.name})</option>`);
 		});
 	}
 
@@ -345,7 +365,7 @@ class ExpenseDeskApp {
 			wrap.html(`
 				<div class="receipt-preview">
 					<span>📎 ${this.receipt_url.split('/').pop()}</span>
-					<button class="btn-remove-receipt" style="background: none; border: none; color: #e53e3e; cursor: pointer; font-weight: bold;">✕</button>
+					<button class="btn-remove-receipt" type="button" title="Удалить">✕</button>
 				</div>
 			`).show();
 
@@ -413,16 +433,23 @@ class ExpenseDeskApp {
 			expense_account = this.selected_category.default_account;
 		}
 
+		// Selected Employee (for dinner, taxi, errands)
+		const employee_id = $("#expense-employee-select").val() || null;
 		let party_type = null;
 		let party = null;
-		if (category_name === "Staff Advance" || category_name === "Аванс сотруднику") {
+		let beneficiary_name = null;
+		if (employee_id) {
 			party_type = "Employee";
-			party = $("#staff-employee-select").val() || null;
+			party = employee_id;
+			const emp_obj = (this.data.employees || []).find((e) => e.name === employee_id);
+			if (emp_obj) {
+				beneficiary_name = emp_obj.employee_name;
+			}
 		}
 
 		const description = ($("#expense-desc").val() || "").trim();
 		const submit_btn = $("#btn-submit-expense");
-		submit_btn.prop("disabled", true).html(`<span>⏳</span> <span>${this.is_tg ? "Сабт шуда истодааст..." : "Сохранение..."}</span>`);
+		submit_btn.prop("disabled", true).html(`<span>⏳</span> <span>${this.is_tg ? "Сабт шуда истодааст..." : "Проведение..."}</span>`);
 
 		frappe.call({
 			method: "erpnext.accounts.page.expense_desk.expense_desk.record_quick_expense",
@@ -432,6 +459,7 @@ class ExpenseDeskApp {
 				paid_from: this.selected_source.account,
 				pos_profile: this.selected_source.pos_profile,
 				description: description,
+				beneficiary_name: beneficiary_name,
 				expense_account: expense_account,
 				party_type: party_type,
 				party: party,
@@ -441,7 +469,7 @@ class ExpenseDeskApp {
 				company: this.data.company,
 			},
 			callback: (r) => {
-				submit_btn.prop("disabled", false).html(`<span>⚡</span> <span>${this.is_tg ? "Сабт ва баромад аз касса" : "Записать и списать"}</span>`);
+				submit_btn.prop("disabled", false).html(`<span class="btn-icon">⚡</span> <span>${this.is_tg ? "Сабт ва баромад аз касса" : "Провести расход"}</span>`);
 				if (r.message) {
 					frappe.show_alert({
 						message: this.is_tg ? `✅ ${category_name}: ${format_currency(amount, this.data.currency)} сабт шуд!` : `✅ ${category_name}: ${format_currency(amount, this.data.currency)} успешно списано!`,
@@ -450,6 +478,7 @@ class ExpenseDeskApp {
 
 					$("#expense-amount").val("");
 					$("#expense-desc").val("");
+					$("#expense-employee-select").val("");
 					$("#custom-cat-name").val("");
 					this.receipt_url = null;
 					this.update_receipt_preview();
@@ -459,7 +488,7 @@ class ExpenseDeskApp {
 				}
 			},
 			error: () => {
-				submit_btn.prop("disabled", false).html(`<span>⚡</span> <span>${this.is_tg ? "Сабт ва баромад аз касса" : "Записать и списать"}</span>`);
+				submit_btn.prop("disabled", false).html(`<span class="btn-icon">⚡</span> <span>${this.is_tg ? "Сабт ва баромад аз касса" : "Провести расход"}</span>`);
 			},
 		});
 	}
@@ -469,19 +498,24 @@ class ExpenseDeskApp {
 		const summary = this.data.summary || { today_total: 0, period_total: 0, period_count: 0, category_breakdown: [] };
 		const sources = this.data.payment_sources || [];
 		const categories = this.data.categories || [];
+		const employees = this.data.employees || [];
 
 		const is_custom_open = this.active_period === "custom";
 
 		const stream_html = $(`
-			<div>
+			<div class="expense-stream-wrapper">
 				<div class="expense-card-header">
-					<h3 class="expense-card-title">
-						<span>📋</span>
-						${this.is_tg ? "Ҷараёни хароҷотҳо" : "Лента расходов"}
-					</h3>
-					<span class="expense-badge" id="live-filter-indicator">
-						${this.is_tg ? 'Имрӯз' : 'Сегодня'}
-					</span>
+					<div class="header-main">
+						<h3 class="expense-card-title">
+							<span class="header-icon">📋</span>
+							<span>${this.is_tg ? "Журнали хароҷотҳо" : "Журнал расходов"}</span>
+						</h3>
+					</div>
+					<div class="header-right-meta">
+						<span class="expense-badge" id="live-filter-indicator">
+							${this.get_active_period_label()}
+						</span>
+					</div>
 				</div>
 
 				<!-- Advanced Filter Box -->
@@ -495,7 +529,7 @@ class ExpenseDeskApp {
 							<button class="filter-pill ${this.active_period === 'month' ? 'active' : ''}" data-period="month">${this.is_tg ? 'Ин моҳ' : 'Месяц'}</button>
 							<button class="filter-pill ${this.active_period === 'all' ? 'active' : ''}" data-period="all">${this.is_tg ? 'Ҳама' : 'Все'}</button>
 							<button class="filter-pill ${this.active_period === 'custom' ? 'active' : ''}" id="btn-toggle-custom-date" data-period="custom">
-								📅 ${this.is_tg ? 'Период...' : 'Выбрать даты...'}
+								📅 ${this.is_tg ? 'Санаҳо...' : 'Период...'}
 							</button>
 						</div>
 					</div>
@@ -515,7 +549,7 @@ class ExpenseDeskApp {
 						</button>
 					</div>
 
-					<!-- Bottom Row: Source, Category & Search -->
+					<!-- Bottom Row: Source, Category, Employee & Search Controls -->
 					<div class="filter-row-controls">
 						<select id="filter-source-select" class="filter-select">
 							<option value="all">-- ${this.is_tg ? 'Ҳамаи манбаҳо' : 'Все источники'} --</option>
@@ -527,9 +561,14 @@ class ExpenseDeskApp {
 							${categories.map(c => `<option value="${c.category_name}" ${this.active_category_filter === c.category_name ? 'selected' : ''}>${c.icon || '🏷️'} ${c.category_name}</option>`).join('')}
 						</select>
 
+						<select id="filter-employee-select" class="filter-select">
+							<option value="all">-- ${this.is_tg ? 'Ҳамаи кормандон' : 'Все сотрудники'} --</option>
+							${employees.map(e => `<option value="${e.name}" ${this.active_employee_filter === e.name ? 'selected' : ''}>👤 ${e.employee_name}</option>`).join('')}
+						</select>
+
 						<div class="filter-search-box">
 							<span class="filter-search-icon">🔍</span>
-							<input type="text" id="filter-search-input" class="filter-search-input" placeholder="${this.is_tg ? 'Ҷустуҷӯ аз рӯи тавсиф...' : 'Поиск по примечанию, чеку...'}" value="${this.search_query}">
+							<input type="text" id="filter-search-input" class="filter-search-input" placeholder="${this.is_tg ? 'Ҷустуҷӯ...' : 'Поиск по примечанию...'}" value="${this.search_query}">
 						</div>
 
 						<button class="btn-reset-filters" id="btn-reset-filters" style="${this.has_active_filters() ? '' : 'display: none;'}">
@@ -538,14 +577,18 @@ class ExpenseDeskApp {
 					</div>
 				</div>
 
-				<!-- KPI Banner -->
+				<!-- Professional KPI Banner (3-metrics) -->
 				<div class="expense-kpi-banner">
-					<div>
+					<div class="kpi-card">
 						<div class="kpi-block-label">${this.is_tg ? 'Хароҷоти интихобшуда' : 'Расход за период'}</div>
 						<div class="kpi-block-val" id="summary-period-total">${format_currency(summary.period_total, curr)}</div>
 					</div>
-					<div style="text-align: right;">
-						<div class="kpi-block-label">${this.is_tg ? 'Миқдори сабтҳо' : 'Количество записей'}</div>
+					<div class="kpi-card">
+						<div class="kpi-block-label">${this.is_tg ? 'Хароҷоти имрӯз' : 'Расход за сегодня'}</div>
+						<div class="kpi-block-val text-accent" id="summary-today-total">${format_currency(summary.today_total, curr)}</div>
+					</div>
+					<div class="kpi-card text-right">
+						<div class="kpi-block-label">${this.is_tg ? 'Миқдори сабтҳо' : 'Количество операций'}</div>
 						<div class="kpi-block-val" id="summary-period-count">${summary.period_count}</div>
 					</div>
 				</div>
@@ -564,8 +607,26 @@ class ExpenseDeskApp {
 		this.bind_stream_events(stream_html);
 	}
 
+	get_active_period_label() {
+		const map = {
+			today: this.is_tg ? "Имрӯз" : "Сегодня",
+			yesterday: this.is_tg ? "Дирӯз" : "Вчера",
+			week: this.is_tg ? "Ҳафта" : "Неделя",
+			month: this.is_tg ? "Ин моҳ" : "Месяц",
+			all: this.is_tg ? "Ҳама давр" : "Все время",
+			custom: this.is_tg ? "Период" : "Период",
+		};
+		return map[this.active_period] || map.today;
+	}
+
 	has_active_filters() {
-		return this.active_period !== "today" || this.active_source_filter !== "all" || this.active_category_filter !== "all" || (this.search_query && this.search_query.trim().length > 0);
+		return (
+			this.active_period !== "today" ||
+			this.active_source_filter !== "all" ||
+			this.active_category_filter !== "all" ||
+			this.active_employee_filter !== "all" ||
+			(this.search_query && this.search_query.trim().length > 0)
+		);
 	}
 
 	render_category_bars(container, breakdown) {
@@ -582,7 +643,7 @@ class ExpenseDeskApp {
 				<div class="cat-bar-item">
 					<div class="cat-bar-header">
 						<span>${item.icon || '🏷️'} ${item.category}</span>
-						<span>${format_currency(item.total, curr)} (${item.percent}%)</span>
+						<span><strong>${format_currency(item.total, curr)}</strong> (${item.percent}%)</span>
 					</div>
 					<div class="cat-bar-track">
 						<div class="cat-bar-fill" style="width: ${item.percent}%;"></div>
@@ -600,8 +661,8 @@ class ExpenseDeskApp {
 		if (!expenses || expenses.length === 0) {
 			container.html(`
 				<div class="empty-stream-state">
-					<div style="font-size: 32px; margin-bottom: 8px;">🧾</div>
-					<div>${this.is_tg ? "Дар ин давра хароҷоте ёфт нашуд" : "По выбранным фильтрам расходов не найдено"}</div>
+					<div class="empty-icon">🧾</div>
+					<div class="empty-text">${this.is_tg ? "Дар ин давра хароҷоте ёфт нашуд" : "По выбранным фильтрам расходов не найдено"}</div>
 				</div>
 			`);
 			return;
@@ -609,31 +670,33 @@ class ExpenseDeskApp {
 
 		expenses.forEach((exp) => {
 			const is_voided = exp.docstatus === 2;
+			const employee_display = exp.employee_name || exp.beneficiary_name || (exp.party_type === "Employee" ? exp.party : null);
+
 			const card = $(`
 				<div class="stream-card ${is_voided ? 'voided' : ''}" data-name="${exp.name}">
 					<div class="stream-left">
-						<div class="stream-icon">${exp.icon || '🏷️'}</div>
+						<div class="stream-icon-box">${exp.icon || '🏷️'}</div>
 						<div class="stream-meta">
-							<div class="stream-category">${exp.expense_category}</div>
-							<div class="stream-details">
-								${exp.description ? frappe.utils.escape_html(exp.description) : ''}
-								${exp.party ? ` • 👤 ${exp.party}` : ''}
-								${exp.beneficiary_name ? ` • 👤 ${exp.beneficiary_name}` : ''}
+							<div class="stream-category-row">
+								<span class="stream-category">${exp.expense_category}</span>
+								${employee_display ? `<span class="stream-employee-pill">👤 ${frappe.utils.escape_html(employee_display)}</span>` : ''}
 							</div>
-							<div>
+							${exp.description ? `<div class="stream-details">${frappe.utils.escape_html(exp.description)}</div>` : ''}
+							<div class="stream-subtags">
 								<span class="stream-source-tag">
 									${exp.pos_profile ? `💵 Касса: ${exp.pos_profile}` : `🔐 ${exp.paid_from}`}
 								</span>
-								${exp.receipt_attachment ? `<a href="${exp.receipt_attachment}" target="_blank" style="margin-left: 6px; font-size: 11px; text-decoration: none;">📎 ${this.is_tg ? 'Чек' : 'Чек'}</a>` : ''}
+								${exp.receipt_attachment ? `<a href="${exp.receipt_attachment}" target="_blank" class="stream-attachment-link">📎 ${this.is_tg ? 'Чек' : 'Чек'}</a>` : ''}
+								${is_voided ? `<span class="badge-voided">${this.is_tg ? 'Бекор карда шуд' : 'Аннулирован'}</span>` : ''}
 							</div>
 						</div>
 					</div>
 
 					<div class="stream-right">
-						<div class="stream-amount">-${format_currency(exp.amount, curr)}</div>
+						<div class="stream-amount ${is_voided ? 'amount-voided' : ''}">-${format_currency(exp.amount, curr)}</div>
 						<div class="stream-time">${exp.formatted_date} ${exp.formatted_time}</div>
 						${!is_voided ? `
-							<button class="btn-void-expense" data-name="${exp.name}">
+							<button type="button" class="btn-void-expense" data-name="${exp.name}">
 								${this.is_tg ? 'Бекоркунӣ' : 'Аннулировать'}
 							</button>
 						` : ''}
@@ -702,6 +765,12 @@ class ExpenseDeskApp {
 			this.reload_stream();
 		});
 
+		// Employee filter dropdown
+		container.find("#filter-employee-select").on("change", (e) => {
+			this.active_employee_filter = $(e.currentTarget).val();
+			this.reload_stream();
+		});
+
 		// Debounced search
 		container.find("#filter-search-input").on("input", (e) => {
 			clearTimeout(this.search_timer);
@@ -718,6 +787,7 @@ class ExpenseDeskApp {
 			this.to_date = null;
 			this.active_source_filter = "all";
 			this.active_category_filter = "all";
+			this.active_employee_filter = "all";
 			this.search_query = "";
 			this.render_stream(this.wrapper.find(".expense-stream-col"));
 			this.reload_stream();
@@ -726,6 +796,7 @@ class ExpenseDeskApp {
 
 	reload_stream() {
 		$("#btn-reset-filters").toggle(this.has_active_filters());
+		$("#live-filter-indicator").text(this.get_active_period_label());
 
 		frappe.call({
 			method: "erpnext.accounts.page.expense_desk.expense_desk.get_filtered_expenses",
@@ -735,6 +806,7 @@ class ExpenseDeskApp {
 				to_date: this.to_date,
 				source_id: this.active_source_filter,
 				category: this.active_category_filter,
+				employee: this.active_employee_filter,
 				search: this.search_query,
 				company: this.data.company,
 			},
@@ -744,6 +816,9 @@ class ExpenseDeskApp {
 					const summary = r.message.summary;
 					$("#summary-period-total").text(format_currency(summary.period_total, curr));
 					$("#summary-period-count").text(summary.period_count);
+					if (summary.today_total !== undefined) {
+						$("#summary-today-total").text(format_currency(summary.today_total, curr));
+					}
 					this.render_category_bars($("#category-bars-wrap"), summary.category_breakdown);
 					this.render_stream_items($("#expense-stream-list"), r.message.recent_expenses);
 				}
