@@ -343,7 +343,7 @@ class ExpenseDeskApp {
 		form.find("#receipt-upload-btn").on("click", (e) => {
 			if ($(e.target).closest(".btn-remove-receipt").length) return;
 			new frappe.ui.FileUploader({
-				make_attachments_public: 0,
+				make_attachments_public: 1,
 				allow_multiple: false,
 				on_success: (file_doc) => {
 					this.receipt_url = file_doc.file_url;
@@ -362,10 +362,17 @@ class ExpenseDeskApp {
 		const label = $("#receipt-upload-label");
 		if (this.receipt_url) {
 			label.hide();
+			const is_img = /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(this.receipt_url);
 			wrap.html(`
-				<div class="receipt-preview">
-					<span>📎 ${this.receipt_url.split('/').pop()}</span>
-					<button class="btn-remove-receipt" type="button" title="Удалить">✕</button>
+				<div class="receipt-uploaded-card">
+					<div class="receipt-thumb-wrap">
+						${is_img ? `<img src="${this.receipt_url}" class="receipt-form-thumb" alt="Receipt">` : `<span class="receipt-file-icon">📄</span>`}
+					</div>
+					<div class="receipt-file-info">
+						<div class="receipt-file-name">${this.receipt_url.split('/').pop()}</div>
+						<div class="receipt-file-status">✅ ${this.is_tg ? 'Акс замима шуд' : 'Фото прикреплено'}</div>
+					</div>
+					<button class="btn-remove-receipt" type="button" title="${this.is_tg ? 'Нест кардан' : 'Удалить'}">✕</button>
 				</div>
 			`).show();
 
@@ -686,7 +693,12 @@ class ExpenseDeskApp {
 								<span class="stream-source-tag">
 									${exp.pos_profile ? `💵 Касса: ${exp.pos_profile}` : `🔐 ${exp.paid_from}`}
 								</span>
-								${exp.receipt_attachment ? `<a href="${exp.receipt_attachment}" target="_blank" class="stream-attachment-link">📎 ${this.is_tg ? 'Чек' : 'Чек'}</a>` : ''}
+								${exp.receipt_attachment ? `
+									<div class="stream-receipt-preview" title="${this.is_tg ? 'Дидани чеки харид' : 'Посмотреть фото чека'}">
+										<img src="${exp.receipt_attachment}" class="stream-thumb-img" onerror="this.style.display='none'">
+										<span class="stream-receipt-badge">📷 ${this.is_tg ? 'Чек' : 'Чек'}</span>
+									</div>
+								` : ''}
 								${is_voided ? `<span class="badge-voided">${this.is_tg ? 'Бекор карда шуд' : 'Аннулирован'}</span>` : ''}
 							</div>
 						</div>
@@ -703,6 +715,13 @@ class ExpenseDeskApp {
 					</div>
 				</div>
 			`);
+
+			if (exp.receipt_attachment) {
+				card.find(".stream-receipt-preview").on("click", (e) => {
+					e.stopPropagation();
+					this.show_receipt_lightbox(exp.receipt_attachment, exp);
+				});
+			}
 
 			card.find(".btn-void-expense").on("click", (e) => {
 				e.stopPropagation();
@@ -824,6 +843,65 @@ class ExpenseDeskApp {
 				}
 			},
 		});
+	}
+
+	show_receipt_lightbox(receipt_url, expense) {
+		const curr = this.data.currency || "TJS";
+		const is_img = /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(receipt_url);
+
+		const dialog = new frappe.ui.Dialog({
+			title: this.is_tg ? "Акси чек / Ҳуҷҷат" : "Фото чека / Документ",
+			size: "large",
+		});
+
+		dialog.set_message(`
+			<div class="receipt-lightbox-container">
+				<div class="receipt-lightbox-meta">
+					<div class="lightbox-meta-item">
+						<span class="lightbox-meta-label">${this.is_tg ? "Категория:" : "Категория:"}</span>
+						<span class="lightbox-meta-val"><strong>${expense.icon || '🏷️'} ${expense.expense_category}</strong></span>
+					</div>
+					<div class="lightbox-meta-item">
+						<span class="lightbox-meta-label">${this.is_tg ? "Маблағ:" : "Сумма:"}</span>
+						<span class="lightbox-meta-val text-danger"><strong>-${format_currency(expense.amount, curr)}</strong></span>
+					</div>
+					${expense.employee_name ? `
+						<div class="lightbox-meta-item">
+							<span class="lightbox-meta-label">${this.is_tg ? "Корманд:" : "Сотрудник:"}</span>
+							<span class="lightbox-meta-val">👤 ${expense.employee_name}</span>
+						</div>
+					` : ''}
+					<div class="lightbox-meta-item">
+						<span class="lightbox-meta-label">${this.is_tg ? "Сана:" : "Дата:"}</span>
+						<span class="lightbox-meta-val">${expense.formatted_date} ${expense.formatted_time}</span>
+					</div>
+				</div>
+
+				<div class="receipt-lightbox-media">
+					${is_img ? `
+						<a href="${receipt_url}" target="_blank" title="${this.is_tg ? 'Барои андозаи аслӣ пахш кунед' : 'Нажмите для открытия оригинала'}">
+							<img src="${receipt_url}" class="receipt-lightbox-img" alt="Receipt">
+						</a>
+					` : `
+						<div class="receipt-file-box">
+							<div style="font-size: 48px; margin-bottom: 8px;">📄</div>
+							<div style="color: #ffffff; font-weight: 600; margin-bottom: 12px;">${receipt_url.split('/').pop()}</div>
+							<a href="${receipt_url}" target="_blank" class="btn btn-sm btn-primary">
+								${this.is_tg ? "Кушодани файл" : "Открыть файл"}
+							</a>
+						</div>
+					`}
+				</div>
+
+				<div class="receipt-lightbox-footer">
+					<a href="${receipt_url}" target="_blank" class="btn btn-sm btn-default">
+						↗️ ${this.is_tg ? "Кушодани расми аслӣ" : "Открыть полный размер"}
+					</a>
+				</div>
+			</div>
+		`);
+
+		dialog.show();
 	}
 
 	confirm_void_expense(name, amount, category) {
