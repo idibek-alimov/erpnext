@@ -2,6 +2,11 @@
 // For license information, please see license.txt
 
 frappe.pages["expense-desk"].on_page_load = function (wrapper) {
+	if (wrapper.expense_desk_app) {
+		wrapper.expense_desk_app.load_init_data();
+		return;
+	}
+
 	const is_tg = frappe.boot.user.language === "tg";
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -104,6 +109,7 @@ class ExpenseDeskApp {
 	}
 
 	render_form(container) {
+		container.empty();
 		const curr = this.data.currency || "TJS";
 
 		const form_html = $(`
@@ -260,7 +266,7 @@ class ExpenseDeskApp {
 
 	update_source_live_badge() {
 		const curr = this.data.currency || "TJS";
-		const badge = $("#source-live-badge");
+		const badge = this.wrapper.find("#source-live-badge");
 		if (this.selected_source) {
 			badge.html(`
 				<span class="badge-label">${this.is_tg ? "Боқимонда:" : "Остаток:"}</span>
@@ -289,7 +295,7 @@ class ExpenseDeskApp {
 				container.find(".category-chip").removeClass("active");
 				chip.addClass("active");
 				this.selected_category = cat;
-				$("#custom-cat-box").removeClass("show");
+				this.wrapper.find("#custom-cat-box").removeClass("show");
 			});
 
 			container.append(chip);
@@ -307,8 +313,8 @@ class ExpenseDeskApp {
 			this.is_custom_category = true;
 			container.find(".category-chip").removeClass("active");
 			custom_chip.addClass("active");
-			$("#custom-cat-box").addClass("show");
-			$("#custom-cat-name").focus();
+			this.wrapper.find("#custom-cat-box").addClass("show");
+			this.wrapper.find("#custom-cat-name").focus();
 		});
 
 		container.append(custom_chip);
@@ -358,8 +364,8 @@ class ExpenseDeskApp {
 	}
 
 	update_receipt_preview() {
-		const wrap = $("#receipt-preview-wrap");
-		const label = $("#receipt-upload-label");
+		const wrap = this.wrapper.find("#receipt-preview-wrap");
+		const label = this.wrapper.find("#receipt-upload-label");
 		if (this.receipt_url) {
 			label.hide();
 			const is_img = /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(this.receipt_url);
@@ -388,14 +394,15 @@ class ExpenseDeskApp {
 	}
 
 	submit_expense() {
-		const amount = flt($("#expense-amount").val());
+		const wrap = this.wrapper;
+		const amount = flt(wrap.find("#expense-amount").val());
 		if (amount <= 0) {
 			frappe.msgprint({
 				title: __("Хатогӣ"),
 				indicator: "red",
 				message: this.is_tg ? "Лутфан маблағи хароҷотро дуруст ворид намоед." : "Пожалуйста, укажите корректную сумму расхода.",
 			});
-			$("#expense-amount").focus();
+			wrap.find("#expense-amount").focus();
 			return;
 		}
 
@@ -414,16 +421,16 @@ class ExpenseDeskApp {
 		let pin_category = false;
 
 		if (this.is_custom_category) {
-			category_name = ($("#custom-cat-name").val() || "").trim();
-			expense_account = $("#custom-cat-account").val();
-			pin_category = $("#pin-cat-check").is(":checked");
+			category_name = (wrap.find("#custom-cat-name").val() || "").trim();
+			expense_account = wrap.find("#custom-cat-account").val();
+			pin_category = wrap.find("#pin-cat-check").is(":checked");
 			if (!category_name) {
 				frappe.msgprint({
 					title: __("Хатогӣ"),
 					indicator: "red",
 					message: this.is_tg ? "Лутфан номи категорияи навро нависед." : "Пожалуйста, введите название категории.",
 				});
-				$("#custom-cat-name").focus();
+				wrap.find("#custom-cat-name").focus();
 				return;
 			}
 		} else {
@@ -441,7 +448,7 @@ class ExpenseDeskApp {
 		}
 
 		// Selected Employee (for dinner, taxi, errands)
-		const employee_id = $("#expense-employee-select").val() || null;
+		const employee_id = wrap.find("#expense-employee-select").val() || null;
 		let party_type = null;
 		let party = null;
 		let beneficiary_name = null;
@@ -454,8 +461,8 @@ class ExpenseDeskApp {
 			}
 		}
 
-		const description = ($("#expense-desc").val() || "").trim();
-		const submit_btn = $("#btn-submit-expense");
+		const description = (wrap.find("#expense-desc").val() || "").trim();
+		const submit_btn = wrap.find("#btn-submit-expense");
 		submit_btn.prop("disabled", true).html(`<span>⏳</span> <span>${this.is_tg ? "Сабт шуда истодааст..." : "Проведение..."}</span>`);
 
 		frappe.call({
@@ -483,10 +490,10 @@ class ExpenseDeskApp {
 						indicator: "green",
 					});
 
-					$("#expense-amount").val("");
-					$("#expense-desc").val("");
-					$("#expense-employee-select").val("");
-					$("#custom-cat-name").val("");
+					wrap.find("#expense-amount").val("");
+					wrap.find("#expense-desc").val("");
+					wrap.find("#expense-employee-select").val("");
+					wrap.find("#custom-cat-name").val("");
 					this.receipt_url = null;
 					this.update_receipt_preview();
 
@@ -501,6 +508,7 @@ class ExpenseDeskApp {
 	}
 
 	render_stream(container) {
+		container.empty();
 		const curr = this.data.currency || "TJS";
 		const summary = this.data.summary || { today_total: 0, period_total: 0, period_count: 0, category_breakdown: [] };
 		const sources = this.data.payment_sources || [];
@@ -740,11 +748,11 @@ class ExpenseDeskApp {
 			const period = btn.data("period");
 
 			if (period === "custom") {
-				$("#custom-date-panel").toggleClass("show");
+				container.find("#custom-date-panel").toggleClass("show");
 				return;
 			}
 
-			$("#custom-date-panel").removeClass("show");
+			container.find("#custom-date-panel").removeClass("show");
 			container.find(".filter-pill").removeClass("active");
 			btn.addClass("active");
 			this.active_period = period;
@@ -755,8 +763,8 @@ class ExpenseDeskApp {
 
 		// Custom date apply
 		container.find("#btn-apply-custom-dates").on("click", () => {
-			const from = $("#filter-from-date").val();
-			const to = $("#filter-to-date").val();
+			const from = container.find("#filter-from-date").val();
+			const to = container.find("#filter-to-date").val();
 			if (!from || !to) {
 				frappe.msgprint({
 					title: __("Хатогӣ"),
@@ -802,21 +810,37 @@ class ExpenseDeskApp {
 
 		// Reset filters
 		container.find("#btn-reset-filters").on("click", () => {
-			this.active_period = "all";
-			this.from_date = null;
-			this.to_date = null;
-			this.active_source_filter = "all";
-			this.active_category_filter = "all";
-			this.active_employee_filter = "all";
-			this.search_query = "";
-			this.render_stream(this.wrapper.find(".expense-stream-col"));
-			this.reload_stream();
+			this.reset_filters();
 		});
 	}
 
+	reset_filters() {
+		this.active_period = "all";
+		this.from_date = null;
+		this.to_date = null;
+		this.active_source_filter = "all";
+		this.active_category_filter = "all";
+		this.active_employee_filter = "all";
+		this.search_query = "";
+
+		const wrap = this.wrapper;
+		wrap.find(".filter-pill").removeClass("active");
+		wrap.find('.filter-pill[data-period="all"]').addClass("active");
+		wrap.find("#custom-date-panel").removeClass("show");
+		wrap.find("#filter-from-date").val("");
+		wrap.find("#filter-to-date").val("");
+		wrap.find("#filter-source-select").val("all");
+		wrap.find("#filter-category-select").val("all");
+		wrap.find("#filter-employee-select").val("all");
+		wrap.find("#filter-search-input").val("");
+		wrap.find("#btn-reset-filters").hide();
+
+		this.reload_stream();
+	}
+
 	reload_stream() {
-		$("#btn-reset-filters").toggle(this.has_active_filters());
-		$("#live-filter-indicator").text(this.get_active_period_label());
+		this.wrapper.find("#btn-reset-filters").toggle(this.has_active_filters());
+		this.wrapper.find("#live-filter-indicator").text(this.get_active_period_label());
 
 		frappe.call({
 			method: "erpnext.accounts.page.expense_desk.expense_desk.get_filtered_expenses",
@@ -834,13 +858,13 @@ class ExpenseDeskApp {
 				if (r.message) {
 					const curr = this.data.currency || "TJS";
 					const summary = r.message.summary;
-					$("#summary-period-total").text(format_currency(summary.period_total, curr));
-					$("#summary-period-count").text(summary.period_count);
+					this.wrapper.find("#summary-period-total").text(format_currency(summary.period_total, curr));
+					this.wrapper.find("#summary-period-count").text(summary.period_count);
 					if (summary.today_total !== undefined) {
-						$("#summary-today-total").text(format_currency(summary.today_total, curr));
+						this.wrapper.find("#summary-today-total").text(format_currency(summary.today_total, curr));
 					}
-					this.render_category_bars($("#category-bars-wrap"), summary.category_breakdown);
-					this.render_stream_items($("#expense-stream-list"), r.message.recent_expenses);
+					this.render_category_bars(this.wrapper.find("#category-bars-wrap"), summary.category_breakdown);
+					this.render_stream_items(this.wrapper.find("#expense-stream-list"), r.message.recent_expenses);
 				}
 			},
 		});
