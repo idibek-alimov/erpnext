@@ -30,6 +30,11 @@ frappe.pages["expense-desk"].on_page_load = function (wrapper) {
 	);
 
 	page.add_inner_button(
+		is_tg ? __("Андозҳо") : __("Налоги"),
+		() => frappe.set_route("tax-desk")
+	);
+
+	page.add_inner_button(
 		is_tg ? __("Рӯйхати пурра") : __("Все расходы"),
 		() => frappe.set_route("List", "Quick Expense")
 	);

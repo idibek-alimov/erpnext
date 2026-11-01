@@ -13,6 +13,7 @@
 		{ icon: "👥", ru: "Персонал", tg: "Кормандон", route: "staff-hub" },
 		{ icon: "💰", ru: "Кассы и счета", tg: "Хазинаҳо", route: "money-hub" },
 		{ icon: "🏷️", ru: "Расход кассы", tg: "Хароҷоти касса", route: "expense-desk" },
+		{ icon: "🏛️", ru: "Налоги", tg: "Андозҳо", route: "tax-desk" },
 	];
 
 	function is_full_menu() {

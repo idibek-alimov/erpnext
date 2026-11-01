@@ -41,6 +41,13 @@ frappe.pages["supplier-hub"].on_page_load = function (wrapper) {
 	);
 
 	page.add_inner_button(
+		is_tg ? __("Андозҳо") : __("Налоги"),
+		() => {
+			frappe.set_route("tax-desk");
+		}
+	);
+
+	page.add_inner_button(
 		is_tg ? __("Навсозӣ") : __("Обновить"),
 		() => {
 			if (wrapper.supplier_hub_app) {

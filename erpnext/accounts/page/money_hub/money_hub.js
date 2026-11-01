@@ -17,6 +17,7 @@ frappe.pages["money-hub"].on_page_load = function (wrapper) {
 	});
 
 	page.add_inner_button(is_tg ? __("Хароҷотҳо") : __("Расходы"), () => frappe.set_route("expense-desk"));
+	page.add_inner_button(is_tg ? __("Андозҳо") : __("Налоги"), () => frappe.set_route("tax-desk"));
 	page.add_inner_button(is_tg ? __("Таъминкунандагон") : __("Поставщики"), () => frappe.set_route("supplier-hub"));
 	page.add_inner_button(is_tg ? __("Кормандон") : __("Сотрудники"), () => frappe.set_route("staff-hub"));
 	page.add_inner_button(is_tg ? __("Каталоги молҳо") : __("Каталог товаров"), () => frappe.set_route("product-catalog"));
