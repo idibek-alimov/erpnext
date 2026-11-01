@@ -17,6 +17,8 @@
   "paid_from",
   "mode_of_payment",
   "pos_profile",
+  "pos_opening_shift",
+  "created_from_pos",
   "col_break2",
   "party_type",
   "party",
@@ -100,6 +102,18 @@
    "fieldtype": "Link",
    "label": "POS Profile",
    "options": "POS Profile"
+  },
+  {
+   "fieldname": "pos_opening_shift",
+   "fieldtype": "Link",
+   "label": "POS Opening Shift",
+   "options": "POS Opening Shift"
+  },
+  {
+   "default": "0",
+   "fieldname": "created_from_pos",
+   "fieldtype": "Check",
+   "label": "Created From POS"
   },
   {
    "fieldname": "col_break2",

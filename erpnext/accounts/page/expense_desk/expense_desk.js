@@ -667,6 +667,8 @@ class ExpenseDeskApp {
 			`);
 			container.append(bar);
 		});
+	}
+
 	get_employee_display(exp) {
 		if (!exp) return null;
 		// If employee_name is already a human name (not HR-EMP-...)

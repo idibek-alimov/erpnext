@@ -4,7 +4,7 @@
 import json
 import frappe
 from frappe import _
-from frappe.utils import flt, today, nowdate, getdate, formatdate
+from frappe.utils import flt, cint, today, nowdate, getdate, formatdate
 
 from erpnext.stock.page.product_catalog.product_catalog import get_default_company
 
@@ -127,7 +127,7 @@ def ensure_default_categories(company):
 
 
 @frappe.whitelist()
-def get_expense_desk_init_data(company=None):
+def get_expense_desk_init_data(company=None, pos_profile=None, pos_opening_shift=None, from_pos=0):
 	company = company or get_default_company()
 	currency = frappe.db.get_value("Company", company, "default_currency") or "TJS"
 
@@ -135,7 +135,7 @@ def get_expense_desk_init_data(company=None):
 	ensure_default_categories(company)
 
 	# 1. Discover Payment Sources (POS Tills, Safe, Bank)
-	payment_sources = get_payment_sources(company)
+	payment_sources = get_payment_sources(company, pos_profile=pos_profile)
 
 	# 2. Fetch Pinned / Active Categories in Russian
 	categories = frappe.db.get_all(
@@ -160,12 +160,21 @@ def get_expense_desk_init_data(company=None):
 		order_by="employee_name asc",
 	)
 
-	# 5. Fetch Today's & Recent Expenses (default to all recent expenses so feed is never empty)
-	recent_expenses, summary = get_expenses_and_summary(company, period="all")
+	# 5. Fetch Today's & Recent Expenses (default to today for POS, all for desk)
+	initial_period = "today" if (pos_profile or cint(from_pos)) else "all"
+	recent_expenses, summary = get_expenses_and_summary(
+		company,
+		period=initial_period,
+		pos_profile=pos_profile,
+		pos_opening_shift=pos_opening_shift,
+		from_pos=from_pos,
+	)
 
 	return {
 		"company": company,
 		"currency": currency,
+		"pos_profile": pos_profile,
+		"pos_opening_shift": pos_opening_shift,
 		"payment_sources": payment_sources,
 		"categories": categories,
 		"expense_accounts": expense_accounts,
@@ -175,16 +184,20 @@ def get_expense_desk_init_data(company=None):
 	}
 
 
-def get_payment_sources(company):
+def get_payment_sources(company, pos_profile=None):
 	from erpnext.accounts.utils import get_balance_on
 
 	sources = []
 	seen_accounts = set()
 
 	# A. Active POS Profiles (Tills)
+	filters = {"company": company, "disabled": 0}
+	if pos_profile:
+		filters["name"] = pos_profile
+
 	pos_profiles = frappe.db.get_all(
 		"POS Profile",
-		filters={"company": company, "disabled": 0},
+		filters=filters,
 		fields=["name", "warehouse", "posa_cash_mode_of_payment"],
 	)
 
@@ -216,41 +229,43 @@ def get_payment_sources(company):
 			"balance": balance,
 		})
 
-	# B. Safe / General Cash in Hand accounts
-	cash_accounts = frappe.db.get_all(
-		"Account",
-		filters={"company": company, "account_type": "Cash", "is_group": 0},
-		fields=["name", "account_name"],
-	)
+	# If opened within POS Awesome (pos_profile provided), HIDE Safe and only show this POS cash and Bank accounts
+	if not pos_profile:
+		# B. Safe / General Cash in Hand accounts
+		cash_accounts = frappe.db.get_all(
+			"Account",
+			filters={"company": company, "account_type": "Cash", "is_group": 0},
+			fields=["name", "account_name"],
+		)
 
-	for acc in cash_accounts:
-		if acc.name in seen_accounts:
-			continue
-		balance = flt(get_balance_on(acc.name))
-		sources.append({
-			"id": f"safe:{acc.name}",
-			"type": "safe",
-			"pos_profile": None,
-			"account": acc.name,
-			"label": f"🔐 {acc.account_name}",
-			"balance": balance,
-		})
-		seen_accounts.add(acc.name)
+		for acc in cash_accounts:
+			if acc.name in seen_accounts:
+				continue
+			balance = flt(get_balance_on(acc.name))
+			sources.append({
+				"id": f"safe:{acc.name}",
+				"type": "safe",
+				"pos_profile": None,
+				"account": acc.name,
+				"label": f"🔐 {acc.account_name}",
+				"balance": balance,
+			})
+			seen_accounts.add(acc.name)
 
-	# If all cash accounts were assigned to POS, ensure an explicit Safe source option
-	if not any(s["type"] == "safe" for s in sources):
-		default_cash = frappe.get_cached_value("Company", company, "default_cash_account") or "Cash - R"
-		balance = flt(get_balance_on(default_cash)) if default_cash else 0.0
-		sources.append({
-			"id": f"safe:{default_cash}",
-			"type": "safe",
-			"pos_profile": None,
-			"account": default_cash,
-			"label": "🔐 Сейф магазина (Safe)",
-			"balance": balance,
-		})
+		# If all cash accounts were assigned to POS, ensure an explicit Safe source option
+		if not any(s["type"] == "safe" for s in sources):
+			default_cash = frappe.get_cached_value("Company", company, "default_cash_account") or "Cash - R"
+			balance = flt(get_balance_on(default_cash)) if default_cash else 0.0
+			sources.append({
+				"id": f"safe:{default_cash}",
+				"type": "safe",
+				"pos_profile": None,
+				"account": default_cash,
+				"label": "🔐 Сейф магазина (Safe)",
+				"balance": balance,
+			})
 
-	# C. Bank Accounts
+	# C. Bank Accounts (available for both Desk and POS)
 	bank_accounts = frappe.db.get_all(
 		"Account",
 		filters={"company": company, "account_type": "Bank", "is_group": 0},
@@ -281,6 +296,9 @@ def get_filtered_expenses(
 	employee="all",
 	search=None,
 	company=None,
+	pos_profile=None,
+	pos_opening_shift=None,
+	from_pos=0,
 ):
 	company = company or get_default_company()
 	recent_expenses, summary = get_expenses_and_summary(
@@ -292,6 +310,9 @@ def get_filtered_expenses(
 		category=category,
 		employee=employee,
 		search=search,
+		pos_profile=pos_profile,
+		pos_opening_shift=pos_opening_shift,
+		from_pos=from_pos,
 	)
 	return {"recent_expenses": recent_expenses, "summary": summary}
 
@@ -305,6 +326,9 @@ def get_expenses_and_summary(
 	category="all",
 	employee="all",
 	search=None,
+	pos_profile=None,
+	pos_opening_shift=None,
+	from_pos=0,
 ):
 	from frappe.utils import add_days, get_first_day, get_last_day
 
@@ -312,7 +336,10 @@ def get_expenses_and_summary(
 	start_date = today_d
 	end_date = today_d
 
-	if period == "custom" and from_date and to_date:
+	if period == "shift" and pos_opening_shift:
+		start_date = None
+		end_date = None
+	elif period == "custom" and from_date and to_date:
 		start_date = getdate(from_date)
 		end_date = getdate(to_date)
 	elif period == "yesterday":
@@ -330,6 +357,16 @@ def get_expenses_and_summary(
 
 	conds = ["company = %(company)s", "docstatus <= 2"]
 	vals = {"company": company}
+
+	if cint(from_pos) or pos_profile:
+		conds.append("created_from_pos = 1")
+		if pos_profile:
+			conds.append("pos_profile = %(desk_pos_profile)s")
+			vals["desk_pos_profile"] = pos_profile
+
+	if period == "shift" and pos_opening_shift:
+		conds.append("pos_opening_shift = %(pos_opening_shift)s")
+		vals["pos_opening_shift"] = pos_opening_shift
 
 	if start_date and end_date:
 		conds.append("posting_date BETWEEN %(start_date)s AND %(end_date)s")
@@ -363,8 +400,24 @@ def get_expenses_and_summary(
 		vals["emp_id"] = emp_id or employee
 		vals["emp_name"] = emp_name or employee
 
+	bank_accounts = frappe.db.get_all(
+		"Account",
+		filters={"company": company, "account_type": "Bank", "is_group": 0},
+		pluck="name",
+	)
+
 	if source_id and source_id != "all":
-		if source_id.startswith("pos:"):
+		if source_id == "cash":
+			if bank_accounts:
+				conds.append("paid_from NOT IN %(bank_accounts)s")
+				vals["bank_accounts"] = tuple(bank_accounts)
+		elif source_id == "bank":
+			if bank_accounts:
+				conds.append("paid_from IN %(bank_accounts)s")
+				vals["bank_accounts"] = tuple(bank_accounts)
+			else:
+				conds.append("1 = 0")
+		elif source_id.startswith("pos:"):
 			pos_name = source_id.split(":", 1)[1]
 			conds.append("pos_profile = %(pos_profile)s")
 			vals["pos_profile"] = pos_name
@@ -385,7 +438,7 @@ def get_expenses_and_summary(
 		f"""
 		SELECT 
 			name, posting_date, creation, expense_category, amount,
-			paid_from, pos_profile, party_type, party, beneficiary_name,
+			paid_from, pos_profile, pos_opening_shift, party_type, party, beneficiary_name,
 			description, receipt_attachment, journal_entry, payment_entry,
 			purchase_invoice, docstatus, owner
 		FROM `tabQuick Expense`
@@ -446,19 +499,36 @@ def get_expenses_and_summary(
 	]
 
 	# Today's overall total (unfiltered)
-	today_total_all = frappe.db.sql(
-		"""
-		SELECT COALESCE(SUM(amount), 0)
-		FROM `tabQuick Expense`
-		WHERE company = %s AND posting_date = %s AND docstatus = 1
-		""",
-		(company, today()),
-	)[0][0]
+	if cint(from_pos) or pos_profile:
+		today_conds = ["company = %s", "posting_date = %s", "docstatus = 1", "created_from_pos = 1"]
+		today_vals = [company, today()]
+		if pos_profile:
+			today_conds.append("pos_profile = %s")
+			today_vals.append(pos_profile)
+		today_total_all = frappe.db.sql(
+			f"SELECT COALESCE(SUM(amount), 0) FROM `tabQuick Expense` WHERE {' AND '.join(today_conds)}",
+			tuple(today_vals),
+		)[0][0]
+	else:
+		today_total_all = frappe.db.sql(
+			"""
+			SELECT COALESCE(SUM(amount), 0)
+			FROM `tabQuick Expense`
+			WHERE company = %s AND posting_date = %s AND docstatus = 1
+			""",
+			(company, today()),
+		)[0][0]
+
+	bank_set = set(bank_accounts or [])
+	cash_total = sum(e["amount"] for e in active_expenses if e.get("paid_from") not in bank_set)
+	bank_total = sum(e["amount"] for e in active_expenses if e.get("paid_from") in bank_set)
 
 	summary = {
 		"period_total": round(total_amount, 2),
 		"period_count": total_count,
 		"today_total": round(flt(today_total_all), 2),
+		"cash_total": round(cash_total, 2),
+		"bank_total": round(bank_total, 2),
 		"category_breakdown": category_breakdown,
 	}
 
@@ -471,6 +541,8 @@ def record_quick_expense(
 	amount,
 	paid_from=None,
 	pos_profile=None,
+	pos_opening_shift=None,
+	created_from_pos=0,
 	description=None,
 	beneficiary_name=None,
 	expense_account=None,
@@ -485,8 +557,13 @@ def record_quick_expense(
 	"""Instantly create and submit a Quick Expense from the Expense Desk."""
 	roles = frappe.get_roles()
 	allowed_roles = {"Accounts Manager", "Stock Manager", "System Manager", "Administrator"}
+	if pos_profile:
+		allowed_roles.update({
+			"Retail Cashier", "Retail Manager", "Retail Owner", "POS Manager",
+			"POS Awesome Supervisor", "POS User"
+		})
 	if not allowed_roles.intersection(roles):
-		frappe.throw(_("Only Store Managers and Owners can log expenses from the Expense Desk."))
+		frappe.throw(_("You are not authorized to log expenses."))
 
 	company = company or get_default_company()
 	amount = flt(amount)
@@ -504,6 +581,8 @@ def record_quick_expense(
 	doc.expense_category = category
 	doc.amount = amount
 	doc.pos_profile = pos_profile
+	doc.pos_opening_shift = pos_opening_shift
+	doc.created_from_pos = 1 if (cint(created_from_pos) or (pos_opening_shift and pos_profile)) else 0
 	doc.paid_from = paid_from
 	doc.description = description
 	doc.beneficiary_name = beneficiary_name
@@ -529,16 +608,23 @@ def record_quick_expense(
 			cat_doc.insert()
 			frappe.db.commit()
 
-	return get_expense_desk_init_data(company)
+	if cint(created_from_pos):
+		return get_expense_desk_init_data(company, pos_profile=pos_profile, pos_opening_shift=pos_opening_shift)
+	return get_expense_desk_init_data(company, pos_profile=None)
 
 
 @frappe.whitelist()
-def cancel_quick_expense(expense_name, company=None):
+def cancel_quick_expense(expense_name, company=None, pos_profile=None, pos_opening_shift=None):
 	"""Void/Cancel an expense and its underlying Journal or Payment Entry."""
 	roles = frappe.get_roles()
 	allowed_roles = {"Accounts Manager", "Stock Manager", "System Manager", "Administrator"}
+	if pos_profile:
+		allowed_roles.update({
+			"Retail Cashier", "Retail Manager", "Retail Owner", "POS Manager",
+			"POS Awesome Supervisor", "POS User"
+		})
 	if not allowed_roles.intersection(roles):
-		frappe.throw(_("Only Store Managers and Owners can cancel expenses."))
+		frappe.throw(_("You are not authorized to cancel expenses."))
 
 	company = company or get_default_company()
 	doc = frappe.get_doc("Quick Expense", expense_name)
@@ -546,4 +632,6 @@ def cancel_quick_expense(expense_name, company=None):
 		doc.flags.ignore_permissions = True
 		doc.cancel()
 
-	return get_expense_desk_init_data(company)
+	if pos_profile:
+		return get_expense_desk_init_data(company, pos_profile=pos_profile, pos_opening_shift=pos_opening_shift)
+	return get_expense_desk_init_data(company, pos_profile=None)
