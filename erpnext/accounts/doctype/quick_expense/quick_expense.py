@@ -43,8 +43,13 @@ class QuickExpense(Document):
 	def validate(self):
 		self.validate_amount()
 		self.set_company_defaults()
+		self.resolve_beneficiary()
 		self.resolve_expense_account()
 		self.resolve_paid_from()
+
+	def resolve_beneficiary(self):
+		if self.party_type == "Employee" and self.party and not self.beneficiary_name:
+			self.beneficiary_name = frappe.db.get_value("Employee", self.party, "employee_name")
 
 	def validate_amount(self):
 		if not self.amount or self.amount <= 0:

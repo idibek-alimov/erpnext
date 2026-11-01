@@ -667,6 +667,23 @@ class ExpenseDeskApp {
 			`);
 			container.append(bar);
 		});
+	get_employee_display(exp) {
+		if (!exp) return null;
+		// If employee_name is already a human name (not HR-EMP-...)
+		if (exp.employee_name && !exp.employee_name.startsWith("HR-EMP-")) {
+			return exp.employee_name;
+		}
+		if (exp.beneficiary_name && !exp.beneficiary_name.startsWith("HR-EMP-")) {
+			return exp.beneficiary_name;
+		}
+		// Try matching against loaded employees list
+		const employees = this.data?.employees || [];
+		const target_id = exp.party || exp.employee_name || exp.beneficiary_name;
+		if (target_id) {
+			const found = employees.find((e) => e.name === target_id || e.employee_name === target_id);
+			if (found) return found.employee_name;
+		}
+		return exp.employee_name || exp.beneficiary_name || (exp.party_type === "Employee" ? exp.party : null);
 	}
 
 	render_ledger_table(container, expenses, summary) {
@@ -723,7 +740,7 @@ class ExpenseDeskApp {
 		expenses.forEach((exp) => {
 			const is_voided = exp.docstatus === 2;
 			const safe_receipt_url = exp.receipt_attachment ? encodeURI(exp.receipt_attachment) : null;
-			const employee_display = exp.employee_name || exp.beneficiary_name || (exp.party_type === "Employee" ? exp.party : null);
+			const employee_display = this.get_employee_display(exp);
 
 			const row = $(`
 				<tr class="ledger-row ${is_voided ? 'row-voided' : ''} ${safe_receipt_url ? 'has-receipt' : ''}" data-name="${exp.name}" title="${this.is_tg ? 'Барои дидани ҷузъиёт пахш кунед' : 'Нажмите для просмотра деталей операции'}">
@@ -924,7 +941,7 @@ class ExpenseDeskApp {
 		const curr = this.data.currency || "TJS";
 		const is_voided = exp.docstatus === 2;
 		const safe_receipt_url = exp.receipt_attachment ? encodeURI(exp.receipt_attachment) : null;
-		const employee_display = exp.employee_name || exp.beneficiary_name || (exp.party_type === "Employee" ? exp.party : null);
+		const employee_display = this.get_employee_display(exp);
 
 		const dlg = new frappe.ui.Dialog({
 			title: `${exp.icon || "💸"} ${frappe.utils.escape_html(exp.expense_category)}`,
@@ -1056,7 +1073,7 @@ class ExpenseDeskApp {
 		// Remove any existing overlay
 		$(".expense-receipt-popup-overlay").remove();
 
-		const emp_display = expense.employee_name || expense.beneficiary_name || (expense.party_type === "Employee" ? expense.party : null);
+		const emp_display = this.get_employee_display(expense);
 
 		const popup = $(`
 			<div class="expense-receipt-popup-overlay">

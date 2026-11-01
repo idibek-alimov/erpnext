@@ -296,6 +296,7 @@ def add_staff_expense(employee, expense_category, amount, paid_from, description
 	doc.description = description or _("Expense allowance for {0}").format(employee)
 	doc.party_type = "Employee"
 	doc.party = employee
+	doc.beneficiary_name = frappe.db.get_value("Employee", employee, "employee_name") or employee
 
 	doc.flags.ignore_permissions = True
 	doc.insert()

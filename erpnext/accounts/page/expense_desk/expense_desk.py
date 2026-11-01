@@ -341,14 +341,27 @@ def get_expenses_and_summary(
 		vals["category"] = category
 
 	if employee and employee != "all":
-		emp_name = frappe.db.get_value("Employee", employee, "employee_name")
-		if emp_name:
-			conds.append("(party = %(employee)s OR beneficiary_name = %(emp_name)s OR beneficiary_name = %(employee)s OR (party_type = 'Employee' AND party = %(employee)s))")
-			vals["employee"] = employee
-			vals["emp_name"] = emp_name
+		emp_id = None
+		emp_name = None
+		if frappe.db.exists("Employee", employee):
+			emp_id = employee
+			emp_name = frappe.db.get_value("Employee", employee, "employee_name")
 		else:
-			conds.append("(party = %(employee)s OR beneficiary_name = %(employee)s OR (party_type = 'Employee' AND party = %(employee)s))")
-			vals["employee"] = employee
+			emp_id = frappe.db.get_value("Employee", {"employee_name": employee}, "name")
+			emp_name = employee if emp_id else None
+
+		conds.append(
+			"""(
+				party = %(employee)s
+				OR party = %(emp_id)s
+				OR beneficiary_name = %(employee)s
+				OR beneficiary_name = %(emp_name)s
+				OR (party_type = 'Employee' AND (party = %(employee)s OR party = %(emp_id)s))
+			)"""
+		)
+		vals["employee"] = employee
+		vals["emp_id"] = emp_id or employee
+		vals["emp_name"] = emp_name or employee
 
 	if source_id and source_id != "all":
 		if source_id.startswith("pos:"):
@@ -389,7 +402,7 @@ def get_expenses_and_summary(
 	)
 
 	employee_map = dict(
-		frappe.db.sql("SELECT name, employee_name FROM `tabEmployee` WHERE company = %s", company)
+		frappe.db.sql("SELECT name, employee_name FROM `tabEmployee`")
 	)
 
 	for exp in expenses:
@@ -397,8 +410,20 @@ def get_expenses_and_summary(
 		exp["formatted_time"] = exp["creation"].strftime("%H:%M") if exp.get("creation") else ""
 		exp["formatted_date"] = formatdate(exp["posting_date"], "dd.mm.yyyy")
 		exp["amount"] = flt(exp["amount"])
-		if exp.get("party_type") == "Employee" and exp.get("party"):
-			exp["employee_name"] = employee_map.get(exp["party"]) or exp.get("beneficiary_name") or exp["party"]
+		
+		# Resolve human-readable employee name
+		resolved_emp_name = None
+		if exp.get("party") and exp.get("party") in employee_map:
+			resolved_emp_name = employee_map[exp["party"]]
+		elif exp.get("beneficiary_name") and exp.get("beneficiary_name") in employee_map:
+			resolved_emp_name = employee_map[exp["beneficiary_name"]]
+		elif exp.get("beneficiary_name"):
+			resolved_emp_name = exp["beneficiary_name"]
+		elif exp.get("party_type") == "Employee" and exp.get("party"):
+			resolved_emp_name = exp["party"]
+
+		if resolved_emp_name:
+			exp["employee_name"] = resolved_emp_name
 
 	# Calculate summary for this filtered period (active submitted only)
 	active_expenses = [e for e in expenses if e.get("docstatus") == 1]
