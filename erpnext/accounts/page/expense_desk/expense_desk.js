@@ -679,11 +679,8 @@ class ExpenseDeskApp {
 				<table class="expense-ledger-table">
 					<thead>
 						<tr>
-							<th class="col-date">${this.is_tg ? 'Сана / Вақт' : 'Дата / Время'}</th>
-							<th class="col-cat">${this.is_tg ? 'Категория' : 'Категория'}</th>
-							<th class="col-emp">${this.is_tg ? 'Корманд' : 'Сотрудник'}</th>
-							<th class="col-desc">${this.is_tg ? 'Тавсиф' : 'Примечание'}</th>
-							<th class="col-source">${this.is_tg ? 'Манбаъ' : 'Источник'}</th>
+							<th class="col-cat">${this.is_tg ? 'Категория / Корманд' : 'Категория / Сотрудник'}</th>
+							<th class="col-source">${this.is_tg ? 'Манбаи маблағ' : 'Источник списания'}</th>
 							<th class="col-receipt text-center">${this.is_tg ? 'Чек' : 'Чек'}</th>
 							<th class="col-amount text-right">${this.is_tg ? 'Маблағ' : 'Сумма'}</th>
 							<th class="col-action text-center"></th>
@@ -692,11 +689,10 @@ class ExpenseDeskApp {
 					<tbody id="expense-ledger-tbody"></tbody>
 					<tfoot id="expense-ledger-tfoot">
 						<tr class="ledger-summary-row">
-							<td colspan="5" class="summary-label-cell">
+							<td colspan="3" class="summary-label-cell">
 								<span class="summary-label-title">${this.is_tg ? 'Ҳамагӣ (Итого):' : 'Итого за выбранный период:'}</span>
 								<span class="summary-count-badge">${summary.period_count} ${this.is_tg ? 'амал' : 'операций'}</span>
 							</td>
-							<td class="text-center"></td>
 							<td class="summary-amount-cell text-right">
 								<strong>-${format_currency(summary.period_total, curr)}</strong>
 							</td>
@@ -712,7 +708,7 @@ class ExpenseDeskApp {
 		if (!expenses || expenses.length === 0) {
 			tbody.html(`
 				<tr class="empty-table-row">
-					<td colspan="8" class="empty-table-cell">
+					<td colspan="5" class="empty-table-cell">
 						<div class="empty-stream-state">
 							<div class="empty-icon">🧾</div>
 							<div class="empty-text">${this.is_tg ? "Дар ин давра хароҷоте ёфт нашуд" : "По выбранным фильтрам расходов не найдено"}</div>
@@ -730,22 +726,18 @@ class ExpenseDeskApp {
 			const employee_display = exp.employee_name || exp.beneficiary_name || (exp.party_type === "Employee" ? exp.party : null);
 
 			const row = $(`
-				<tr class="ledger-row ${is_voided ? 'row-voided' : ''} ${safe_receipt_url ? 'has-receipt' : ''}" data-name="${exp.name}">
-					<td class="cell-date">
-						<div class="date-main">${exp.formatted_date}</div>
-						<div class="time-sub">${exp.formatted_time}</div>
-					</td>
+				<tr class="ledger-row ${is_voided ? 'row-voided' : ''} ${safe_receipt_url ? 'has-receipt' : ''}" data-name="${exp.name}" title="${this.is_tg ? 'Барои дидани ҷузъиёт пахш кунед' : 'Нажмите для просмотра деталей операции'}">
 					<td class="cell-cat">
-						<span class="cat-pill">
+						<div class="cat-primary-line">
 							<span class="cat-icon">${exp.icon || '🏷️'}</span>
 							<span class="cat-name">${exp.expense_category}</span>
-						</span>
-					</td>
-					<td class="cell-emp">
-						${employee_display ? `<span class="stream-employee-pill">👤 ${frappe.utils.escape_html(employee_display)}</span>` : `<span class="cell-empty-dash">—</span>`}
-					</td>
-					<td class="cell-desc">
-						${exp.description ? `<span class="desc-text" title="${frappe.utils.escape_html(exp.description)}">${frappe.utils.escape_html(exp.description)}</span>` : `<span class="cell-empty-dash">—</span>`}
+							<span class="cell-time-tag">${exp.formatted_date} · ${exp.formatted_time}</span>
+						</div>
+						${employee_display ? `
+							<div class="cat-sub-line">
+								<span class="stream-employee-pill">👤 ${frappe.utils.escape_html(employee_display)}</span>
+							</div>
+						` : ''}
 					</td>
 					<td class="cell-source">
 						<span class="stream-source-tag">
@@ -774,6 +766,12 @@ class ExpenseDeskApp {
 					</td>
 				</tr>
 			`);
+
+			// On row click: open rich details modal just like in money-hub
+			row.on("click", (e) => {
+				if ($(e.target).closest(".btn-void-row, .btn-receipt-preview").length) return;
+				this.show_expense_detail_modal(exp);
+			});
 
 			if (safe_receipt_url) {
 				row.find(".btn-receipt-preview").on("click", (e) => {
@@ -920,6 +918,134 @@ class ExpenseDeskApp {
 				}
 			},
 		});
+	}
+
+	show_expense_detail_modal(exp) {
+		const curr = this.data.currency || "TJS";
+		const is_voided = exp.docstatus === 2;
+		const safe_receipt_url = exp.receipt_attachment ? encodeURI(exp.receipt_attachment) : null;
+		const employee_display = exp.employee_name || exp.beneficiary_name || (exp.party_type === "Employee" ? exp.party : null);
+
+		const dlg = new frappe.ui.Dialog({
+			title: `${exp.icon || "💸"} ${frappe.utils.escape_html(exp.expense_category)}`,
+			fields: [
+				{
+					fieldtype: "HTML",
+					fieldname: "detail_area",
+				},
+			],
+		});
+
+		const slip_html = `
+			<div class="expense-detail-slip">
+				<!-- Hero Amount Header -->
+				<div class="expense-slip-hero">
+					<div class="expense-slip-type">
+						⬆️ ${this.is_tg ? "Баромад аз касса / Хароҷот" : "Расход / Выдача из кассы"}
+					</div>
+					<div class="expense-slip-amount ${is_voided ? 'amount-voided' : ''}">
+						-${format_currency(exp.amount, curr)}
+					</div>
+					<div>
+						${!is_voided ? `
+							<span class="badge badge-pill badge-success" style="font-size: 11px; padding: 4px 10px;">
+								✓ ${this.is_tg ? "Сабт шудааст" : "Проведено"} (${exp.name})
+							</span>
+						` : `
+							<span class="badge badge-pill badge-danger" style="font-size: 11px; padding: 4px 10px;">
+								✕ ${this.is_tg ? "Бекор карда шуд" : "Аннулирован"} (${exp.name})
+							</span>
+						`}
+					</div>
+				</div>
+
+				<!-- Attributes Grid (just like Money Hub) -->
+				<div class="expense-slip-grid">
+					<div class="expense-slip-cell">
+						<span class="expense-slip-lbl">${this.is_tg ? "Категория:" : "Категория:"}</span>
+						<span class="expense-slip-val font-weight-bold">${exp.icon || '🏷️'} ${frappe.utils.escape_html(exp.expense_category)}</span>
+					</div>
+					<div class="expense-slip-cell">
+						<span class="expense-slip-lbl">${this.is_tg ? "Манбаи маблағ:" : "Источник списания:"}</span>
+						<span class="expense-slip-val font-weight-bold">
+							${exp.pos_profile ? `💵 Касса: ${exp.pos_profile}` : `🔐 ${exp.paid_from}`}
+						</span>
+					</div>
+					<div class="expense-slip-cell">
+						<span class="expense-slip-lbl">${this.is_tg ? "Корманд / Қабулкунанда:" : "Сотрудник / Получатель:"}</span>
+						<span class="expense-slip-val ${employee_display ? 'text-primary font-weight-bold' : 'text-muted'}">
+							${employee_display ? `👤 ${frappe.utils.escape_html(employee_display)}` : '—'}
+						</span>
+					</div>
+					<div class="expense-slip-cell">
+						<span class="expense-slip-lbl">${this.is_tg ? "Сана ва вақт:" : "Дата и время:"}</span>
+						<span class="expense-slip-val">${exp.formatted_date} · ⏰ ${exp.formatted_time}</span>
+					</div>
+					<div class="expense-slip-cell">
+						<span class="expense-slip-lbl">${this.is_tg ? "Муаллиф / Кассир:" : "Автор / Кассир:"}</span>
+						<span class="expense-slip-val">👤 ${frappe.utils.escape_html(exp.owner || '—')}</span>
+					</div>
+					<div class="expense-slip-cell">
+						<span class="expense-slip-lbl">${this.is_tg ? "Ҳуҷҷати пардохт:" : "Связанный документ:"}</span>
+						<span class="expense-slip-val">${exp.payment_entry || exp.journal_entry || exp.name}</span>
+					</div>
+					<div class="expense-slip-cell span-full">
+						<span class="expense-slip-lbl">${this.is_tg ? "Тавсиф / Эзоҳ:" : "Примечание / Описание:"}</span>
+						<span class="expense-slip-val text-dark" style="font-size: 13px;">
+							${exp.description ? frappe.utils.escape_html(exp.description) : '<span class="text-muted">—</span>'}
+						</span>
+					</div>
+				</div>
+
+				<!-- Receipt Thumbnail inside slip if attached -->
+				${safe_receipt_url ? `
+					<div class="expense-slip-receipt-box">
+						<div class="receipt-box-header">
+							<span>📷 ${this.is_tg ? "Чеки замимашуда:" : "Прикрепленный чек:"}</span>
+							<button type="button" class="btn btn-xs btn-default btn-open-full-receipt">🔍 ${this.is_tg ? "Калон кардан" : "Увеличить"}</button>
+						</div>
+						<div class="receipt-box-img-wrap">
+							<img src="${safe_receipt_url}" class="receipt-box-img" alt="Receipt">
+						</div>
+					</div>
+				` : ''}
+
+				<!-- Slip Action Buttons -->
+				<div class="expense-slip-actions">
+					${!is_voided ? `
+						<button class="btn btn-sm btn-danger btn-slip-void">
+							✕ ${this.is_tg ? "Бекор кардани хароҷот" : "Аннулировать расход"}
+						</button>
+					` : ''}
+					<button class="btn btn-sm btn-primary btn-slip-doc">
+						📄 ${this.is_tg ? "Кушодани санад" : "Открыть документ"} (${exp.name})
+					</button>
+				</div>
+			</div>
+		`;
+
+		dlg.fields_dict.detail_area.$wrapper.html(slip_html);
+
+		// Event handlers inside detail modal
+		dlg.$wrapper.find(".btn-open-full-receipt").on("click", () => {
+			this.show_receipt_lightbox(exp.receipt_attachment, exp);
+		});
+
+		dlg.$wrapper.find(".receipt-box-img").on("click", () => {
+			this.show_receipt_lightbox(exp.receipt_attachment, exp);
+		});
+
+		dlg.$wrapper.find(".btn-slip-doc").on("click", () => {
+			dlg.hide();
+			frappe.set_route("Form", "Quick Expense", exp.name);
+		});
+
+		dlg.$wrapper.find(".btn-slip-void").on("click", () => {
+			dlg.hide();
+			this.confirm_void_expense(exp.name, exp.amount, exp.expense_category);
+		});
+
+		dlg.show();
 	}
 
 	show_receipt_lightbox(receipt_url, expense) {

@@ -1252,5 +1252,166 @@
 	text-align: center;
 }
 
+/* Category & Employee Stacked Layout */
+.cell-cat {
+	min-width: 180px;
+}
+
+.cat-primary-line {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.cat-name {
+	font-weight: 600;
+	color: #0f172a;
+	font-size: 13px;
+}
+
+.cell-time-tag {
+	font-size: 11px;
+	font-weight: 500;
+	color: #64748b;
+	background: #f1f5f9;
+	padding: 1px 6px;
+	border-radius: 4px;
+	margin-left: 4px;
+}
+
+.cat-sub-line {
+	margin-top: 4px;
+	display: flex;
+	align-items: center;
+}
+
+.ledger-row {
+	cursor: pointer;
+	transition: background-color 0.12s ease;
+}
+
+.ledger-row:hover {
+	background-color: #f1f5f9 !important;
+}
+
+/* --- Money-Hub Style Expense Detail Modal Slip --- */
+.expense-detail-slip {
+	padding: 6px 8px;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.expense-slip-hero {
+	text-align: center;
+	border-bottom: 2px dashed #e2e8f0;
+	padding-bottom: 16px;
+	margin-bottom: 16px;
+}
+
+.expense-slip-type {
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: #64748b;
+	margin-bottom: 4px;
+}
+
+.expense-slip-amount {
+	font-size: 32px;
+	font-weight: 800;
+	color: #dc2626;
+	margin: 4px 0 8px;
+	letter-spacing: -0.5px;
+}
+
+.expense-slip-amount.amount-voided {
+	text-decoration: line-through;
+	color: #94a3b8;
+}
+
+.expense-slip-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+	background: #f8fafc;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	padding: 14px;
+	margin-bottom: 16px;
+}
+
+.expense-slip-cell {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.expense-slip-cell.span-full {
+	grid-column: 1 / -1;
+}
+
+.expense-slip-lbl {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	color: #64748b;
+	letter-spacing: 0.03em;
+}
+
+.expense-slip-val {
+	font-size: 13px;
+	color: #1e293b;
+}
+
+.expense-slip-receipt-box {
+	background: #f8fafc;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	padding: 12px 14px;
+	margin-bottom: 16px;
+}
+
+.receipt-box-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	font-size: 12px;
+	font-weight: 600;
+	color: #334155;
+	margin-bottom: 10px;
+}
+
+.receipt-box-img-wrap {
+	display: flex;
+	justify-content: center;
+	background: #0f172a;
+	padding: 10px;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.receipt-box-img {
+	max-height: 180px;
+	max-width: 100%;
+	object-fit: contain;
+	border-radius: 4px;
+	transition: transform 0.15s ease;
+}
+
+.receipt-box-img:hover {
+	transform: scale(1.02);
+}
+
+.expense-slip-actions {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+	border-top: 1px solid #e2e8f0;
+	padding-top: 14px;
+	margin-top: 14px;
+}
+
+
 
 
