@@ -341,8 +341,14 @@ def get_expenses_and_summary(
 		vals["category"] = category
 
 	if employee and employee != "all":
-		conds.append("party_type = 'Employee' AND party = %(employee)s")
-		vals["employee"] = employee
+		emp_name = frappe.db.get_value("Employee", employee, "employee_name")
+		if emp_name:
+			conds.append("(party = %(employee)s OR beneficiary_name = %(emp_name)s OR beneficiary_name = %(employee)s OR (party_type = 'Employee' AND party = %(employee)s))")
+			vals["employee"] = employee
+			vals["emp_name"] = emp_name
+		else:
+			conds.append("(party = %(employee)s OR beneficiary_name = %(employee)s OR (party_type = 'Employee' AND party = %(employee)s))")
+			vals["employee"] = employee
 
 	if source_id and source_id != "all":
 		if source_id.startswith("pos:"):

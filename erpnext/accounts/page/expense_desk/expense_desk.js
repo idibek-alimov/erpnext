@@ -611,14 +611,14 @@ class ExpenseDeskApp {
 				<!-- Category Breakdown Progress Bars -->
 				<div class="category-bars-wrap" id="category-bars-wrap"></div>
 
-				<!-- Stream List -->
-				<div class="expense-stream-list" id="expense-stream-list"></div>
+				<!-- Structured Accounting Ledger Table -->
+				<div class="expense-ledger-container" id="expense-ledger-container"></div>
 			</div>
 		`);
 
 		container.append(stream_html);
 		this.render_category_bars(stream_html.find("#category-bars-wrap"), summary.category_breakdown);
-		this.render_stream_items(stream_html.find("#expense-stream-list"), this.data.recent_expenses);
+		this.render_ledger_table(stream_html.find("#expense-ledger-container"), this.data.recent_expenses, summary);
 		this.bind_stream_events(stream_html);
 	}
 
@@ -669,17 +669,58 @@ class ExpenseDeskApp {
 		});
 	}
 
-	render_stream_items(container, expenses) {
+	render_ledger_table(container, expenses, summary) {
 		container.empty();
 		const curr = this.data.currency || "TJS";
+		summary = summary || { period_total: 0, period_count: 0 };
+
+		const table_html = $(`
+			<div class="expense-ledger-table-wrap">
+				<table class="expense-ledger-table">
+					<thead>
+						<tr>
+							<th class="col-date">${this.is_tg ? 'Сана / Вақт' : 'Дата / Время'}</th>
+							<th class="col-cat">${this.is_tg ? 'Категория' : 'Категория'}</th>
+							<th class="col-emp">${this.is_tg ? 'Корманд' : 'Сотрудник'}</th>
+							<th class="col-desc">${this.is_tg ? 'Тавсиф' : 'Примечание'}</th>
+							<th class="col-source">${this.is_tg ? 'Манбаъ' : 'Источник'}</th>
+							<th class="col-receipt text-center">${this.is_tg ? 'Чек' : 'Чек'}</th>
+							<th class="col-amount text-right">${this.is_tg ? 'Маблағ' : 'Сумма'}</th>
+							<th class="col-action text-center"></th>
+						</tr>
+					</thead>
+					<tbody id="expense-ledger-tbody"></tbody>
+					<tfoot id="expense-ledger-tfoot">
+						<tr class="ledger-summary-row">
+							<td colspan="5" class="summary-label-cell">
+								<span class="summary-label-title">${this.is_tg ? 'Ҳамагӣ (Итого):' : 'Итого за выбранный период:'}</span>
+								<span class="summary-count-badge">${summary.period_count} ${this.is_tg ? 'амал' : 'операций'}</span>
+							</td>
+							<td class="text-center"></td>
+							<td class="summary-amount-cell text-right">
+								<strong>-${format_currency(summary.period_total, curr)}</strong>
+							</td>
+							<td></td>
+						</tr>
+					</tfoot>
+				</table>
+			</div>
+		`);
+
+		const tbody = table_html.find("#expense-ledger-tbody");
 
 		if (!expenses || expenses.length === 0) {
-			container.html(`
-				<div class="empty-stream-state">
-					<div class="empty-icon">🧾</div>
-					<div class="empty-text">${this.is_tg ? "Дар ин давра хароҷоте ёфт нашуд" : "По выбранным фильтрам расходов не найдено"}</div>
-				</div>
+			tbody.html(`
+				<tr class="empty-table-row">
+					<td colspan="8" class="empty-table-cell">
+						<div class="empty-stream-state">
+							<div class="empty-icon">🧾</div>
+							<div class="empty-text">${this.is_tg ? "Дар ин давра хароҷоте ёфт нашуд" : "По выбранным фильтрам расходов не найдено"}</div>
+						</div>
+					</td>
+				</tr>
 			`);
+			container.append(table_html);
 			return;
 		}
 
@@ -688,57 +729,68 @@ class ExpenseDeskApp {
 			const safe_receipt_url = exp.receipt_attachment ? encodeURI(exp.receipt_attachment) : null;
 			const employee_display = exp.employee_name || exp.beneficiary_name || (exp.party_type === "Employee" ? exp.party : null);
 
-			const card = $(`
-				<div class="stream-card ${is_voided ? 'voided' : ''} ${safe_receipt_url ? 'has-receipt' : ''}" data-name="${exp.name}">
-					<div class="stream-left">
-						<div class="stream-icon-box">${exp.icon || '🏷️'}</div>
-						<div class="stream-meta">
-							<div class="stream-category-row">
-								<span class="stream-category">${exp.expense_category}</span>
-								${employee_display ? `<span class="stream-employee-pill">👤 ${frappe.utils.escape_html(employee_display)}</span>` : ''}
-							</div>
-							${exp.description ? `<div class="stream-details">${frappe.utils.escape_html(exp.description)}</div>` : ''}
-							<div class="stream-subtags">
-								<span class="stream-source-tag">
-									${exp.pos_profile ? `💵 Касса: ${exp.pos_profile}` : `🔐 ${exp.paid_from}`}
-								</span>
-								${safe_receipt_url ? `
-									<div class="stream-receipt-preview" title="${this.is_tg ? 'Дидани чеки харид' : 'Посмотреть фото чека'}">
-										<img src="${safe_receipt_url}" class="stream-thumb-img" onerror="this.style.display='none'">
-										<span class="stream-receipt-badge">📷 ${this.is_tg ? 'Чек' : 'Чек'}</span>
-									</div>
-								` : ''}
-								${is_voided ? `<span class="badge-voided">${this.is_tg ? 'Бекор карда шуд' : 'Аннулирован'}</span>` : ''}
-							</div>
-						</div>
-					</div>
-
-					<div class="stream-right">
-						<div class="stream-amount ${is_voided ? 'amount-voided' : ''}">-${format_currency(exp.amount, curr)}</div>
-						<div class="stream-time">${exp.formatted_date} ${exp.formatted_time}</div>
-						${!is_voided ? `
-							<button type="button" class="btn-void-expense" data-name="${exp.name}">
-								${this.is_tg ? 'Бекоркунӣ' : 'Аннулировать'}
+			const row = $(`
+				<tr class="ledger-row ${is_voided ? 'row-voided' : ''} ${safe_receipt_url ? 'has-receipt' : ''}" data-name="${exp.name}">
+					<td class="cell-date">
+						<div class="date-main">${exp.formatted_date}</div>
+						<div class="time-sub">${exp.formatted_time}</div>
+					</td>
+					<td class="cell-cat">
+						<span class="cat-pill">
+							<span class="cat-icon">${exp.icon || '🏷️'}</span>
+							<span class="cat-name">${exp.expense_category}</span>
+						</span>
+					</td>
+					<td class="cell-emp">
+						${employee_display ? `<span class="stream-employee-pill">👤 ${frappe.utils.escape_html(employee_display)}</span>` : `<span class="cell-empty-dash">—</span>`}
+					</td>
+					<td class="cell-desc">
+						${exp.description ? `<span class="desc-text" title="${frappe.utils.escape_html(exp.description)}">${frappe.utils.escape_html(exp.description)}</span>` : `<span class="cell-empty-dash">—</span>`}
+					</td>
+					<td class="cell-source">
+						<span class="stream-source-tag">
+							${exp.pos_profile ? `💵 Касса: ${exp.pos_profile}` : `🔐 ${exp.paid_from}`}
+						</span>
+					</td>
+					<td class="cell-receipt text-center">
+						${safe_receipt_url ? `
+							<button type="button" class="btn-receipt-preview" title="${this.is_tg ? 'Дидани чек' : 'Посмотреть фото чека'}">
+								<img src="${safe_receipt_url}" class="receipt-mini-thumb" onerror="this.style.display='none'">
+								<span class="receipt-tag-text">📷 Чек</span>
 							</button>
-						` : ''}
-					</div>
-				</div>
+						` : `<span class="cell-empty-dash">—</span>`}
+					</td>
+					<td class="cell-amount text-right ${is_voided ? 'amount-voided' : ''}">
+						<strong>-${format_currency(exp.amount, curr)}</strong>
+					</td>
+					<td class="cell-action text-center">
+						${!is_voided ? `
+							<button type="button" class="btn-void-row" data-name="${exp.name}" title="${this.is_tg ? 'Бекор кардан' : 'Аннулировать расход'}">
+								✕ ${this.is_tg ? 'Бекор' : 'Аннулировать'}
+							</button>
+						` : `
+							<span class="badge-voided">${this.is_tg ? 'Бекор шуд' : 'Аннулирован'}</span>
+						`}
+					</td>
+				</tr>
 			`);
 
-			if (exp.receipt_attachment) {
-				card.on("click", (e) => {
-					if ($(e.target).closest(".btn-void-expense").length) return;
+			if (safe_receipt_url) {
+				row.find(".btn-receipt-preview").on("click", (e) => {
+					e.stopPropagation();
 					this.show_receipt_lightbox(exp.receipt_attachment, exp);
 				});
 			}
 
-			card.find(".btn-void-expense").on("click", (e) => {
+			row.find(".btn-void-row").on("click", (e) => {
 				e.stopPropagation();
 				this.confirm_void_expense(exp.name, exp.amount, exp.expense_category);
 			});
 
-			container.append(card);
+			tbody.append(row);
 		});
+
+		container.append(table_html);
 	}
 
 	bind_stream_events(container) {
@@ -864,7 +916,7 @@ class ExpenseDeskApp {
 						this.wrapper.find("#summary-today-total").text(format_currency(summary.today_total, curr));
 					}
 					this.render_category_bars(this.wrapper.find("#category-bars-wrap"), summary.category_breakdown);
-					this.render_stream_items(this.wrapper.find("#expense-stream-list"), r.message.recent_expenses);
+					this.render_ledger_table(this.wrapper.find("#expense-ledger-container"), r.message.recent_expenses, summary);
 				}
 			},
 		});
