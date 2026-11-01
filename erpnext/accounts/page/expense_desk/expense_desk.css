@@ -744,6 +744,15 @@
 	background: #f8fafc;
 }
 
+.stream-card.has-receipt {
+	cursor: pointer;
+}
+
+.stream-card.has-receipt:hover {
+	border-color: #93c5fd;
+	box-shadow: 0 2px 8px rgba(59, 130, 246, 0.08);
+}
+
 .stream-left {
 	display: flex;
 	align-items: flex-start;

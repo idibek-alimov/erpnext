@@ -677,10 +677,10 @@ class ExpenseDeskApp {
 
 		expenses.forEach((exp) => {
 			const is_voided = exp.docstatus === 2;
-			const employee_display = exp.employee_name || exp.beneficiary_name || (exp.party_type === "Employee" ? exp.party : null);
+			const safe_receipt_url = exp.receipt_attachment ? encodeURI(exp.receipt_attachment) : null;
 
 			const card = $(`
-				<div class="stream-card ${is_voided ? 'voided' : ''}" data-name="${exp.name}">
+				<div class="stream-card ${is_voided ? 'voided' : ''} ${safe_receipt_url ? 'has-receipt' : ''}" data-name="${exp.name}">
 					<div class="stream-left">
 						<div class="stream-icon-box">${exp.icon || '🏷️'}</div>
 						<div class="stream-meta">
@@ -693,9 +693,9 @@ class ExpenseDeskApp {
 								<span class="stream-source-tag">
 									${exp.pos_profile ? `💵 Касса: ${exp.pos_profile}` : `🔐 ${exp.paid_from}`}
 								</span>
-								${exp.receipt_attachment ? `
+								${safe_receipt_url ? `
 									<div class="stream-receipt-preview" title="${this.is_tg ? 'Дидани чеки харид' : 'Посмотреть фото чека'}">
-										<img src="${exp.receipt_attachment}" class="stream-thumb-img" onerror="this.style.display='none'">
+										<img src="${safe_receipt_url}" class="stream-thumb-img" onerror="this.style.display='none'">
 										<span class="stream-receipt-badge">📷 ${this.is_tg ? 'Чек' : 'Чек'}</span>
 									</div>
 								` : ''}
@@ -717,8 +717,8 @@ class ExpenseDeskApp {
 			`);
 
 			if (exp.receipt_attachment) {
-				card.find(".stream-receipt-preview").on("click", (e) => {
-					e.stopPropagation();
+				card.on("click", (e) => {
+					if ($(e.target).closest(".btn-void-expense").length) return;
 					this.show_receipt_lightbox(exp.receipt_attachment, exp);
 				});
 			}
@@ -847,14 +847,21 @@ class ExpenseDeskApp {
 
 	show_receipt_lightbox(receipt_url, expense) {
 		const curr = this.data.currency || "TJS";
+		const safe_url = encodeURI(receipt_url);
 		const is_img = /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(receipt_url);
 
 		const dialog = new frappe.ui.Dialog({
 			title: this.is_tg ? "Акси чек / Ҳуҷҷат" : "Фото чека / Документ",
 			size: "large",
+			fields: [
+				{
+					fieldtype: "HTML",
+					fieldname: "receipt_preview_html",
+				},
+			],
 		});
 
-		dialog.set_message(`
+		const html = `
 			<div class="receipt-lightbox-container">
 				<div class="receipt-lightbox-meta">
 					<div class="lightbox-meta-item">
@@ -863,7 +870,7 @@ class ExpenseDeskApp {
 					</div>
 					<div class="lightbox-meta-item">
 						<span class="lightbox-meta-label">${this.is_tg ? "Маблағ:" : "Сумма:"}</span>
-						<span class="lightbox-meta-val text-danger"><strong>-${format_currency(expense.amount, curr)}</strong></span>
+						<span class="lightbox-meta-val" style="color: #dc2626;"><strong>-${format_currency(expense.amount, curr)}</strong></span>
 					</div>
 					${expense.employee_name ? `
 						<div class="lightbox-meta-item">
@@ -879,14 +886,14 @@ class ExpenseDeskApp {
 
 				<div class="receipt-lightbox-media">
 					${is_img ? `
-						<a href="${receipt_url}" target="_blank" title="${this.is_tg ? 'Барои андозаи аслӣ пахш кунед' : 'Нажмите для открытия оригинала'}">
-							<img src="${receipt_url}" class="receipt-lightbox-img" alt="Receipt">
+						<a href="${safe_url}" target="_blank" title="${this.is_tg ? 'Барои андозаи аслӣ пахш кунед' : 'Нажмите для открытия оригинала'}">
+							<img src="${safe_url}" class="receipt-lightbox-img" alt="Receipt">
 						</a>
 					` : `
 						<div class="receipt-file-box">
 							<div style="font-size: 48px; margin-bottom: 8px;">📄</div>
 							<div style="color: #ffffff; font-weight: 600; margin-bottom: 12px;">${receipt_url.split('/').pop()}</div>
-							<a href="${receipt_url}" target="_blank" class="btn btn-sm btn-primary">
+							<a href="${safe_url}" target="_blank" class="btn btn-sm btn-primary">
 								${this.is_tg ? "Кушодани файл" : "Открыть файл"}
 							</a>
 						</div>
@@ -894,13 +901,14 @@ class ExpenseDeskApp {
 				</div>
 
 				<div class="receipt-lightbox-footer">
-					<a href="${receipt_url}" target="_blank" class="btn btn-sm btn-default">
+					<a href="${safe_url}" target="_blank" class="btn btn-sm btn-default">
 						↗️ ${this.is_tg ? "Кушодани расми аслӣ" : "Открыть полный размер"}
 					</a>
 				</div>
 			</div>
-		`);
+		`;
 
+		dialog.fields_dict.receipt_preview_html.$wrapper.html(html);
 		dialog.show();
 	}
 
