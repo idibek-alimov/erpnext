@@ -34,10 +34,7 @@ def _classify_account(account_name, account_type):
 
 
 def import_existing_accounts(company):
-	"""First run: turn existing Cash/Bank leaf accounts into Money Wallets."""
-	if frappe.db.count("Money Wallet", {"company": company}):
-		return
-
+	"""Sync all existing Cash/Bank leaf accounts into Money Wallets."""
 	ensure_default_payment_accounts(company)
 
 	accounts = frappe.db.get_all(
@@ -48,7 +45,7 @@ def import_existing_accounts(company):
 	)
 	for idx, acc in enumerate(accounts):
 		wtype = _classify_account(acc.account_name, acc.account_type)
-		if frappe.db.exists("Money Wallet", acc.account_name):
+		if frappe.db.exists("Money Wallet", {"account": acc.name, "company": company}) or frappe.db.exists("Money Wallet", acc.account_name):
 			continue
 		mop = frappe.db.get_value(
 			"Mode of Payment Account", {"default_account": acc.name, "company": company}, "parent"
@@ -103,29 +100,45 @@ def get_money_hub_data(company=None, include_hidden=0):
 	)
 
 	total = cash = non_cash = today_in = today_out = 0.0
+	pos_tills = []
+	bank_wallets = []
+	safes = []
+
 	for w in wallets:
 		w["balance"] = flt(get_balance_on(w.account, company=company)) if w.account else 0.0
 		d, c = _today_movement(w.account) if w.account else (0.0, 0.0)
 		w["today_in"], w["today_out"] = d, c
-		if w.enabled:
+
+		if w.get("enabled", 1):
 			total += w["balance"]
 			today_in += d
 			today_out += c
-			if w.wallet_type in ("Till", "Safe"):
-				cash += w["balance"]
-			else:
-				non_cash += w["balance"]
+
+		wtype = (w.get("wallet_type") or "").strip()
+		if wtype == "Till":
+			cash += w["balance"]
+			pos_tills.append(w)
+		elif wtype == "Safe":
+			cash += w["balance"]
+			safes.append(w)
+		else:
+			non_cash += w["balance"]
+			bank_wallets.append(w)
 
 	return {
 		"company": company,
 		"currency": currency,
 		"wallets": wallets,
+		"pos_tills": pos_tills,
+		"bank_wallets": bank_wallets,
+		"safes": safes,
 		"totals": {
 			"total": total,
 			"cash": cash,
 			"non_cash": non_cash,
 			"today_in": today_in,
 			"today_out": today_out,
+			"net_today": today_in - today_out,
 		},
 	}
 
@@ -150,15 +163,55 @@ def _create_mode_of_payment(wallet_name, mop_type, account, company):
 	return mop.name
 
 
-def _add_to_pos_profiles(mop, company):
-	"""Expose a Mode of Payment in every active POS Profile so POS Awesome shows it."""
+def sync_pos_profiles(company):
+	"""Ensure POS Profiles contain ONLY active Money Wallets with accept_in_pos=1."""
+	wallets = frappe.db.get_all(
+		"Money Wallet",
+		filters={"company": company, "enabled": 1, "accept_in_pos": 1},
+		fields=["name", "wallet_name", "wallet_type", "account", "mode_of_payment"],
+		order_by="sort_order asc, creation asc",
+	)
+	allowed_mops = [w.mode_of_payment for w in wallets if w.mode_of_payment]
+
+	# Always ensure at least default Cash MOP exists
+	if not any(w.wallet_type == "Till" for w in wallets):
+		default_cash_mop = frappe.db.get_value("Mode of Payment", {"type": "Cash", "enabled": 1}, "name") or "Cash"
+		if default_cash_mop not in allowed_mops:
+			allowed_mops.insert(0, default_cash_mop)
+
 	for prof in frappe.db.get_all("POS Profile", filters={"company": company, "disabled": 0}, pluck="name"):
 		doc = frappe.get_doc("POS Profile", prof)
-		if any(p.mode_of_payment == mop for p in doc.payments):
+		existing_mops = [p.mode_of_payment for p in doc.payments]
+
+		filtered_payments = [p for p in doc.payments if p.mode_of_payment in allowed_mops]
+		new_mops = [mop for mop in allowed_mops if mop not in existing_mops]
+
+		# If nothing changed, do not re-save POS Profile (prevents flushing site Redis cache and triggering payment refresh warnings)
+		if len(filtered_payments) == len(existing_mops) and not new_mops:
 			continue
-		doc.append("payments", {"mode_of_payment": mop, "default": 0})
+
+		doc.payments = filtered_payments
+		for mop in new_mops:
+			doc.append("payments", {"mode_of_payment": mop, "default": 0})
+
+		# Ensure one default
+		if doc.payments and not any(p.default for p in doc.payments):
+			doc.payments[0].default = 1
+
 		doc.flags.ignore_permissions = True
 		doc.save()
+
+
+@frappe.whitelist(allow_guest=True)
+def get_pos_wallets(company=None):
+	"""Returns active Money Wallets configured for POS."""
+	company = company or get_default_company()
+	return frappe.db.get_all(
+		"Money Wallet",
+		filters={"company": company, "enabled": 1, "accept_in_pos": 1},
+		fields=["name", "wallet_name", "wallet_type", "account", "mode_of_payment", "icon", "color"],
+		order_by="sort_order asc, creation asc",
+	)
 
 
 def _post_opening_balance(wallet_account, amount, company, wallet_name):
@@ -215,7 +268,6 @@ def create_wallet(wallet_name, wallet_type, opening_balance=0, accept_in_pos=0, 
 	mop = None
 	if accept_in_pos:
 		mop = _create_mode_of_payment(wallet_name, cfg["mop_type"], account_doc.name, company)
-		_add_to_pos_profiles(mop, company)
 
 	if opening_balance > 0:
 		_post_opening_balance(account_doc.name, opening_balance, company, wallet_name)
@@ -237,27 +289,37 @@ def create_wallet(wallet_name, wallet_type, opening_balance=0, accept_in_pos=0, 
 	})
 	wallet.flags.ignore_permissions = True
 	wallet.insert()
+	
+	sync_pos_profiles(company)
 	frappe.db.commit()
 	return get_money_hub_data(company)
 
 
 @frappe.whitelist()
-def update_wallet(name, wallet_name=None, commission_percent=None, enabled=None, company=None):
-	"""Rename, change commission, or hide/show a wallet."""
+def update_wallet(name, wallet_name=None, commission_percent=None, enabled=None, accept_in_pos=None, company=None):
+	"""Rename, change commission, toggle POS acceptance, or hide/show a wallet."""
 	_check_permission()
 	doc = frappe.get_doc("Money Wallet", name)
 	doc.flags.ignore_permissions = True
+	company = company or doc.company
 	if commission_percent is not None:
 		doc.commission_percent = flt(commission_percent)
 	if enabled is not None:
 		doc.enabled = int(enabled)
+	if accept_in_pos is not None:
+		doc.accept_in_pos = int(accept_in_pos)
+		if doc.accept_in_pos and not doc.mode_of_payment and doc.account:
+			cfg = WALLET_TYPES.get(doc.wallet_type, {"mop_type": "Bank"})
+			doc.mode_of_payment = _create_mode_of_payment(doc.wallet_name, cfg["mop_type"], doc.account, company)
 	doc.save()
 	new_name = (wallet_name or "").strip()
 	if new_name and new_name != doc.name:
 		frappe.rename_doc("Money Wallet", doc.name, new_name)
 		frappe.db.set_value("Money Wallet", new_name, "wallet_name", new_name)
+	
+	sync_pos_profiles(company)
 	frappe.db.commit()
-	return get_money_hub_data(company or doc.company, include_hidden=0)
+	return get_money_hub_data(company, include_hidden=0)
 
 
 # ---------------------------------------------------------------------------
@@ -313,24 +375,31 @@ def transfer_money(from_wallet, to_wallet, amount, kind="Обычный пере
 
 
 def _feed_period(period):
-	from frappe.utils import add_days, get_first_day, get_last_day, getdate
+	from frappe.utils import add_days, get_first_day, get_last_day, getdate, add_months
 
 	t = getdate(today())
 	if period == "today":
 		return t, t
+	if period == "yesterday":
+		y = add_days(t, -1)
+		return y, y
 	if period == "week":
 		return add_days(t, -7), t
 	if period == "month":
 		return get_first_day(t), get_last_day(t)
+	if period == "quarter":
+		qm = ((t.month - 1) // 3) * 3 + 1
+		first = getdate(f"{t.year}-{qm:02d}-01")
+		return first, get_last_day(add_months(first, 2))
 	return None, None
 
 
 @frappe.whitelist()
-def get_money_feed(wallet=None, period="week", search=None, limit=100, company=None):
-	"""Chronological stream of every money movement through wallets with human labels."""
+def get_money_feed(wallet=None, period="week", from_date=None, to_date=None, op_type=None, direction=None, search=None, limit=500, company=None):
+	"""Chronological stream of money movements with rich categorization and party metadata."""
 	company = company or get_default_company()
-	wallets = frappe.db.get_all("Money Wallet", filters={"company": company}, fields=["name", "wallet_name", "account"])
-	acc_map = {w.account: w.wallet_name for w in wallets if w.account}
+	wallets = frappe.db.get_all("Money Wallet", filters={"company": company}, fields=["name", "wallet_name", "account", "wallet_type", "icon", "color"])
+	acc_map = {w.account: w for w in wallets if w.account}
 	if wallet:
 		wacc = frappe.db.get_value("Money Wallet", wallet, "account")
 		accounts = [wacc] if wacc else []
@@ -340,13 +409,24 @@ def get_money_feed(wallet=None, period="week", search=None, limit=100, company=N
 		return []
 
 	conds, vals = ["account IN %(accounts)s", "is_cancelled = 0"], {"accounts": accounts}
-	start, end = _feed_period(period)
-	if start:
-		conds.append("posting_date BETWEEN %(start)s AND %(end)s")
-		vals.update({"start": start, "end": end})
+
+	if from_date and to_date:
+		conds.append("posting_date BETWEEN %(from_date)s AND %(to_date)s")
+		vals.update({"from_date": from_date, "to_date": to_date})
+	elif from_date:
+		conds.append("posting_date >= %(from_date)s")
+		vals["from_date"] = from_date
+	elif to_date:
+		conds.append("posting_date <= %(to_date)s")
+		vals["to_date"] = to_date
+	elif period and period != "all":
+		start, end = _feed_period(period)
+		if start:
+			conds.append("posting_date BETWEEN %(start)s AND %(end)s")
+			vals.update({"start": start, "end": end})
 
 	rows = frappe.db.sql(
-		f"""SELECT name, posting_date, creation, account, debit, credit, voucher_type, voucher_no, owner
+		f"""SELECT name, posting_date, creation, account, debit, credit, voucher_type, voucher_no, owner, remarks, against
 		FROM `tabGL Entry` WHERE {' AND '.join(conds)}
 		ORDER BY posting_date DESC, creation DESC LIMIT {int(limit)}""",
 		vals,
@@ -357,14 +437,33 @@ def get_money_feed(wallet=None, period="week", search=None, limit=100, company=N
 
 	pe_names = [r.voucher_no for r in rows if r.voucher_type == "Payment Entry"]
 	je_names = [r.voucher_no for r in rows if r.voucher_type == "Journal Entry"]
+	si_names = [r.voucher_no for r in rows if r.voucher_type == "Sales Invoice"]
+	pos_names = [r.voucher_no for r in rows if r.voucher_type == "POS Invoice"]
+	pi_names = [r.voucher_no for r in rows if r.voucher_type == "Purchase Invoice"]
+
 	pe_info = {}
 	if pe_names:
-		for p in frappe.db.get_all("Payment Entry", filters={"name": ["in", pe_names]}, fields=["name", "payment_type", "party", "remarks"]):
+		for p in frappe.db.get_all("Payment Entry", filters={"name": ["in", pe_names]}, fields=["name", "payment_type", "party_type", "party", "party_name", "remarks"]):
 			pe_info[p.name] = p
+
 	je_info = {}
 	if je_names:
 		for j in frappe.db.get_all("Journal Entry", filters={"name": ["in", je_names]}, fields=["name", "voucher_type", "user_remark"]):
 			je_info[j.name] = j
+
+	cust_info = {}
+	if si_names:
+		for s in frappe.db.get_all("Sales Invoice", filters={"name": ["in", si_names]}, fields=["name", "customer", "customer_name"]):
+			cust_info[s.name] = s.customer_name or s.customer
+	if pos_names:
+		for p in frappe.db.get_all("POS Invoice", filters={"name": ["in", pos_names]}, fields=["name", "customer", "customer_name"]):
+			cust_info[p.name] = p.customer_name or p.customer
+
+	supp_info = {}
+	if pi_names:
+		for p in frappe.db.get_all("Purchase Invoice", filters={"name": ["in", pi_names]}, fields=["name", "supplier", "supplier_name"]):
+			supp_info[p.name] = p.supplier_name or p.supplier
+
 	exp_by_voucher = {}
 	if pe_names or je_names:
 		for e in frappe.db.sql(
@@ -377,53 +476,205 @@ def get_money_feed(wallet=None, period="week", search=None, limit=100, company=N
 
 	feed = []
 	for r in rows:
-		label, icon = _feed_label(r, pe_info, je_info, exp_by_voucher)
-		amount = flt(r.debit) - flt(r.credit)
+		label, icon, op_cat, party, detail_notes = _feed_classify(r, pe_info, je_info, cust_info, supp_info, exp_by_voucher)
+		debit = flt(r.debit)
+		credit = flt(r.credit)
+		amount = debit - credit
+		w = acc_map.get(r.account)
+
 		feed.append({
+			"gl_name": r.name,
 			"date": frappe.utils.formatdate(r.posting_date, "dd.mm.yyyy"),
+			"raw_date": str(r.posting_date),
 			"time": r.creation.strftime("%H:%M") if r.creation else "",
-			"wallet": acc_map.get(r.account),
+			"wallet": w.wallet_name if w else r.account,
+			"wallet_icon": w.icon if w else "💰",
+			"wallet_color": w.color if w else "#4a5568",
 			"label": label,
 			"icon": icon,
+			"op_type": op_cat,
+			"party": party,
+			"notes": detail_notes or r.remarks or "",
+			"debit": debit,
+			"credit": credit,
 			"amount": amount,
 			"voucher_type": r.voucher_type,
 			"voucher_no": r.voucher_no,
 			"user": frappe.utils.get_fullname(r.owner),
 		})
+
+	# Python filtering
+	if op_type and op_type != "all":
+		feed = [f for f in feed if f["op_type"] == op_type]
+
+	if direction == "in":
+		feed = [f for f in feed if f["debit"] > 0]
+	elif direction == "out":
+		feed = [f for f in feed if f["credit"] > 0]
+
 	if search and search.strip():
 		s = search.strip().lower()
-		feed = [f for f in feed if s in f["label"].lower() or s in (f["wallet"] or "").lower() or s in f["voucher_no"].lower()]
+		feed = [
+			f for f in feed
+			if s in f["label"].lower()
+			or s in (f["wallet"] or "").lower()
+			or s in f["voucher_no"].lower()
+			or s in (f["party"] or "").lower()
+			or s in (f["notes"] or "").lower()
+			or s in f["user"].lower()
+		]
+
 	return feed
 
 
-def _feed_label(r, pe_info, je_info, exp_by_voucher):
+def _feed_classify(r, pe_info, je_info, cust_info, supp_info, exp_by_voucher):
 	vt = r.voucher_type
+	vno = r.voucher_no
+
 	if vt in ("Sales Invoice", "POS Invoice"):
-		return ("Возврат" if flt(r.credit) > flt(r.debit) else "Продажа"), "🛒"
+		party = cust_info.get(vno) or "Покупатель"
+		if flt(r.credit) > flt(r.debit):
+			return "Возврат товара", "↩️", "sales", party, "Возврат средств клиенту"
+		return "Продажа (Розница)", "🛒", "sales", party, "Оплата за покупку"
+
 	if vt == "Purchase Invoice":
-		return "Закупка", "📦"
+		party = supp_info.get(vno) or "Поставщик"
+		return "Закупка товара", "📦", "supplier", party, "Поступление товара / Накладная"
+
 	if vt == "Payment Entry":
-		if r.voucher_no in exp_by_voucher:
-			return f"Расход: {exp_by_voucher[r.voucher_no]}", "💸"
-		pe = pe_info.get(r.voucher_no)
+		if vno in exp_by_voucher:
+			cat = exp_by_voucher[vno]
+			return f"Расход: {cat}", "💸", "expense", cat, "Операционный расход"
+		pe = pe_info.get(vno)
 		if pe:
+			party = pe.party_name or pe.party or ""
 			if pe.payment_type == "Internal Transfer":
-				return (pe.remarks or "Перевод").split(" Amount")[0], "🔄"
+				rem = (pe.remarks or "Перевод").split(" Amount")[0]
+				return rem, "🔄", "transfer", "", pe.remarks or "Внутренний перевод"
 			if pe.payment_type == "Receive":
-				return f"Оплата от клиента{': ' + pe.party if pe.party else ''}", "⬇️"
-			return f"Оплата поставщику{': ' + pe.party if pe.party else ''}", "⬆️"
-		return "Платёж", "💳"
+				return f"Оплата от клиента: {party}" if party else "Оплата от клиента", "⬇️", "sales", party, pe.remarks or ""
+			if pe.payment_type == "Pay":
+				return f"Оплата поставщику: {party}" if party else "Оплата поставщику", "⬆️", "supplier", party, pe.remarks or ""
+		return "Платёж", "💳", "other", "", r.remarks or ""
+
 	if vt == "Journal Entry":
-		if r.voucher_no in exp_by_voucher:
-			return f"Расход: {exp_by_voucher[r.voucher_no]}", "💸"
-		je = je_info.get(r.voucher_no)
-		remark = (je.user_remark if je else "") or ""
-		if remark.startswith("MONEYHUB_TAX"):
-			return "Налог", "🏛️"
+		if vno in exp_by_voucher:
+			cat = exp_by_voucher[vno]
+			return f"Расход: {cat}", "💸", "expense", cat, "Операционный расход"
+		je = je_info.get(vno)
+		remark = (je.user_remark if je else "") or (r.remarks or "")
+		if remark.startswith("MONEYHUB_TAX") or "налог" in remark.lower() or "tax" in remark.lower():
+			return "Оплата налога", "🏛️", "tax", "Налоговая служба", remark
 		if je and je.voucher_type == "Opening Entry":
-			return "Начальный остаток", "🏁"
-		return "Корректировка", "✏️"
-	return vt, "•"
+			return "Начальный остаток", "🏁", "other", "", "Ввод начального сальдо"
+		return "Корректировка / Проводка", "✏️", "other", "", remark
+
+	return vt, "•", "other", "", r.remarks or ""
+
+
+@frappe.whitelist()
+def get_transaction_details(voucher_type, voucher_no, company=None):
+	"""Returns comprehensive structured details for Option A Modal."""
+	company = company or get_default_company()
+	if not voucher_type or not voucher_no:
+		frappe.throw(_("Missing voucher parameters"))
+
+	if not frappe.db.exists(voucher_type, voucher_no):
+		frappe.throw(_("Document {0} {1} not found").format(voucher_type, voucher_no))
+
+	doc = frappe.get_doc(voucher_type, voucher_no)
+	currency = frappe.db.get_value("Company", company, "default_currency") or "TJS"
+
+	out = {
+		"voucher_type": voucher_type,
+		"voucher_no": voucher_no,
+		"docstatus": doc.docstatus,
+		"status": getattr(doc, "status", "Submitted" if doc.docstatus == 1 else "Draft"),
+		"posting_date": frappe.utils.formatdate(getattr(doc, "posting_date", today()), "dd.mm.yyyy"),
+		"posting_time": str(getattr(doc, "posting_time", ""))[:5],
+		"owner": frappe.utils.get_fullname(doc.owner),
+		"currency": currency,
+		"items": [],
+		"payments": [],
+		"references": [],
+		"accounts": [],
+		"remarks": getattr(doc, "remarks", "") or getattr(doc, "user_remark", "") or "",
+	}
+
+	if voucher_type in ("Sales Invoice", "POS Invoice"):
+		out["party_type"] = "Customer"
+		out["party"] = getattr(doc, "customer", "")
+		out["party_name"] = getattr(doc, "customer_name", doc.customer or "")
+		out["grand_total"] = flt(getattr(doc, "grand_total", 0))
+		out["net_total"] = flt(getattr(doc, "net_total", 0))
+		out["discount_amount"] = flt(getattr(doc, "discount_amount", 0))
+		out["is_return"] = getattr(doc, "is_return", 0)
+
+		for item in getattr(doc, "items", []):
+			out["items"].append({
+				"item_code": item.item_code,
+				"item_name": item.item_name,
+				"qty": flt(item.qty),
+				"rate": flt(item.rate),
+				"amount": flt(item.amount),
+				"uom": getattr(item, "uom", "шт"),
+			})
+
+		for p in getattr(doc, "payments", []):
+			if flt(p.amount) > 0:
+				out["payments"].append({
+					"mode_of_payment": p.mode_of_payment,
+					"amount": flt(p.amount),
+				})
+
+	elif voucher_type == "Purchase Invoice":
+		out["party_type"] = "Supplier"
+		out["party"] = getattr(doc, "supplier", "")
+		out["party_name"] = getattr(doc, "supplier_name", doc.supplier or "")
+		out["grand_total"] = flt(getattr(doc, "grand_total", 0))
+		out["net_total"] = flt(getattr(doc, "net_total", 0))
+
+		for item in getattr(doc, "items", []):
+			out["items"].append({
+				"item_code": item.item_code,
+				"item_name": item.item_name,
+				"qty": flt(item.qty),
+				"rate": flt(item.rate),
+				"amount": flt(item.amount),
+				"uom": getattr(item, "uom", "шт"),
+			})
+
+	elif voucher_type == "Payment Entry":
+		out["payment_type"] = doc.payment_type
+		out["party_type"] = getattr(doc, "party_type", "")
+		out["party"] = getattr(doc, "party", "")
+		out["party_name"] = getattr(doc, "party_name", doc.party or "")
+		out["paid_amount"] = flt(doc.paid_amount)
+		out["received_amount"] = flt(doc.received_amount)
+		out["paid_from"] = doc.paid_from
+		out["paid_to"] = doc.paid_to
+		out["reference_no"] = getattr(doc, "reference_no", "")
+
+		for ref in getattr(doc, "references", []):
+			out["references"].append({
+				"reference_doctype": ref.reference_doctype,
+				"reference_name": ref.reference_name,
+				"total_amount": flt(ref.total_amount),
+				"allocated_amount": flt(ref.allocated_amount),
+			})
+
+	elif voucher_type == "Journal Entry":
+		out["total_debit"] = flt(getattr(doc, "total_debit", 0))
+		out["voucher_type_name"] = getattr(doc, "voucher_type", "Journal Entry")
+
+		for acc in getattr(doc, "accounts", []):
+			out["accounts"].append({
+				"account": acc.account,
+				"debit": flt(getattr(acc, "debit_in_account_currency", getattr(acc, "debit", 0))),
+				"credit": flt(getattr(acc, "credit_in_account_currency", getattr(acc, "credit", 0))),
+			})
+
+	return out
 
 
 # ----- Taxes ---------------------------------------------------------------

@@ -1,170 +1,670 @@
-/* Money Hub - wallets & balances */
+/* Money Hub - Professional Multi-Tab Treasury & Cash Flow Cockpit */
 
 .mh-layout {
-	padding: 0 0 32px 0;
+	padding: 0 0 40px 0;
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-	color: var(--text-color, #1f272e);
+	color: var(--text-color, #1e293b);
 }
 
+/* --- Modern Tab Navigation Bar --- */
+.mh-tabs-bar {
+	display: flex;
+	gap: 10px;
+	border-bottom: 2px solid var(--border-color, #e2e8f0);
+	margin-bottom: 24px;
+	padding-bottom: 0;
+}
+
+.mh-tab-item {
+	padding: 10px 20px;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-muted, #64748b);
+	cursor: pointer;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -2px;
+	transition: color 0.15s ease, border-color 0.15s ease;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	user-select: none;
+}
+
+.mh-tab-item:hover {
+	color: var(--text-color, #0f172a);
+}
+
+.mh-tab-item.active {
+	color: var(--primary-color, #2563eb);
+	border-bottom-color: var(--primary-color, #2563eb);
+}
+
+.mh-tab-badge {
+	background: #f1f5f9;
+	color: #475569;
+	font-size: 11px;
+	font-weight: 700;
+	padding: 1px 7px;
+	border-radius: 10px;
+}
+
+.mh-tab-item.active .mh-tab-badge {
+	background: var(--primary-color, #2563eb);
+	color: #ffffff;
+}
+
+/* --- Top KPI Strip (Hero Cockpit) --- */
 .mh-kpi-strip {
 	display: grid;
-	grid-template-columns: 1.4fr repeat(4, 1fr);
-	gap: 14px;
+	grid-template-columns: 1.4fr repeat(5, 1fr);
+	gap: 12px;
 	margin-bottom: 24px;
 }
 
-@media (max-width: 1000px) {
-	.mh-kpi-strip { grid-template-columns: 1fr 1fr; }
-	.mh-kpi-main { grid-column: 1 / -1; }
+@media (max-width: 1200px) {
+	.mh-kpi-strip {
+		grid-template-columns: repeat(3, 1fr);
+	}
+	.mh-kpi-main {
+		grid-column: 1 / -1;
+	}
+}
+
+@media (max-width: 768px) {
+	.mh-kpi-strip {
+		grid-template-columns: 1fr 1fr;
+	}
+	.mh-kpi-main {
+		grid-column: 1 / -1;
+	}
 }
 
 .mh-kpi {
-	background: var(--fg-color, #fff);
+	background: var(--fg-color, #ffffff);
 	border: 1px solid var(--border-color, #e2e8f0);
-	border-radius: 14px;
-	padding: 16px 18px;
+	border-radius: 12px;
+	padding: 14px 16px;
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
 }
 
 .mh-kpi-label {
 	font-size: 11px;
 	font-weight: 600;
-	letter-spacing: 0.5px;
+	letter-spacing: 0.03em;
 	text-transform: uppercase;
-	color: var(--text-muted, #718096);
+	color: var(--text-muted, #64748b);
 	margin-bottom: 6px;
 }
 
-.mh-kpi-value { font-size: 20px; font-weight: 700; }
-.mh-kpi-value small { font-size: 12px; font-weight: 600; color: var(--text-muted, #718096); }
+.mh-kpi-value {
+	font-size: 21px;
+	font-weight: 700;
+	color: var(--text-color, #0f172a);
+}
+
+.mh-kpi-value small {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-muted, #64748b);
+}
+
+.mh-kpi-sub {
+	font-size: 11px;
+	color: var(--text-muted, #94a3b8);
+	margin-top: 4px;
+}
 
 .mh-kpi-main {
-	background: linear-gradient(135deg, #2b6cb0, #553c9a);
+	background: linear-gradient(135deg, #1e293b, #0f172a);
 	border: none;
-	color: #fff;
+	color: #ffffff;
 }
-.mh-kpi-main .mh-kpi-label, .mh-kpi-main .mh-kpi-value small { color: rgba(255, 255, 255, 0.8); }
-.mh-kpi-main .mh-kpi-value { font-size: 28px; }
-.mh-kpi-in .mh-kpi-value { color: #2f855a; }
-.mh-kpi-out .mh-kpi-value { color: #c53030; }
 
-.mh-section-title {
+.mh-kpi-main .mh-kpi-label,
+.mh-kpi-main .mh-kpi-sub,
+.mh-kpi-main .mh-kpi-value small {
+	color: rgba(255, 255, 255, 0.7);
+}
+
+.mh-kpi-main .mh-kpi-value {
+	color: #ffffff;
+	font-size: 26px;
+}
+
+.mh-kpi-in .mh-kpi-value {
+	color: #16a34a;
+}
+
+.mh-kpi-out .mh-kpi-value {
+	color: #dc2626;
+}
+
+/* --- Account Groups (Categorized Wallets) --- */
+.mh-groups-wrap {
+	display: flex;
+	flex-direction: column;
+	gap: 22px;
+	margin-bottom: 30px;
+}
+
+.mh-group-box {
+	background: var(--fg-color, #ffffff);
+	border: 1px solid var(--border-color, #e2e8f0);
+	border-radius: 12px;
+	padding: 16px 18px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.mh-group-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 14px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid var(--border-color, #f1f5f9);
+}
+
+.mh-group-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.mh-group-icon {
+	font-size: 18px;
+}
+
+.mh-group-name {
 	font-size: 15px;
 	font-weight: 700;
-	margin-bottom: 12px;
+	color: var(--text-color, #1e293b);
+}
+
+.mh-group-count {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-muted, #64748b);
+}
+
+.mh-group-subtotal {
+	font-size: 14px;
+	color: var(--text-color, #0f172a);
+}
+
+.mh-group-subtotal strong {
+	font-size: 16px;
+	color: var(--text-color, #0f172a);
 }
 
 .mh-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-	gap: 16px;
+	grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+	gap: 14px;
 }
 
+/* --- Account Wallet Card --- */
 .mh-card {
 	position: relative;
-	background: var(--fg-color, #fff);
+	background: var(--fg-color, #ffffff);
 	border: 1px solid var(--border-color, #e2e8f0);
-	border-top: 4px solid var(--mh-accent, #4a5568);
-	border-radius: 14px;
-	padding: 16px 18px;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-	transition: transform 0.15s ease, box-shadow 0.15s ease;
+	border-left: 4px solid var(--mh-accent, #4a5568);
+	border-radius: 10px;
+	padding: 14px 16px;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+	transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
 }
 
 .mh-card:hover {
 	transform: translateY(-2px);
-	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+	border-color: #cbd5e1;
 }
 
-.mh-card-top { display: flex; justify-content: space-between; align-items: center; }
-.mh-card-icon { font-size: 26px; }
+.mh-card-active {
+	border-color: var(--primary-color, #2563eb) !important;
+	box-shadow: 0 0 0 2px var(--primary-color, #2563eb), 0 4px 12px rgba(37, 99, 235, 0.12) !important;
+}
+
+.mh-card-top {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 6px;
+}
+
+.mh-card-icon-wrap {
+	width: 36px;
+	height: 36px;
+	border-radius: 8px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 18px;
+}
+
+.mh-card-top-right {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.mh-badge {
+	font-size: 10.5px;
+	font-weight: 600;
+	padding: 2px 6px;
+	border-radius: 4px;
+}
+
+.mh-badge-pos {
+	background: #ecfdf5;
+	color: #059669;
+	border: 1px solid #a7f3d0;
+}
+
+.mh-badge-fee {
+	background: #fffbeb;
+	color: #d97706;
+	border: 1px solid #fde68a;
+}
 
 .mh-menu-btn {
 	border: none;
 	background: transparent;
-	font-size: 20px;
+	font-size: 18px;
 	line-height: 1;
 	cursor: pointer;
-	color: var(--text-muted, #718096);
-	padding: 2px 8px;
+	color: var(--text-muted, #94a3b8);
+	padding: 2px 6px;
+	border-radius: 4px;
+}
+
+.mh-menu-btn:hover {
+	background: #f1f5f9;
+	color: #334155;
+}
+
+.mh-card-name {
+	font-size: 14.5px;
+	font-weight: 700;
+	color: var(--text-color, #1e293b);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	margin-bottom: 4px;
+}
+
+.mh-card-balance {
+	font-size: 22px;
+	font-weight: 800;
+	color: var(--text-color, #0f172a);
+	margin-bottom: 8px;
+}
+
+.mh-card-balance small {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-muted, #64748b);
+}
+
+.mh-card-flow {
+	display: flex;
+	gap: 12px;
+	font-size: 11.5px;
+	font-weight: 600;
+	margin-bottom: 12px;
+}
+
+.mh-in {
+	color: #16a34a;
+}
+
+.mh-out {
+	color: #dc2626;
+}
+
+.mh-card-actions {
+	display: flex;
+	gap: 6px;
+	border-top: 1px solid var(--border-color, #f1f5f9);
+	padding-top: 10px;
+}
+
+.mh-card-actions .btn {
+	flex: 1;
+	font-size: 11.5px;
+	font-weight: 600;
+	padding: 4px 8px;
 	border-radius: 6px;
 }
-.mh-menu-btn:hover { background: var(--control-bg, #edf2f7); }
 
-.mh-card-name { font-size: 16px; font-weight: 700; margin-top: 6px; }
-.mh-card-type { font-size: 12px; color: var(--text-muted, #718096); margin-top: 2px; }
-
-.mh-chip {
-	display: inline-block;
-	font-size: 10px;
-	font-weight: 600;
-	padding: 1px 7px;
-	border-radius: 20px;
-	background: #e6fffa;
-	color: #2c7a7b;
-	margin-left: 4px;
-}
-.mh-chip-fee { background: #fffaf0; color: #b7791f; }
-
-.mh-card-balance { font-size: 24px; font-weight: 800; margin: 12px 0 8px; }
-.mh-card-balance small { font-size: 12px; font-weight: 600; color: var(--text-muted, #718096); }
-
-.mh-card-flow { display: flex; gap: 14px; font-size: 12px; font-weight: 600; }
-.mh-in { color: #2f855a; }
-.mh-out { color: #c53030; }
-
+/* Add Wallet Card */
 .mh-card-add {
-	display: flex;
-	flex-direction: column;
+	min-height: 155px;
+	border: 2px dashed var(--border-color, #cbd5e1);
+	border-left: 2px dashed var(--border-color, #cbd5e1);
+	background: transparent;
+	color: var(--text-muted, #64748b);
 	align-items: center;
 	justify-content: center;
+	cursor: pointer;
+	text-align: center;
 	gap: 6px;
-	min-height: 150px;
-	border: 2px dashed var(--border-color, #cbd5e0);
-	border-top: 2px dashed var(--border-color, #cbd5e0);
-	background: transparent;
-	color: var(--text-muted, #718096);
+}
+
+.mh-card-add:hover {
+	border-color: var(--primary-color, #2563eb);
+	color: var(--primary-color, #2563eb);
+	background: #f8fafc;
+}
+
+.mh-add-plus {
+	font-size: 24px;
+}
+
+.mh-add-text {
+	font-size: 13px;
 	font-weight: 600;
+}
+
+/* --- TAB 2: Native Frappe Filter Panel --- */
+.mh-frappe-filter-panel {
+	background: var(--fg-color, #ffffff);
+	border: 1px solid var(--border-color, #e2e8f0);
+	border-radius: 10px;
+	padding: 14px 18px;
+	margin-bottom: 16px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.mh-filter-row-top {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 14px;
+	flex-wrap: wrap;
+	margin-bottom: 12px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--border-color, #f1f5f9);
+}
+
+.mh-search-wrapper {
+	position: relative;
+	flex: 1 1 300px;
+	display: flex;
+	align-items: center;
+}
+
+.mh-search-wrapper .mh-search-icon {
+	position: absolute;
+	left: 10px;
+	font-size: 14px;
+	color: var(--text-muted, #94a3b8);
+	pointer-events: none;
+}
+
+.mh-search-input {
+	padding-left: 32px;
+	padding-right: 28px;
+	background: #f8fafc;
+	border: 1px solid var(--border-color, #e2e8f0);
+	border-radius: 6px;
+	font-size: 13px;
+	height: 34px;
+	width: 100%;
+}
+
+.mh-search-input:focus {
+	background: #ffffff;
+	border-color: var(--primary-color, #2563eb);
+	box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.mh-clear-search-btn {
+	position: absolute;
+	right: 10px;
+	font-size: 12px;
+	color: var(--text-muted, #94a3b8);
 	cursor: pointer;
 }
-.mh-card-add:hover { border-color: #3182ce; color: #3182ce; }
-.mh-add-plus { font-size: 24px; }
 
-/* --- Step 2: taxes, feed --- */
-.mh-section-title { margin-top: 28px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.mh-layout > .mh-section-title:first-of-type { margin-top: 0; }
-.mh-section-sub { font-size: 12px; font-weight: 500; color: var(--text-muted, #718096); }
-.mh-card-active { box-shadow: 0 0 0 2px var(--mh-accent, #3182ce); }
-
-.mh-panel {
-	background: var(--fg-color, #fff);
-	border: 1px solid var(--border-color, #e2e8f0);
-	border-radius: 14px;
-	padding: 18px 20px;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+.mh-date-presets {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	flex-wrap: wrap;
 }
 
-.mh-tax-row { display: flex; gap: 36px; align-items: center; flex-wrap: wrap; }
-.mh-tax-val { font-size: 22px; font-weight: 800; }
-.mh-tax-actions { margin-left: auto; display: flex; gap: 8px; }
-.mh-tax-detail { margin-top: 10px; font-size: 12px; color: var(--text-muted, #718096); }
+.mh-preset-btn {
+	border: 1px solid var(--border-color, #e2e8f0);
+	background: #f8fafc;
+	color: var(--text-muted, #64748b);
+	font-size: 12px;
+	font-weight: 600;
+	padding: 4px 10px;
+	border-radius: 6px;
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
 
-.mh-gauge-wrap { margin-top: 16px; }
-.mh-gauge-label { font-size: 12px; margin-bottom: 6px; }
-.mh-gauge { height: 10px; border-radius: 6px; background: var(--control-bg, #edf2f7); overflow: hidden; }
-.mh-gauge-bar { height: 100%; background: linear-gradient(90deg, #38a169, #68d391); border-radius: 6px; transition: width 0.4s ease; }
-.mh-gauge-orange { background: linear-gradient(90deg, #dd6b20, #f6ad55); }
-.mh-gauge-red { background: linear-gradient(90deg, #c53030, #fc8181); }
-.mh-warn { margin-top: 8px; font-size: 12px; font-weight: 600; color: #c05621; }
+.mh-preset-btn:hover {
+	background: #f1f5f9;
+	color: var(--text-color, #0f172a);
+	border-color: #cbd5e1;
+}
 
-.mh-period-select { margin-left: auto; font-size: 12px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; padding: 3px 8px; background: var(--fg-color, #fff); }
+.mh-preset-btn.active {
+	background: var(--primary-color, #2563eb);
+	color: #ffffff;
+	border-color: var(--primary-color, #2563eb);
+}
 
-.mh-feed { padding: 4px 20px; }
-.mh-feed-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border-color, #edf2f7); }
-.mh-feed-row:last-child { border-bottom: none; }
-.mh-feed-icon { font-size: 20px; width: 32px; text-align: center; }
-.mh-feed-main { flex: 1; min-width: 0; }
-.mh-feed-label { font-weight: 600; color: var(--text-color, #1a202c); }
-.mh-feed-meta { font-size: 11px; color: var(--text-muted, #718096); margin-top: 2px; }
-.mh-feed-amount { font-weight: 700; white-space: nowrap; }
-.mh-empty { padding: 24px; text-align: center; color: var(--text-muted, #718096); }
+.mh-btn-reset-filters {
+	font-size: 11.5px;
+	font-weight: 600;
+	border-radius: 6px;
+	padding: 4px 8px;
+}
+
+/* Filter Row 2: Structured Fields Grid */
+.mh-filter-row-fields {
+	display: grid;
+	grid-template-columns: 1.2fr 1.2fr 1fr 1fr 1fr;
+	gap: 12px;
+}
+
+@media (max-width: 1100px) {
+	.mh-filter-row-fields {
+		grid-template-columns: 1fr 1fr 1fr;
+	}
+}
+
+@media (max-width: 768px) {
+	.mh-filter-row-fields {
+		grid-template-columns: 1fr 1fr;
+	}
+}
+
+.mh-filter-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.mh-field-label {
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--text-muted, #64748b);
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	margin-bottom: 0;
+}
+
+.mh-frappe-control {
+	background: #f8fafc;
+	border: 1px solid var(--border-color, #e2e8f0);
+	border-radius: 6px;
+	font-size: 12.5px;
+	font-weight: 500;
+	color: var(--text-color, #1e293b);
+	padding: 4px 8px;
+	height: 34px;
+	width: 100%;
+}
+
+.mh-frappe-control:focus {
+	background: #ffffff;
+	border-color: var(--primary-color, #2563eb);
+	box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+/* --- Retail Table Container & Table --- */
+.retail-table-container {
+	background: var(--fg-color, #ffffff);
+	border: 1px solid var(--border-color, #e2e8f0);
+	border-radius: 10px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+	overflow: hidden;
+}
+
+.retail-table-wrapper {
+	margin-bottom: 0;
+	overflow-x: auto;
+}
+
+.retail-catalog-table {
+	margin-bottom: 0;
+	border: none;
+	width: 100%;
+}
+
+.retail-catalog-table thead th {
+	background-color: #f8fafc;
+	color: var(--text-muted, #64748b);
+	font-size: 11.5px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	padding: 10px 12px;
+	border-top: none;
+	border-bottom: 1px solid var(--border-color, #e2e8f0);
+	white-space: nowrap;
+	vertical-align: middle;
+}
+
+.retail-catalog-table tbody td {
+	padding: 10px 12px;
+	font-size: 13px;
+	color: var(--text-color, #1e293b);
+	border-top: 1px solid var(--border-color, #f1f5f9);
+	vertical-align: middle;
+	line-height: 1.35;
+}
+
+.retail-table-row {
+	cursor: pointer;
+	transition: background-color 0.15s ease;
+}
+
+.retail-table-row:hover {
+	background-color: #f8fafc !important;
+}
+
+/* Cell Elements */
+.mh-op-icon {
+	font-size: 18px;
+	width: 24px;
+	text-align: center;
+	display: inline-block;
+}
+
+.mh-wallet-pill {
+	display: inline-block;
+	font-size: 12px;
+	font-weight: 600;
+	color: #334155;
+	background: #f1f5f9;
+	padding: 2px 8px;
+	border-radius: 4px;
+	white-space: nowrap;
+}
+
+.mh-amount-in {
+	color: #16a34a;
+	font-size: 13.5px;
+}
+
+.mh-amount-out {
+	color: #dc2626;
+	font-size: 13.5px;
+}
+
+/* --- Sticky Totals Row (<tfoot>) --- */
+.retail-catalog-table tfoot {
+	position: sticky;
+	bottom: 0;
+	z-index: 5;
+}
+
+.retail-catalog-table tfoot td {
+	position: sticky;
+	bottom: 0;
+	background: #f1f5f9 !important;
+	border-top: 2px solid var(--border-color, #cbd5e1) !important;
+	padding: 11px 12px;
+	font-size: 13px;
+}
+
+/* --- Option A: Centered Modal Dialog (Transaction Receipt Slip) --- */
+.mh-receipt-slip {
+	padding: 4px 6px;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.mh-receipt-hero {
+	text-align: center;
+}
+
+.mh-receipt-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+	background: #f8fafc;
+	border: 1px solid var(--border-color, #e2e8f0);
+	border-radius: 8px;
+	padding: 12px 14px;
+	margin-bottom: 16px;
+}
+
+.mh-receipt-cell {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.mh-receipt-lbl {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	color: var(--text-muted, #64748b);
+	letter-spacing: 0.03em;
+}
+
+.mh-receipt-val {
+	font-size: 13px;
+	color: var(--text-color, #1e293b);
+}
+
+.mh-modal-section-title {
+	font-size: 12.5px;
+	font-weight: 700;
+	color: var(--text-muted, #475569);
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	margin: 14px 0 6px;
+}
