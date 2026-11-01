@@ -678,6 +678,7 @@ class ExpenseDeskApp {
 		expenses.forEach((exp) => {
 			const is_voided = exp.docstatus === 2;
 			const safe_receipt_url = exp.receipt_attachment ? encodeURI(exp.receipt_attachment) : null;
+			const employee_display = exp.employee_name || exp.beneficiary_name || (exp.party_type === "Employee" ? exp.party : null);
 
 			const card = $(`
 				<div class="stream-card ${is_voided ? 'voided' : ''} ${safe_receipt_url ? 'has-receipt' : ''}" data-name="${exp.name}">
@@ -853,6 +854,8 @@ class ExpenseDeskApp {
 		// Remove any existing overlay
 		$(".expense-receipt-popup-overlay").remove();
 
+		const emp_display = expense.employee_name || expense.beneficiary_name || (expense.party_type === "Employee" ? expense.party : null);
+
 		const popup = $(`
 			<div class="expense-receipt-popup-overlay">
 				<div class="expense-receipt-popup-card">
@@ -861,7 +864,7 @@ class ExpenseDeskApp {
 							<span class="popup-cat-icon">${expense.icon || '🏷️'}</span>
 							<span class="popup-cat-name">${expense.expense_category}</span>
 							<span class="popup-amount">-${format_currency(expense.amount, curr)}</span>
-							${expense.employee_name ? `<span class="popup-emp-tag">👤 ${frappe.utils.escape_html(expense.employee_name)}</span>` : ''}
+							${emp_display ? `<span class="popup-emp-tag">👤 ${frappe.utils.escape_html(emp_display)}</span>` : ''}
 							<span class="popup-date-tag">${expense.formatted_date} ${expense.formatted_time}</span>
 						</div>
 						<button type="button" class="popup-close-btn" title="Закрыть">✕</button>
