@@ -160,8 +160,8 @@ def get_expense_desk_init_data(company=None):
 		order_by="employee_name asc",
 	)
 
-	# 5. Fetch Today's & Recent Expenses
-	recent_expenses, summary = get_expenses_and_summary(company, period="today")
+	# 5. Fetch Today's & Recent Expenses (default to all recent expenses so feed is never empty)
+	recent_expenses, summary = get_expenses_and_summary(company, period="all")
 
 	return {
 		"company": company,
@@ -328,7 +328,7 @@ def get_expenses_and_summary(
 		start_date = None
 		end_date = None
 
-	conds = ["company = %(company)s", "docstatus < 2"]
+	conds = ["company = %(company)s", "docstatus <= 2"]
 	vals = {"company": company}
 
 	if start_date and end_date:
@@ -394,12 +394,13 @@ def get_expenses_and_summary(
 		if exp.get("party_type") == "Employee" and exp.get("party"):
 			exp["employee_name"] = employee_map.get(exp["party"]) or exp.get("beneficiary_name") or exp["party"]
 
-	# Calculate summary for this filtered period
-	total_amount = sum(e["amount"] for e in expenses)
-	total_count = len(expenses)
+	# Calculate summary for this filtered period (active submitted only)
+	active_expenses = [e for e in expenses if e.get("docstatus") == 1]
+	total_amount = sum(e["amount"] for e in active_expenses)
+	total_count = len(active_expenses)
 
 	cat_totals = {}
-	for e in expenses:
+	for e in active_expenses:
 		cat = e["expense_category"] or "Прочие"
 		cat_totals[cat] = cat_totals.get(cat, 0.0) + e["amount"]
 

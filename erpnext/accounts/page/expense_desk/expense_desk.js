@@ -52,8 +52,8 @@ class ExpenseDeskApp {
 		this.is_custom_category = false;
 		this.receipt_url = null;
 
-		// Filter state
-		this.active_period = "today";
+		// Filter state - default to 'all' so recent expenses are always visible
+		this.active_period = "all";
 		this.from_date = null;
 		this.to_date = null;
 		this.active_source_filter = "all";
@@ -628,7 +628,7 @@ class ExpenseDeskApp {
 
 	has_active_filters() {
 		return (
-			this.active_period !== "today" ||
+			this.active_period !== "all" ||
 			this.active_source_filter !== "all" ||
 			this.active_category_filter !== "all" ||
 			this.active_employee_filter !== "all" ||
@@ -801,7 +801,7 @@ class ExpenseDeskApp {
 
 		// Reset filters
 		container.find("#btn-reset-filters").on("click", () => {
-			this.active_period = "today";
+			this.active_period = "all";
 			this.from_date = null;
 			this.to_date = null;
 			this.active_source_filter = "all";
