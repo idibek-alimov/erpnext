@@ -1,4 +1,243 @@
-/* Simplified Product Detail - Standard Full-Width ERPNext Desk Look */
+/* Product detail: use Desk surfaces, typography and restrained status colors. */
+
+.product-detail-page .pd-workspace {
+	background: var(--fg-color, #fff);
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius-md, 8px);
+	padding: 24px;
+	color: var(--text-color);
+}
+.product-detail-page .pd-record-header {
+	display: flex;
+	gap: 20px;
+	align-items: center;
+	padding-bottom: 24px;
+}
+.product-detail-page .pd-workspace .pd-image-col {
+	width: 88px;
+	min-width: 88px;
+}
+.product-detail-page .pd-workspace .pd-image-box {
+	width: 88px;
+	height: 88px;
+	background: var(--control-bg);
+}
+.product-detail-page .pd-workspace .pd-image-box img {
+	object-fit: contain;
+}
+.product-detail-page .pd-workspace .pd-abbr {
+	font-size: 24px;
+}
+.product-detail-page .pd-workspace .pd-no-photo {
+	padding: 4px;
+	font-size: 10px;
+}
+.product-detail-page .pd-workspace .pd-no-photo > div:last-child {
+	display: none;
+}
+.product-detail-page .pd-workspace #pd-btn-upload {
+	max-width: 100px;
+	white-space: normal;
+	font-size: 10px;
+	padding: 4px 0;
+}
+.product-detail-page .pd-record-info h2 {
+	font-size: 20px;
+	font-weight: 600;
+	margin: 0 0 8px;
+}
+.product-detail-page .pd-supplier {
+	margin-top: 6px;
+	font-size: 12px;
+}
+.product-detail-page .pd-filter-bar {
+	display: flex;
+	gap: 16px;
+	align-items: end;
+	flex-wrap: wrap;
+	padding: 20px 0;
+	border-top: 1px solid var(--border-color);
+}
+.product-detail-page .pd-filter-bar label {
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text-muted);
+	margin: 0;
+	min-width: 160px;
+}
+.product-detail-page .pd-filter-bar select {
+	margin-top: 6px;
+	font-size: 13px;
+}
+.product-detail-page .pd-period-caption {
+	font-size: 12px;
+	padding-bottom: 9px;
+	margin-left: auto;
+}
+.product-detail-page .pd-owner-metrics {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius-md, 8px);
+}
+.product-detail-page .pd-owner-metric {
+	padding: 18px;
+	border-right: 1px solid var(--border-color);
+	font-size: 12px;
+}
+.product-detail-page .pd-owner-metric:last-child {
+	border-right: 0;
+}
+.product-detail-page .pd-owner-value {
+	font-size: 24px;
+	font-weight: 600;
+	margin: 10px 0 6px;
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+}
+.product-detail-page .pd-owner-metric small {
+	display: block;
+	line-height: 1.6;
+}
+.product-detail-page .pd-stock-alerts {
+	padding: 14px 0;
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	flex-wrap: wrap;
+	font-size: 12px;
+}
+.product-detail-page .pd-performance {
+	margin-top: 24px;
+}
+.product-detail-page .pd-performance h3 {
+	font-size: 14px;
+	font-weight: 600;
+	margin: 0 0 14px;
+}
+.product-detail-page .pd-tabs {
+	display: flex;
+	gap: 24px;
+	border-bottom: 1px solid var(--border-color);
+	margin-top: 24px;
+	overflow-x: auto;
+}
+.product-detail-page .pd-tab {
+	padding: 12px 0;
+	color: var(--text-muted);
+	font-size: 13px;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	background: transparent;
+	white-space: nowrap;
+}
+.product-detail-page .pd-tab.active {
+	color: var(--text-color);
+	border-bottom-color: var(--primary);
+	font-weight: 600;
+}
+.product-detail-page .pd-tab:focus-visible {
+	outline: 2px solid var(--primary);
+	outline-offset: -2px;
+}
+.product-detail-page .pd-tab-panel {
+	padding-top: 20px;
+}
+.product-detail-page .pd-tab-panel[hidden] {
+	display: none;
+}
+.product-detail-page .pd-history-note {
+	font-size: 12px;
+	margin-bottom: 18px;
+}
+.product-detail-page .pd-history-table th {
+	font-size: 12px;
+	color: var(--text-muted);
+	font-weight: 500;
+	border-top: 0;
+}
+.product-detail-page .pd-history-table td {
+	font-size: 13px;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	border-color: var(--border-color);
+}
+.product-detail-page .pd-history-table td:not(:last-child) {
+	white-space: nowrap;
+}
+.product-detail-page .pd-empty-state,
+.product-detail-page .pd-overview-status {
+	padding: 40px 12px;
+	text-align: center;
+	color: var(--text-muted);
+}
+.product-detail-page .pd-details-list {
+	display: grid;
+	grid-template-columns: 160px 1fr;
+	gap: 16px;
+	font-size: 13px;
+}
+.product-detail-page .pd-details-list dt {
+	font-weight: 500;
+	color: var(--text-muted);
+}
+.product-detail-page .pd-invoice-links {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 8px;
+}
+.product-detail-page .pd-workspace .pd-table th,
+.product-detail-page .pd-workspace .pd-table td {
+	color: var(--text-color);
+	font-size: 12px;
+	text-transform: none;
+	letter-spacing: normal;
+	padding: 12px;
+	border-color: var(--border-color);
+}
+.product-detail-page .pd-workspace .pd-table tbody tr:hover td {
+	background: var(--control-bg);
+}
+.product-detail-page .pd-workspace .pd-table th,
+.product-detail-page .pd-workspace .pd-table tfoot td {
+	background: var(--control-bg);
+}
+@media (max-width: 1000px) {
+	.product-detail-page .pd-owner-metrics {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.product-detail-page .pd-owner-metric:nth-child(2) {
+		border-right: 0;
+	}
+	.product-detail-page .pd-owner-metric:nth-child(-n + 2) {
+		border-bottom: 1px solid var(--border-color);
+	}
+}
+@media (max-width: 575px) {
+	.product-detail-page .pd-workspace {
+		padding: 16px;
+	}
+	.product-detail-page .pd-record-info h2 {
+		font-size: 17px;
+	}
+	.product-detail-page .pd-filter-bar label {
+		min-width: 0;
+		flex: 1 1 130px;
+	}
+	.product-detail-page .pd-period-caption {
+		margin-left: 0;
+	}
+	.product-detail-page .pd-owner-metric {
+		padding: 12px;
+	}
+	.product-detail-page .pd-owner-value {
+		font-size: 19px;
+	}
+	.product-detail-page .pd-tabs {
+		gap: 18px;
+	}
+}
 
 .product-detail-container {
 	padding: 0;
@@ -705,4 +944,3 @@
 	font-size: 15px;
 	color: #1d4ed8;
 }
-

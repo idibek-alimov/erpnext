@@ -388,19 +388,43 @@ def settle_staff_balance(
 
 
 @frappe.whitelist()
-def save_staff_settings(employee, custom_base_salary, custom_salary_frequency, custom_commission_scheme, custom_default_cash_account):
+def save_staff_settings(
+	employee,
+	custom_base_salary,
+	custom_salary_frequency,
+	custom_commission_scheme,
+	custom_default_cash_account,
+	status=None,
+):
 	if not employee:
 		frappe.throw(_("Employee ID is required"))
 
-	frappe.db.set_value(
-		"Employee",
-		employee,
-		{
-			"custom_base_salary": flt(custom_base_salary),
-			"custom_salary_frequency": custom_salary_frequency or "Monthly",
-			"custom_commission_scheme": custom_commission_scheme or None,
-			"custom_default_cash_account": custom_default_cash_account or None,
-		},
-	)
+	emp_doc = frappe.get_doc("Employee", employee)
+	emp_doc.custom_base_salary = flt(custom_base_salary)
+	emp_doc.custom_salary_frequency = custom_salary_frequency or "Monthly"
+	emp_doc.custom_commission_scheme = custom_commission_scheme or None
+	emp_doc.custom_default_cash_account = custom_default_cash_account or None
+	if status and status in ("Active", "Inactive", "Suspended"):
+		emp_doc.status = status
+
+	emp_doc.flags.ignore_permissions = True
+	emp_doc.flags.ignore_mandatory = True
+	emp_doc.save(ignore_permissions=True)
+
+	# Keep linked Sales Person commission_rate in sync if scheme is Fixed Percentage
+	sp_name = frappe.db.get_value("Sales Person", {"employee": employee}, "name")
+	if sp_name:
+		fixed_rate = None
+		if custom_commission_scheme and frappe.db.exists("Staff Commission Scheme", custom_commission_scheme):
+			scheme_info = frappe.db.get_value(
+				"Staff Commission Scheme",
+				custom_commission_scheme,
+				["calculation_type", "fixed_rate"],
+				as_dict=True,
+			)
+			if scheme_info and scheme_info.calculation_type == "Fixed Percentage":
+				fixed_rate = str(flt(scheme_info.fixed_rate))
+		frappe.db.set_value("Sales Person", sp_name, "commission_rate", fixed_rate, update_modified=False)
+
 	frappe.db.commit()
 	return {"success": True}

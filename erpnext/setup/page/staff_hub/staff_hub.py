@@ -1,9 +1,12 @@
 # Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
+import re
 import frappe
 from frappe import _
 from frappe.utils import flt, cint, today, getdate, add_days, get_first_day, get_last_day
+from frappe.utils.nestedset import get_root_of
+from frappe.utils.password import update_password
 from erpnext.stock.page.product_catalog.product_catalog import get_default_company
 
 
@@ -217,6 +220,8 @@ def get_staff_hub_data(search=None, status="Active", period="this_month", from_d
 		base_salary = flt(emp.base_salary)
 		net_payable = flt((base_salary + commission_amount + bonuses) - (penalties + advances), 2)
 
+		sales_person_name = frappe.db.get_value("Sales Person", {"employee": emp_name}, "name") or ""
+
 		staff_record = {
 			"name": emp_name,
 			"employee_name": emp.employee_name,
@@ -226,6 +231,7 @@ def get_staff_hub_data(search=None, status="Active", period="this_month", from_d
 			"cell_number": emp.cell_number or "",
 			"image": emp.image or "",
 			"user_id": user_id or "",
+			"sales_person": sales_person_name,
 			"base_salary": base_salary,
 			"salary_frequency": emp.salary_frequency,
 			"commission_scheme": emp.commission_scheme or "",
@@ -262,4 +268,387 @@ def get_staff_hub_data(search=None, status="Active", period="this_month", from_d
 		"staff": staff_list,
 		"summary": summary,
 		"total": len(staff_list),
+	}
+
+
+@frappe.whitelist()
+def get_staff_onboarding_context(company=None):
+	from erpnext.setup.page.staff_detail.staff_detail import get_wallet_payment_sources
+	from erpnext.accounts.page.expense_desk.expense_desk import get_payment_sources
+
+	company = company or get_default_company()
+	currency = frappe.db.get_value("Company", company, "default_currency") or "TJS"
+
+	schemes = frappe.db.get_all(
+		"Staff Commission Scheme",
+		filters={"is_active": 1},
+		fields=["name", "basis", "calculation_type", "fixed_rate"],
+		order_by="name asc",
+	)
+
+	payment_sources = get_wallet_payment_sources(company) or get_payment_sources(company)
+
+	pos_profiles = frappe.db.get_all(
+		"POS Profile",
+		filters={"disabled": 0, "company": company},
+		fields=["name", "company", "warehouse"],
+		order_by="name asc",
+	)
+	if not pos_profiles:
+		pos_profiles = frappe.db.get_all(
+			"POS Profile",
+			filters={"disabled": 0},
+			fields=["name", "company", "warehouse"],
+			order_by="name asc",
+		)
+
+	return {
+		"company": company,
+		"currency": currency,
+		"schemes": schemes,
+		"payment_sources": payment_sources,
+		"pos_profiles": pos_profiles,
+	}
+
+
+def _ensure_designation(designation_name: str) -> str:
+	designation_name = (designation_name or "").strip()
+	if not designation_name:
+		return ""
+	if not frappe.db.exists("Designation", designation_name):
+		doc = frappe.get_doc({"doctype": "Designation", "designation_name": designation_name})
+		doc.flags.ignore_permissions = True
+		doc.insert()
+	return designation_name
+
+
+def _ensure_default_gender() -> str:
+	existing = frappe.db.get_value("Gender", {}, "name")
+	if existing:
+		return existing
+	doc = frappe.get_doc({"doctype": "Gender", "gender": "Not Specified"})
+	doc.flags.ignore_permissions = True
+	doc.insert()
+	return doc.name
+
+
+def _ensure_sales_person_root() -> str:
+	root = get_root_of("Sales Person")
+	if root:
+		return root
+	root_name = "All Sales Persons"
+	if frappe.db.exists("Sales Person", root_name):
+		return root_name
+	doc = frappe.get_doc({
+		"doctype": "Sales Person",
+		"sales_person_name": root_name,
+		"is_group": 1,
+		"enabled": 1,
+	})
+	doc.flags.ignore_permissions = True
+	doc.insert()
+	return doc.name
+
+
+def _resolve_login_credentials(login_id: str) -> tuple[str, str]:
+	raw = (login_id or "").strip()
+	if not raw:
+		frappe.throw(_("Login email or username is required for this role."))
+
+	if "@" in raw:
+		email = raw.lower()
+		username = raw.split("@")[0].strip()
+		return email, username
+
+	sanitized = re.sub(r"[^a-zA-Z0-9_.-]", "", raw).lower()
+	if not sanitized:
+		frappe.throw(_("Login username must contain letters or numbers."))
+	email = f"{sanitized}@staff.local"
+	return email, raw
+
+
+def _provision_pos_user(
+	first_name: str,
+	last_name: str,
+	cell_number: str | None,
+	role_type: str,
+	login_id: str,
+	pos_pin: str,
+	pos_profile: str,
+) -> str:
+	pin = (pos_pin or "").strip()
+	if not pin or not pin.isdigit() or not (4 <= len(pin) <= 8):
+		frappe.throw(_("POS PIN must be 4 to 8 digits."))
+
+	pos_profile = (pos_profile or "").strip()
+	if not pos_profile or not frappe.db.exists("POS Profile", pos_profile):
+		frappe.throw(_("Please select a valid POS Profile."))
+
+	email, username = _resolve_login_credentials(login_id)
+
+	existing_user = frappe.db.exists("User", email)
+	if not existing_user and username:
+		existing_user = frappe.db.get_value("User", {"username": username}, "name")
+
+	if existing_user:
+		linked_emp = frappe.db.get_value(
+			"Employee",
+			{"user_id": existing_user, "status": "Active"},
+			["name", "employee_name"],
+			as_dict=True,
+		)
+		if linked_emp:
+			frappe.throw(
+				_("User {0} is already linked to active Employee {1} ({2}).").format(
+					existing_user, linked_emp.employee_name, linked_emp.name
+				)
+			)
+		user_doc = frappe.get_doc("User", existing_user)
+		user_doc.enabled = 1
+		user_doc.user_type = "System User"
+		if not user_doc.first_name:
+			user_doc.first_name = first_name
+		if last_name and not user_doc.last_name:
+			user_doc.last_name = last_name
+	else:
+		user_doc = frappe.get_doc({
+			"doctype": "User",
+			"email": email,
+			"first_name": first_name,
+			"last_name": last_name or "",
+			"username": username,
+			"enabled": 1,
+			"user_type": "System User",
+			"send_welcome_mail_to_user": 0,
+		})
+		if cell_number and not frappe.db.exists("User", {"mobile_no": cell_number}):
+			user_doc.mobile_no = cell_number
+		user_doc.flags.ignore_permissions = True
+		user_doc.flags.no_welcome_mail = True
+		user_doc.flags.ignore_password_policy = True
+		user_doc.insert(ignore_permissions=True)
+
+	# Ensure POS Awesome Supervisor role exists if needed
+	if role_type == "Manager" and not frappe.db.exists("Role", "POS Awesome Supervisor"):
+		role_doc = frappe.get_doc({"doctype": "Role", "role_name": "POS Awesome Supervisor", "desk_access": 1})
+		role_doc.flags.ignore_permissions = True
+		role_doc.insert(ignore_permissions=True)
+
+	desired_roles = ["Employee", "Sales User", "Stock User", "Accounts User", "POS User"]
+	if role_type == "Manager":
+		desired_roles.extend([
+			"POS Awesome Supervisor",
+			"Sales Manager",
+			"Stock Manager",
+			"Accounts Manager",
+			"POS Manager",
+		])
+
+	valid_roles = [r for r in desired_roles if frappe.db.exists("Role", r)]
+	existing_roles = {d.role for d in (user_doc.get("roles") or [])}
+	for role_name in valid_roles:
+		if role_name not in existing_roles:
+			user_doc.append("roles", {"role": role_name})
+
+	user_doc.set("posa_pos_pin", pin)
+	user_doc.flags.ignore_permissions = True
+	user_doc.flags.no_welcome_mail = True
+	user_doc.flags.ignore_password_policy = True
+	user_doc.save(ignore_permissions=True)
+
+	update_password(user_doc.name, pin)
+
+	# Assign User to POS Profile
+	profile_doc = frappe.get_doc("POS Profile", pos_profile)
+	existing_profile_users = {d.user for d in (profile_doc.get("applicable_for_users") or []) if d.user}
+	if user_doc.name not in existing_profile_users:
+		is_default = 0 if existing_profile_users else 1
+		profile_doc.append("applicable_for_users", {
+			"user": user_doc.name,
+			"default": is_default,
+		})
+		profile_doc.flags.ignore_permissions = True
+		profile_doc.save(ignore_permissions=True)
+
+	return user_doc.name
+
+
+def _provision_sales_person(
+	emp_doc,
+	commission_scheme: str | None = None,
+	pos_profile: str | None = None,
+) -> str:
+	root_sp = _ensure_sales_person_root()
+
+	fixed_rate = None
+	if commission_scheme and frappe.db.exists("Staff Commission Scheme", commission_scheme):
+		scheme_info = frappe.db.get_value(
+			"Staff Commission Scheme",
+			commission_scheme,
+			["calculation_type", "fixed_rate"],
+			as_dict=True,
+		)
+		if scheme_info and scheme_info.calculation_type == "Fixed Percentage":
+			fixed_rate = str(flt(scheme_info.fixed_rate))
+
+	existing_for_emp = frappe.db.get_value("Sales Person", {"employee": emp_doc.name}, "name")
+	if existing_for_emp:
+		updates = {"enabled": 1}
+		if fixed_rate is not None:
+			updates["commission_rate"] = fixed_rate
+		frappe.db.set_value("Sales Person", existing_for_emp, updates)
+		sp_name = existing_for_emp
+	else:
+		candidate_name = (emp_doc.employee_name or emp_doc.first_name or emp_doc.name).strip()
+		if frappe.db.exists("Sales Person", candidate_name):
+			other_emp = frappe.db.get_value("Sales Person", candidate_name, "employee")
+			if not other_emp or other_emp == emp_doc.name:
+				updates = {"employee": emp_doc.name, "enabled": 1}
+				if fixed_rate is not None:
+					updates["commission_rate"] = fixed_rate
+				frappe.db.set_value("Sales Person", candidate_name, updates)
+				sp_name = candidate_name
+			else:
+				candidate_name = f"{candidate_name} ({emp_doc.name})"
+				sp_doc = frappe.get_doc({
+					"doctype": "Sales Person",
+					"sales_person_name": candidate_name,
+					"parent_sales_person": root_sp,
+					"is_group": 0,
+					"enabled": 1,
+					"employee": emp_doc.name,
+					"commission_rate": fixed_rate,
+				})
+				sp_doc.flags.ignore_permissions = True
+				sp_doc.insert(ignore_permissions=True)
+				sp_name = sp_doc.name
+		else:
+			sp_doc = frappe.get_doc({
+				"doctype": "Sales Person",
+				"sales_person_name": candidate_name,
+				"parent_sales_person": root_sp,
+				"is_group": 0,
+				"enabled": 1,
+				"employee": emp_doc.name,
+				"commission_rate": fixed_rate,
+			})
+			sp_doc.flags.ignore_permissions = True
+			sp_doc.insert(ignore_permissions=True)
+			sp_name = sp_doc.name
+
+	# If POS Profile restricts allowed sales persons (posa_sales_persons is non-empty), append this Sales Person
+	if pos_profile and frappe.db.exists("POS Profile", pos_profile):
+		profile_doc = frappe.get_doc("POS Profile", pos_profile)
+		allowed_rows = profile_doc.get("posa_sales_persons") or []
+		if allowed_rows:
+			allowed_names = {d.sales_person for d in allowed_rows if d.sales_person}
+			if sp_name not in allowed_names:
+				profile_doc.append("posa_sales_persons", {"sales_person": sp_name})
+				profile_doc.flags.ignore_permissions = True
+				profile_doc.save(ignore_permissions=True)
+
+	return sp_name
+
+
+@frappe.whitelist()
+def create_staff_member(
+	first_name,
+	last_name=None,
+	cell_number=None,
+	role_type="Sales Person",
+	custom_designation=None,
+	base_salary=0,
+	salary_frequency="Monthly",
+	commission_scheme=None,
+	default_cash_account=None,
+	login_id=None,
+	pos_pin=None,
+	pos_profile=None,
+	company=None,
+):
+	first_name = (first_name or "").strip()
+	last_name = (last_name or "").strip()
+	cell_number = (cell_number or "").strip()
+	role_type = (role_type or "Sales Person").strip()
+
+	if not first_name:
+		frappe.throw(_("First Name is required."))
+
+	valid_roles = {"Sales Person", "Cashier", "Manager", "Non-Sales"}
+	if role_type not in valid_roles:
+		frappe.throw(_("Invalid staff role selected."))
+
+	company = company or get_default_company()
+	if not company:
+		frappe.throw(_("Default Company is not configured."))
+
+	role_designation_map = {
+		"Sales Person": "Продавец",
+		"Cashier": "Кассир",
+		"Manager": "Менеджер",
+		"Non-Sales": (custom_designation or "").strip() or "Техперсонал",
+	}
+	designation_label = (custom_designation or "").strip() or role_designation_map[role_type]
+	designation = _ensure_designation(designation_label)
+
+	# Ensure HR Settings has naming method configured
+	if not frappe.db.get_single_value("HR Settings", "emp_created_by"):
+		frappe.db.set_single_value("HR Settings", "emp_created_by", "Naming Series")
+
+	# 1. Provision User & POS Profile if Cashier or Manager
+	user_id = None
+	if role_type in ("Cashier", "Manager"):
+		user_id = _provision_pos_user(
+			first_name=first_name,
+			last_name=last_name,
+			cell_number=cell_number,
+			role_type=role_type,
+			login_id=login_id,
+			pos_pin=pos_pin,
+			pos_profile=pos_profile,
+		)
+
+	# 2. Create Employee
+	default_gender = _ensure_default_gender()
+	emp_doc = frappe.get_doc({
+		"doctype": "Employee",
+		"naming_series": "HR-EMP-",
+		"first_name": first_name,
+		"last_name": last_name,
+		"company": company,
+		"status": "Active",
+		"gender": default_gender,
+		"date_of_birth": "1995-01-01",
+		"date_of_joining": today(),
+		"designation": designation,
+		"cell_number": cell_number or None,
+		"user_id": user_id,
+		"create_user_permission": 0,
+		"custom_base_salary": flt(base_salary),
+		"custom_salary_frequency": salary_frequency or "Monthly",
+		"custom_commission_scheme": (commission_scheme or None) if role_type != "Non-Sales" else None,
+		"custom_default_cash_account": default_cash_account or None,
+	})
+	emp_doc.flags.ignore_permissions = True
+	emp_doc.flags.ignore_mandatory = True
+	emp_doc.insert(ignore_permissions=True)
+
+	# 3. Create & Link Sales Person if Sales Person, Cashier, or Manager
+	sales_person_name = None
+	if role_type in ("Sales Person", "Cashier", "Manager"):
+		sales_person_name = _provision_sales_person(
+			emp_doc=emp_doc,
+			commission_scheme=commission_scheme,
+			pos_profile=pos_profile if role_type in ("Cashier", "Manager") else None,
+		)
+
+	return {
+		"success": True,
+		"employee": emp_doc.name,
+		"employee_name": emp_doc.employee_name,
+		"role_type": role_type,
+		"designation": designation,
+		"sales_person": sales_person_name,
+		"user_id": user_id,
+		"pos_profile": pos_profile if role_type in ("Cashier", "Manager") else None,
 	}

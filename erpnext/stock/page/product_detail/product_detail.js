@@ -26,6 +26,10 @@ class ProductDetailApp {
 		this.selected_color = null;
 		this.sales_chart = null;
 		this.is_reconciling = false;
+		this.period = "month";
+		this.warehouse = "";
+		this.active_tab = "sales";
+		this.overview_request = 0;
 
 		this.page.set_secondary_action(__("Back to Catalog"), () => frappe.set_route("product-catalog"));
 		this.page.add_menu_item(__("Open full Item form (advanced)"), () => {
@@ -80,8 +84,14 @@ class ProductDetailApp {
 			current_stock: { tg: "Дар система", ru: "В системе" },
 			save_stock: { tg: "💾 Сабти бақия", ru: "💾 Сохранить" },
 			cancel: { tg: "Бекор кардан", ru: "Отмена" },
-			no_changes_detected: { tg: "Ягон тағйирот дар бақия ворид нашудааст.", ru: "Изменений в остатках не обнаружено." },
-			reconcile_success: { tg: "Бақияи мол бомуваффақият нав карда шуд!", ru: "Остатки успешно скорректированы!" },
+			no_changes_detected: {
+				tg: "Ягон тағйирот дар бақия ворид нашудааст.",
+				ru: "Изменений в остатках не обнаружено.",
+			},
+			reconcile_success: {
+				tg: "Бақияи мол бомуваффақият нав карда шуд!",
+				ru: "Остатки успешно скорректированы!",
+			},
 			saving: { tg: "Сабт шуда истодааст...", ru: "Сохранение..." },
 			reason_audit: { tg: "Инвентаризатсия / Переучёт", ru: "Инвентаризация / Переучёт" },
 			reason_damaged: { tg: "Брок (списание)", ru: "Списание брака" },
@@ -100,7 +110,10 @@ class ProductDetailApp {
 			qty_to_print: { tg: "Миқдор барои чоп", ru: "Кол-во для печати" },
 			barcode: { tg: "Штрихкод", ru: "Штрихкод" },
 			print_action: { tg: "🖨️ Чоп кардан", ru: "🖨️ Распечатать ценники" },
-			no_items_selected: { tg: "Ягон мол барои чоп интихоб нашудааст.", ru: "Не выбрано ни одной позиции для печати." },
+			no_items_selected: {
+				tg: "Ягон мол барои чоп интихоб нашудааст.",
+				ru: "Не выбрано ни одной позиции для печати.",
+			},
 			selected_variants: { tg: "Интихоб шуд", ru: "Выбрано позиций" },
 			total_labels_count: { tg: "Ҳамагӣ наклейка", ru: "Всего наклеек" },
 			pcs: { tg: "дона", ru: "шт." },
@@ -109,326 +122,50 @@ class ProductDetailApp {
 	}
 
 	load(item_code, retain_color = null) {
+		const request = ++this.overview_request;
 		this.item_code = item_code;
 		this.is_reconciling = false;
-		this.$body.html(`<div class="text-center text-muted" style="padding:60px;">${__("Loading...")}</div>`);
+		this.$body.html(
+			`<div class="text-center text-muted" style="padding:60px;">${__("Loading...")}</div>`
+		);
 		frappe.call({
 			method: "erpnext.stock.page.product_detail.product_detail.get_product_detail",
 			args: { item_code },
 			callback: (r) => {
+				if (request !== this.overview_request) return;
 				if (!r.message) return;
 				this.data = r.message;
+				this.item_code = r.message.item_code;
 				this.selected_color = null;
 				this.render();
-				if (retain_color && this.color_control) {
-					this.color_control.set_value(retain_color);
+				if (retain_color) {
+					this.$body.find(".pd-filter-color").val(retain_color).trigger("change");
 				}
 			},
-		});
-	}
-
-	render() {
-		const d = this.data;
-		let pageTitle = frappe.utils.escape_html(d.item_name);
-		if (d.effective_discount && d.effective_discount.has_discount) {
-			pageTitle += ` <span class="indicator-pill red" style="font-size: 13px; font-weight: 600; vertical-align: middle; margin-left: 8px;">-${flt(d.effective_discount.discount_percentage)}% ${d.effective_discount.tier_badge}</span>`;
-		}
-		this.page.set_title(pageTitle);
-		this.page.clear_primary_action();
-		this.page.set_primary_action(this.t("restock"), () => {
-			const color = this.selected_color ? this.selected_color.color : "";
-			frappe.new_doc("Quick Product Restock", {
-				item: this.item_code,
-				item_name: d.item_name,
-				short_code: d.short_code,
-				initial_color: color,
-			});
-		});
-		this.page.clear_inner_toolbar();
-		this.page.add_inner_button(this.t("print_labels"), () => this.open_print_labels_dialog());
-
-		this.$body.html(`
-			<div class="product-detail-container">
-				<div class="pd-card">
-					<!-- Top Section: Image + Info Fields -->
-					<div class="pd-main-grid">
-						<div class="pd-image-col">
-							<div class="pd-image-box" title="${this.t("change_photo")}"></div>
-							<button type="button" class="pd-upload-btn" id="pd-btn-upload">
-								${this.t("upload_photo")}
-							</button>
-						</div>
-						<div class="pd-fields-col">
-							<div class="pd-fields-grid">
-								<div class="pd-field-item pd-f-name"></div>
-								<div class="pd-field-item pd-f-code"></div>
-								<div class="pd-field-item pd-f-cat"></div>
-								<div class="pd-field-item pd-f-supp"></div>
-								<div class="pd-field-item pd-f-stock"></div>
-								<div class="pd-field-item pd-f-sold"></div>
-							</div>
-
-							<!-- Best Seller Highlights (Top Colors & Sizes) -->
-							<div class="pd-highlights-row" id="pd-highlights"></div>
-						</div>
-					</div>
-
-					<!-- Financial & Stats Summary Cards -->
-					<div class="pd-stats-row" id="pd-stats-row"></div>
-
-					<!-- 30-Day Sales Chart -->
-					<div class="pd-chart-container">
-						<div class="pd-chart-header">
-							<span class="pd-chart-title">📊 ${this.t("chart_title")}</span>
-							<span class="pd-chart-runway" id="pd-chart-runway"></span>
-						</div>
-						<div id="pd-sales-chart-wrapper" style="height: 190px;"></div>
-					</div>
-
-					<div class="pd-divider pd-color-divider"></div>
-
-					<!-- Color Picker Section -->
-					<div class="pd-color-section">
-						<div class="pd-section-title">${this.t("color_section_title")}</div>
-						<div class="pd-color-wrapper"></div>
-					</div>
-
-					<!-- Sizes Table -->
-					<div class="pd-sizes-section"></div>
-				</div>
-			</div>
-		`);
-
-		this.make_info_fields();
-		this.update_stats_cards(null);
-		this.render_highlights(null);
-		this.render_sales_chart(null);
-		this.bind_image_events();
-
-		const has_colors = d.colors.some((c) => c.color);
-		if (has_colors) {
-			this.make_color_field();
-		} else {
-			this.$body.find(".pd-color-divider").hide();
-			this.$body.find(".pd-color-section").hide();
-		}
-
-		this.render_image();
-		this.update_upload_btn_label();
-
-		if (!has_colors) {
-			this.render_sizes(d.colors[0]);
-		} else if (d.colors.length === 1) {
-			this.color_control.set_value(d.colors[0].color);
-		} else {
-			this.render_sizes(null);
-		}
-	}
-
-	make_ctl(parent, df, value) {
-		const ctl = frappe.ui.form.make_control({
-			df: Object.assign({ read_only: 1 }, df),
-			parent,
-			render_input: true,
-		});
-		if (value !== undefined) ctl.set_value(value);
-		return ctl;
-	}
-
-	make_info_fields() {
-		const d = this.data;
-		this.ctl_name = this.make_ctl(this.$body.find(".pd-f-name"), { fieldtype: "Data", fieldname: "item_name", label: this.t("product_name") }, d.item_name);
-		this.ctl_code = this.make_ctl(this.$body.find(".pd-f-code"), { fieldtype: "Data", fieldname: "short_code", label: this.t("code") }, d.short_code || d.item_code);
-		this.ctl_cat = this.make_ctl(this.$body.find(".pd-f-cat"), { fieldtype: "Link", options: "Item Group", fieldname: "item_group", label: this.t("category") }, d.item_group);
-		this.ctl_supp = this.make_ctl(this.$body.find(".pd-f-supp"), { fieldtype: "Link", options: "Supplier", fieldname: "supplier", label: this.t("supplier") }, d.supplier || "");
-		this.ctl_stock = this.make_ctl(this.$body.find(".pd-f-stock"), { fieldtype: "Float", fieldname: "total_stock", label: this.t("total_stock") }, d.total_stock);
-		this.ctl_sold = this.make_ctl(this.$body.find(".pd-f-sold"), { fieldtype: "Float", fieldname: "total_sold", label: this.t("total_sold") }, d.total_sold);
-	}
-
-	update_stats_cards(colorObj = null) {
-		const d = this.data;
-		const cur = d.currency;
-		const $row = this.$body.find("#pd-stats-row");
-
-		const revenue = colorObj ? colorObj.revenue : d.total_revenue;
-		const sold = colorObj ? colorObj.sold : d.total_sold;
-		const profit = colorObj ? colorObj.profit : d.total_profit;
-		const margin = colorObj ? colorObj.margin_pct : d.margin_pct;
-		const sold_30d = colorObj ? colorObj.sold_last_30d : d.sold_last_30d;
-		const velocity = colorObj ? colorObj.velocity_per_day : d.velocity_per_day;
-		const runway = colorObj ? colorObj.runway_days : d.runway_days;
-
-		const runwayText = runway < 900 ? `${this.t("runway_prefix")}${runway} ${this.t("days")}` : "";
-		const scopeLabel = colorObj ? ` <span style="font-weight: 500; font-size: 11px; color: #2563eb;">(${colorObj.color})</span>` : "";
-
-		$row.html(`
-			<div class="pd-stat-card">
-				<div class="pd-stat-label">${this.t("revenue")}${scopeLabel}</div>
-				<div class="pd-stat-value">${format_currency(revenue, cur)}</div>
-				<div class="pd-stat-sub">${sold} ${this.lang === "tg" ? "дона фурӯхта шуд" : "шт. продано"}</div>
-			</div>
-			<div class="pd-stat-card">
-				<div class="pd-stat-label">${this.t("profit")}${scopeLabel}</div>
-				<div class="pd-stat-value" style="color: #10b981;">+${format_currency(profit, cur)}</div>
-				<div class="pd-stat-sub">${this.t("margin")}: ${margin}%</div>
-			</div>
-			<div class="pd-stat-card">
-				<div class="pd-stat-label">${this.t("sales_30d")}${scopeLabel}</div>
-				<div class="pd-stat-value">${sold_30d} <span style="font-size: 14px; font-weight: 500;">(${velocity} ${this.t("items_per_day")})</span></div>
-				<div class="pd-stat-sub" style="color: #2563eb;">${runwayText}</div>
-			</div>
-		`);
-
-		const $runwayEl = this.$body.find("#pd-chart-runway");
-		if (runwayText) {
-			$runwayEl.html(`⏱️ ${runwayText}${scopeLabel}`).show();
-		} else {
-			$runwayEl.hide();
-		}
-
-		// Also update the stock/sold fields in info grid
-		if (this.ctl_stock) {
-			this.ctl_stock.set_value(colorObj ? colorObj.stock : d.total_stock);
-		}
-		if (this.ctl_sold) {
-			this.ctl_sold.set_value(colorObj ? colorObj.sold : d.total_sold);
-		}
-	}
-
-	render_highlights(colorObj = null) {
-		const d = this.data;
-		const $h = this.$body.find("#pd-highlights");
-		let html = "";
-
-		// If a color is selected: HIDE the hit color stat completely, show top sizes for this color
-		if (colorObj) {
-			const sizes = colorObj.top_sizes || [];
-			if (sizes.length > 0) {
-				html += `
-					<div class="pd-highlight-group">
-						<span class="pd-highlight-title">🏆 ${this.t("top_sizes_label")} (${colorObj.color}):</span>
-						${sizes
-							.map(
-								(s, i) => `
-							<span class="pd-rank-item">
-								<span class="pd-rank-tag">#${i + 1}</span>
-								<span class="pd-rank-val">${frappe.utils.escape_html(s.name)}</span>
-								<span class="pd-rank-pct">(${s.qty} ${this.lang === "tg" ? "дона" : "шт"}, ${s.pct}%)</span>
-							</span>
-						`
-							)
-							.join("")}
-					</div>
-				`;
-			}
-		} else {
-			// No color chosen: show Top Colors AND Top Sizes overall
-			if (d.top_colors && d.top_colors.length > 0) {
-				html += `
-					<div class="pd-highlight-group">
-						<span class="pd-highlight-title">🎨 ${this.t("top_colors_label")}:</span>
-						${d.top_colors
-							.map(
-								(c, i) => `
-							<span class="pd-rank-item">
-								<span class="pd-rank-tag">#${i + 1}</span>
-								<span class="pd-rank-val">${frappe.utils.escape_html(c.name)}</span>
-								<span class="pd-rank-pct">(${c.qty} ${this.lang === "tg" ? "дона" : "шт"}, ${c.pct}%)</span>
-							</span>
-						`
-							)
-							.join("")}
-					</div>
-				`;
-			}
-
-			if (d.top_sizes && d.top_sizes.length > 0) {
-				html += `
-					<div class="pd-highlight-group">
-						<span class="pd-highlight-title">🏆 ${this.t("top_sizes_label")}:</span>
-						${d.top_sizes
-							.map(
-								(s, i) => `
-							<span class="pd-rank-item">
-								<span class="pd-rank-tag">#${i + 1}</span>
-								<span class="pd-rank-val">${frappe.utils.escape_html(s.name)}</span>
-								<span class="pd-rank-pct">(${s.qty} ${this.lang === "tg" ? "дона" : "шт"}, ${s.pct}%)</span>
-							</span>
-						`
-							)
-							.join("")}
-					</div>
-				`;
-			}
-		}
-
-		$h.html(html);
-	}
-
-	render_sales_chart(colorName = null) {
-		const d = this.data;
-		if (!d.chart_labels || d.chart_labels.length === 0) return;
-
-		let values = d.chart_values;
-		if (colorName && d.color_chart_values && d.color_chart_values[colorName]) {
-			values = d.color_chart_values[colorName];
-		}
-
-		const chartEl = this.$body.find("#pd-sales-chart-wrapper")[0];
-		if (!chartEl) return;
-
-		const labels = d.chart_labels.map((l, idx) => (idx % 4 === 0 || idx === d.chart_labels.length - 1 ? l : ""));
-
-		const chartData = {
-			labels: labels,
-			datasets: [
-				{
-					name: colorName ? `${colorName}` : __("All Sales"),
-					values: values,
-				},
-			],
-		};
-
-		if (this.sales_chart) {
-			this.sales_chart.update(chartData);
-		} else {
-			this.sales_chart = new frappe.Chart(chartEl, {
-				title: "",
-				data: chartData,
-				type: "bar",
-				height: 160,
-				colors: ["#2563eb"],
-				axisOptions: {
-					xIsSeries: true,
-					shortenYAxisNumbers: 1,
-				},
-				barOptions: {
-					spaceRatio: 0.35,
-				},
-				tooltipOptions: {
-					formatTooltipY: (d) => `${d} ${this.lang === "tg" ? "дона" : "шт"}`,
-				},
-			});
-		}
-	}
-
-	make_color_field() {
-		const options = ["", ...this.data.colors.map((c) => c.color)].join("\n");
-		this.color_control = frappe.ui.form.make_control({
-			df: {
-				fieldtype: "Select",
-				fieldname: "color",
-				label: this.t("color"),
-				options,
-				change: () => this.on_color_change(),
+			error: () => {
+				if (request !== this.overview_request) return;
+				this.$body
+					.empty()
+					.append($("<div class='pd-empty-state'>").text(__("Unable to load product")))
+					.append(
+						$("<button class='btn btn-default'>")
+							.text(__("Retry"))
+							.on("click", () => this.load(item_code))
+					);
 			},
-			parent: this.$body.find(".pd-color-wrapper"),
-			render_input: true,
 		});
-		this.color_control.refresh();
 	}
 
 	bind_image_events() {
+		this.$body
+			.find(".pd-image-box")
+			.attr({ role: "button", tabindex: 0, "aria-label": this.t("change_photo") })
+			.on("keydown", (e) => {
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					this.open_image_uploader();
+				}
+			});
 		this.$body.find("#pd-btn-upload, .pd-image-box").on("click", () => {
 			this.open_image_uploader();
 		});
@@ -469,19 +206,6 @@ class ProductDetailApp {
 		});
 	}
 
-	on_color_change() {
-		const value = this.color_control.get_value();
-		const color = this.data.colors.find((c) => c.color === value) || null;
-		this.selected_color = color;
-		this.is_reconciling = false;
-		this.render_image();
-		this.update_upload_btn_label();
-		this.render_sizes(color);
-		this.render_sales_chart(color ? color.color : null);
-		this.update_stats_cards(color);
-		this.render_highlights(color);
-	}
-
 	update_upload_btn_label() {
 		const $btn = this.$body.find("#pd-btn-upload");
 		if (this.selected_color) {
@@ -497,10 +221,13 @@ class ProductDetailApp {
 
 	render_image() {
 		const d = this.data;
-		const src = (this.selected_color && this.selected_color.image) || (this.selected_color ? "" : d.image);
+		const src =
+			(this.selected_color && this.selected_color.image) || (this.selected_color ? "" : d.image);
 		const $box = this.$body.find(".pd-image-box");
 		if (src) {
-			$box.html(`<img src="${frappe.utils.escape_html(src)}" alt="${frappe.utils.escape_html(d.item_name)}">`);
+			$box.html(
+				`<img src="${frappe.utils.escape_html(src)}" alt="${frappe.utils.escape_html(d.item_name)}">`
+			);
 		} else {
 			const colorText = this.selected_color ? ` (${this.selected_color.color})` : "";
 			$box.html(`
@@ -530,9 +257,20 @@ class ProductDetailApp {
 
 		const rows = color.sizes
 			.map((s) => {
-				const hasPromo = s.discount && s.discount.has_discount && flt(s.discount.discounted_price) < flt(s.selling_price);
+				const hasPromo =
+					s.discount &&
+					s.discount.has_discount &&
+					flt(s.discount.discounted_price) < flt(s.selling_price);
 				const priceDisplay = hasPromo
-					? `<del class="text-muted" style="font-size: 11px;">${format_currency(s.selling_price, cur)}</del> <strong style="color: #ef4444; font-size: 13px; margin-left: 3px;">${format_currency(s.discount.discounted_price, cur)}</strong> <span class="indicator-pill red" style="font-size: 10px; padding: 1px 5px; margin-left: 3px;">-${flt(s.discount.discount_percentage)}%</span>`
+					? `<del class="text-muted" style="font-size: 11px;">${format_currency(
+							s.selling_price,
+							cur
+					  )}</del> <strong style="color: #ef4444; font-size: 13px; margin-left: 3px;">${format_currency(
+							s.discount.discounted_price,
+							cur
+					  )}</strong> <span class="indicator-pill red" style="font-size: 10px; padding: 1px 5px; margin-left: 3px;">-${flt(
+							s.discount.discount_percentage
+					  )}%</span>`
 					: format_currency(s.selling_price, cur);
 
 				return `
@@ -569,7 +307,11 @@ class ProductDetailApp {
 		$s.html(`
 			<div class="pd-sizes-header">
 				<div class="pd-section-title">
-					<span>${this.t("sizes")}${color.color ? ` — <span style="color: #2563eb;">${frappe.utils.escape_html(color.color)}</span>` : ""}</span>
+					<span>${this.t("sizes")}${
+			color.color
+				? ` — <span style="color: #2563eb;">${frappe.utils.escape_html(color.color)}</span>`
+				: ""
+		}</span>
 				</div>
 				<div class="pd-sizes-actions">
 					${
@@ -609,7 +351,9 @@ class ProductDetailApp {
 							<th>${this.t("short_code")}</th>
 							<th class="text-right">${this.t("cost")}</th>
 							<th class="text-right">${this.t("price")}</th>
-							<th class="text-right ${isReco ? "pd-th-reconcile" : ""}">${isReco ? this.t("actual_stock_count") : this.t("left")}</th>
+							<th class="text-right ${isReco ? "pd-th-reconcile" : ""}">${
+			isReco ? this.t("actual_stock_count") : this.t("left")
+		}</th>
 							<th class="text-right">${this.t("sold")}</th>
 							<th>${this.t("status")}</th>
 						</tr>
@@ -635,6 +379,16 @@ class ProductDetailApp {
 		const $s = this.$body.find(".pd-sizes-section");
 
 		$s.find("#pd-btn-start-reconcile").on("click", () => {
+			if (!this.warehouse) {
+				frappe.msgprint(
+					this.label(
+						"Select a warehouse before adjusting stock",
+						"Выберите склад для корректировки остатков",
+						"Барои ислоҳи бақия анборро интихоб кунед"
+					)
+				);
+				return;
+			}
 			this.is_reconciling = true;
 			this.render_sizes(color);
 			setTimeout(() => {
@@ -723,6 +477,7 @@ class ProductDetailApp {
 				args: {
 					item_code: this.item_code,
 					changes: JSON.stringify(changes),
+					warehouse: this.warehouse,
 					reason: reason,
 				},
 				callback: (r) => {
@@ -743,6 +498,392 @@ class ProductDetailApp {
 		});
 	}
 
+	label(en, ru, tg) {
+		return this.lang === "tg" ? tg : ru;
+	}
+
+	render() {
+		const d = this.data;
+		const esc = frappe.utils.escape_html;
+		const L = this.label.bind(this);
+		this.sales_chart = null;
+		this.overview = null;
+		this.page.set_title(esc(d.item_name));
+		this.page.set_primary_action(L("Receive stock", "Приёмка товара", "Қабули мол"), () =>
+			frappe.new_doc("Quick Product Restock", {
+				item: this.item_code,
+				item_name: d.item_name,
+				short_code: d.short_code,
+				initial_color: this.selected_color?.color || "",
+			})
+		);
+		this.page.clear_inner_toolbar();
+		this.page.add_inner_button(L("Print labels", "Печать ценников", "Чопи нархномаҳо"), () =>
+			this.open_print_labels_dialog()
+		);
+		const colors = d.colors.filter((c) => c.color);
+		this.$body.html(`<div class="pd-workspace">
+			<div class="pd-record-header">
+				<div class="pd-image-col"><div class="pd-image-box"></div><button id="pd-btn-upload" class="btn btn-link btn-xs"></button></div>
+				<div class="pd-record-info"><h2>${esc(d.item_name)}</h2><div class="text-muted">${esc(
+			d.short_code || d.item_code
+		)} · ${esc(d.item_group)}</div>
+				<div class="pd-supplier text-muted">${this.t("supplier")}: ${esc(d.supplier || "—")}</div></div>
+			</div>
+			<div class="pd-filter-bar">
+				<label>${L("Period", "Период", "Давра")}<select class="form-control pd-filter-period">
+				${[
+					["month", L("This month", "Этот месяц", "Ин моҳ")],
+					["today", L("Today", "Сегодня", "Имрӯз")],
+					["7d", L("7 days", "7 дней", "7 рӯз")],
+					["30d", L("30 days", "30 дней", "30 рӯз")],
+					["all", L("All time", "Всё время", "Ҳамаи давра")],
+				]
+					.map(([v, l]) => `<option value="${v}">${l}</option>`)
+					.join("")}</select></label>
+				<label>${L(
+					"Warehouse",
+					"Склад",
+					"Анбор"
+				)}<select class="form-control pd-filter-warehouse"><option value="">${L(
+			"All warehouses",
+			"Все склады",
+			"Ҳамаи анборҳо"
+		)}</option></select></label>
+				${
+					colors.length
+						? `<label>${L(
+								"Color",
+								"Цвет",
+								"Ранг"
+						  )}<select class="form-control pd-filter-color"><option value="">${this.t(
+								"all_colors"
+						  )}</option>${colors
+								.map((c) => `<option value="${esc(c.color)}">${esc(c.color)}</option>`)
+								.join("")}</select></label>`
+						: ""
+				}
+				<span class="pd-period-caption text-muted"></span>
+			</div>
+			<div class="pd-overview-content">
+				<div class="pd-owner-metrics"></div><div class="pd-stock-alerts"></div>
+				<div class="pd-performance"><h3>${L(
+					"Sales performance",
+					"Динамика продаж",
+					"Раванди фурӯш"
+				)}</h3><div class="pd-financial-chart"></div></div>
+				<div class="pd-tabs" role="tablist">${[
+					["sales", L("Sales history", "История продаж", "Таърихи фурӯш")],
+					["stock", L("Variants & stock", "Варианты и остатки", "Намудҳо ва бақия")],
+					["details", L("Product details", "Данные товара", "Маълумоти мол")],
+				]
+					.map(
+						([v, l]) =>
+							`<button class="pd-tab" role="tab" data-tab="${v}" id="pd-tab-${v}" aria-controls="pd-panel-${v}">${l}</button>`
+					)
+					.join("")}</div>
+				<div class="pd-tab-panel" role="tabpanel" id="pd-panel-sales" data-panel="sales" aria-labelledby="pd-tab-sales"><div class="pd-sales-history"></div></div>
+				<div class="pd-tab-panel" role="tabpanel" id="pd-panel-stock" data-panel="stock" aria-labelledby="pd-tab-stock"><div class="pd-sizes-section"></div></div>
+				<div class="pd-tab-panel" role="tabpanel" id="pd-panel-details" data-panel="details" aria-labelledby="pd-tab-details"><dl class="pd-details-list"><dt>${this.t(
+					"code"
+				)}</dt><dd>${esc(d.short_code || d.item_code)}</dd><dt>${this.t("category")}</dt><dd>${esc(
+			d.item_group
+		)}</dd><dt>${this.t("supplier")}</dt><dd>${esc(d.supplier || "—")}</dd><dt>${this.t(
+			"barcode"
+		)}</dt><dd>${esc(d.barcode)}</dd></dl></div>
+			</div><div class="pd-overview-status" role="status"></div>
+		</div>`);
+		this.$body
+			.find(".pd-filter-period")
+			.val(this.period)
+			.on("change", (e) => {
+				this.period = e.target.value;
+				this.refresh_overview();
+			});
+		this.$body.find(".pd-filter-warehouse").on("change", (e) => {
+			this.warehouse = e.target.value;
+			this.refresh_overview();
+		});
+		this.$body.find(".pd-filter-color").on("change", (e) => {
+			this.selected_color = d.colors.find((c) => c.color === e.target.value) || null;
+			this.render_image();
+			this.update_upload_btn_label();
+			this.refresh_overview();
+		});
+		this.$body.find(".pd-tab").on("click", (e) => this.show_tab(e.currentTarget.dataset.tab));
+		this.bind_image_events();
+		this.render_image();
+		this.update_upload_btn_label();
+		this.show_tab(this.active_tab);
+		this.refresh_overview();
+	}
+
+	show_tab(tab) {
+		this.active_tab = tab;
+		this.$body.find(".pd-tab").each((i, el) =>
+			$(el)
+				.attr("aria-selected", String(el.dataset.tab === tab))
+				.toggleClass("active", el.dataset.tab === tab)
+		);
+		this.$body.find(".pd-tab-panel").each((i, el) => $(el).prop("hidden", el.dataset.panel !== tab));
+	}
+
+	refresh_overview() {
+		const request = ++this.overview_request;
+		const L = this.label.bind(this);
+		this.is_reconciling = false;
+		this.$body.find(".pd-overview-content").hide();
+		this.$body.find(".pd-overview-status").text(__("Loading...")).show();
+		frappe.call({
+			method: "erpnext.stock.page.product_detail.product_detail.get_product_overview",
+			args: {
+				item_code: this.item_code,
+				period: this.period,
+				warehouse: this.warehouse,
+				color: this.selected_color?.color || "",
+			},
+			callback: (r) => {
+				if (request !== this.overview_request || !r.message) return;
+				this.overview = r.message;
+				const o = this.overview;
+				const select = this.$body.find(".pd-filter-warehouse");
+				select.find("option[value!='']").remove();
+				o.warehouses.forEach((w) => select.append($("<option>").val(w).text(w)));
+				select.val(this.warehouse);
+				this.$body
+					.find(".pd-period-caption")
+					.text(
+						`${frappe.datetime.str_to_user(o.from_date)} – ${frappe.datetime.str_to_user(
+							o.to_date
+						)}`
+					);
+				this.$body.find(".pd-overview-status").hide();
+				this.$body.find(".pd-overview-content").show();
+				this.render_overview();
+			},
+			error: () => {
+				if (request === this.overview_request)
+					this.$body
+						.find(".pd-overview-status")
+						.html(
+							`<p>${L(
+								"Could not load data",
+								"Не удалось загрузить данные",
+								"Маълумот бор нашуд"
+							)}</p><button class="btn btn-default pd-retry">${__("Retry")}</button>`
+						)
+						.find(".pd-retry")
+						.on("click", () => this.refresh_overview());
+			},
+		});
+	}
+
+	render_overview() {
+		const o = this.overview,
+			L = this.label.bind(this),
+			esc = frappe.utils.escape_html;
+		const money = (n) => format_currency(n, o.currency);
+		const qty = (n) => format_number(n, null, 2);
+		const now = L("Current balance", "Текущий остаток", "Бақияи ҷорӣ");
+		const no_access = L("No sales access", "Нет доступа к продажам", "Дастрасӣ ба фурӯш нест");
+		const cards = [
+			[
+				L("In stock now", "Сейчас на складе", "Ҳоло дар анбор"),
+				`${qty(o.stock)} ${esc(this.data.stock_uom)}`,
+				now,
+			],
+			[
+				L("Net sold", "Продано, за вычетом возвратов", "Фурӯши холис"),
+				o.can_read_sales ? qty(o.sold - o.returned) : "—",
+				o.can_read_sales
+					? `${L("Sold", "Продано", "Фурӯхта шуд")}: ${qty(o.sold)} · ${L(
+							"Returned",
+							"Возвращено",
+							"Баргардонида шуд"
+					  )}: ${qty(o.returned)}`
+					: no_access,
+			],
+			[
+				L("Gross profit", "Валовая прибыль", "Фоидаи умумӣ"),
+				o.can_read_sales ? money(o.profit) : "—",
+				o.can_read_sales ? `${this.t("revenue")}: ${money(o.revenue)}` : no_access,
+			],
+			[
+				L("Stock value", "Стоимость остатка", "Арзиши бақия"),
+				money(o.stock_value),
+				L("At ERPNext valuation", "По учётной стоимости", "Бо арзиши баҳисобгирӣ"),
+			],
+		];
+		this.$body
+			.find(".pd-owner-metrics")
+			.html(
+				cards
+					.map(
+						([title, value, sub], i) =>
+							`<div class="pd-owner-metric"><div class="text-muted">${title}</div><div class="pd-owner-value ${
+								i === 2 && o.profit < 0 ? "text-danger" : ""
+							}">${value}</div><small class="text-muted">${sub}</small></div>`
+					)
+					.join("")
+			);
+		const colors = this.selected_color ? [this.selected_color] : this.data.colors;
+		const sizes = colors.flatMap((c) =>
+			c.sizes.map((s) => ({
+				...s,
+				stock_qty: o.variant_stock[s.item_code] || 0,
+				sold_qty: o.variant_sold[s.item_code] || 0,
+				size: !this.selected_color && c.color ? `${c.color} / ${s.size}` : s.size,
+			}))
+		);
+		const low = sizes.filter((s) => s.stock_qty <= 5);
+		this.$body
+			.find(".pd-stock-alerts")
+			.html(
+				low.length
+					? `<span class="indicator-pill orange">${L(
+							"Stock warning",
+							"Внимание: остатки",
+							"Огоҳии бақия"
+					  )}</span> <span>${low
+							.slice(0, 3)
+							.map((s) => `${esc(s.size)}: ${qty(s.stock_qty)}`)
+							.join(" · ")}${
+							low.length > 3 ? ` · +${low.length - 3}` : ""
+					  }</span> <button class="btn btn-link btn-xs pd-view-stock">${L(
+							"View stock",
+							"Посмотреть остатки",
+							"Дидани бақия"
+					  )}</button>`
+					: ""
+			)
+			.toggle(Boolean(low.length));
+		this.$body.find(".pd-view-stock").on("click", () => this.show_tab("stock"));
+		// Receiving/printing use the warehouse-filtered balances, not all-company totals.
+		this.data.colors.forEach((c) =>
+			c.sizes.forEach((s) => {
+				s.stock_qty = o.variant_stock[s.item_code] || 0;
+			})
+		);
+		this.render_sizes({
+			color: this.selected_color?.color || "",
+			sizes,
+			stock: o.stock,
+			sold: o.sold - o.returned,
+		});
+		if (!o.can_read_sales)
+			this.$body.find(".pd-table tbody tr").each((i, el) => $(el).find("td").eq(5).text("—"));
+		const chartEl = this.$body.find(".pd-financial-chart").empty()[0];
+		this.$body.find(".pd-performance").toggle(o.can_read_sales);
+		this.sales_chart = null;
+		if (o.can_read_sales && chartEl)
+			this.sales_chart = new frappe.Chart(chartEl, {
+				data: {
+					labels: o.labels,
+					datasets: [
+						{ name: this.t("revenue"), values: o.revenue_series },
+						{
+							name: L("Gross profit", "Валовая прибыль", "Фоидаи умумӣ"),
+							values: o.profit_series,
+						},
+					],
+				},
+				type: "line",
+				height: 220,
+				colors: ["#5e64ff", "#28a745"],
+				lineOptions: { hideDots: 1, regionFill: 0 },
+				axisOptions: { xIsSeries: true },
+				tooltipOptions: { formatTooltipY: (value) => money(value) },
+			});
+		this.history_limit = 20;
+		this.render_daily_history();
+	}
+
+	render_daily_history() {
+		const o = this.overview,
+			L = this.label.bind(this),
+			esc = frappe.utils.escape_html;
+		const money = (n) => format_currency(n, o.currency);
+		const $history = this.$body.find(".pd-sales-history");
+		if (!o.can_read_sales || !o.daily.length) {
+			$history.html(
+				`<div class="pd-empty-state">${
+					o.can_read_sales
+						? L("No sales in this period", "В этом периоде продаж нет", "Дар ин давра фурӯш нест")
+						: L(
+								"No access to Sales Invoices",
+								"Нет доступа к счетам продаж",
+								"Дастрасӣ ба ҳисобҳои фурӯш нест"
+						  )
+				}</div>`
+			);
+			return;
+		}
+		$history.html(
+			`<p class="text-muted pd-history-note">${L(
+				"Returns reduce totals on the return date. Cancelled invoices are excluded. Revenue is after discounts, excluding tax.",
+				"Возвраты уменьшают итоги в день возврата. Отменённые счета исключены. Выручка — после скидок, без налогов.",
+				"Баргардониҳо дар рӯзи баргардонӣ тарҳ мешаванд. Ҳисобҳои бекоршуда дохил намешаванд. Даромад пас аз тахфиф, бе андоз аст."
+			)}</p><div class="table-responsive"><table class="table pd-history-table"><thead><tr>${[
+				L("Date", "Дата", "Сана"),
+				this.t("sold"),
+				L("Returned", "Возвращено", "Баргардонӣ"),
+				this.t("revenue"),
+				L("Gross profit", "Валовая прибыль", "Фоидаи умумӣ"),
+				L("Invoices", "Счета продаж", "Ҳисобҳои фурӯш"),
+			]
+				.map((t, i) => `<th class="${i > 0 && i < 5 ? "text-right" : ""}">${t}</th>`)
+				.join("")}</tr></thead><tbody>${o.daily
+				.slice(0, this.history_limit)
+				.map(
+					(d, i) =>
+						`<tr><td>${frappe.datetime.str_to_user(d.date)}</td><td class="text-right">${flt(
+							d.sold
+						)}</td><td class="text-right">${flt(d.returned)}</td><td class="text-right">${money(
+							d.revenue
+						)}</td><td class="text-right ${d.profit < 0 ? "text-danger" : ""}">${money(
+							d.profit
+						)}</td><td><button class="btn btn-link btn-xs pd-invoices" data-day="${i}">${
+							d.invoices.length
+						} ${L("invoices", "счёт(а)", "ҳисоб")}</button></td></tr>`
+				)
+				.join("")}</tbody></table></div>${
+				o.daily.length > this.history_limit
+					? `<button class="btn btn-default btn-sm pd-history-more">${L(
+							"Show more days",
+							"Показать ещё дни",
+							"Рӯзҳои бештар"
+					  )}</button>`
+					: ""
+			}`
+		);
+		$history.find(".pd-history-more").on("click", () => {
+			this.history_limit += 20;
+			this.render_daily_history();
+		});
+		$history.find(".pd-invoices").on("click", (e) => {
+			const day = o.daily[Number(e.currentTarget.dataset.day)];
+			const dialog = new frappe.ui.Dialog({
+				title: `${L(
+					"Sales invoices",
+					"Счета продаж",
+					"Ҳисобҳои фурӯш"
+				)} · ${frappe.datetime.str_to_user(day.date)}`,
+				fields: [{ fieldtype: "HTML", fieldname: "invoices" }],
+			});
+			dialog.fields_dict.invoices.$wrapper.html(
+				`<div class="pd-invoice-links">${day.invoices
+					.map(
+						(name) =>
+							`<a href="/app/sales-invoice/${encodeURIComponent(
+								name
+							)}" target="_blank" rel="noopener">${esc(name)} ↗</a>`
+					)
+					.join("")}</div>`
+			);
+			dialog.show();
+		});
+	}
+
 	open_print_labels_dialog() {
 		const d = this.data;
 		if (!d || !d.colors) return;
@@ -754,9 +895,12 @@ class ProductDetailApp {
 				const hasPromo = s.discount && s.discount.has_discount;
 				const promoPrice = hasPromo ? flt(s.discount.discounted_price) : flt(s.selling_price);
 				const oldPrice = hasPromo ? flt(s.selling_price) : Math.round(flt(s.selling_price) * 1.3);
-				const discountPct = hasPromo && s.discount.discount_percentage
-					? Math.round(flt(s.discount.discount_percentage))
-					: (oldPrice > promoPrice ? Math.round(((oldPrice - promoPrice) / oldPrice) * 100) : 0);
+				const discountPct =
+					hasPromo && s.discount.discount_percentage
+						? Math.round(flt(s.discount.discount_percentage))
+						: oldPrice > promoPrice
+						? Math.round(((oldPrice - promoPrice) / oldPrice) * 100)
+						: 0;
 
 				all_variants.push({
 					item_code: s.item_code,
@@ -783,7 +927,8 @@ class ProductDetailApp {
 		}
 
 		const has_colors = d.colors.some((c) => c.color);
-		let active_color = this.selected_color && this.selected_color.color ? this.selected_color.color : "all";
+		let active_color =
+			this.selected_color && this.selected_color.color ? this.selected_color.color : "all";
 		let selected_format = "standard"; // "standard" or "sale"
 
 		const dialog = new frappe.ui.Dialog({
@@ -842,14 +987,20 @@ class ProductDetailApp {
 
 			color_tabs_html = `
 				<div class="pd-print-color-tabs">
-					<button type="button" class="pd-color-tab ${active_color === 'all' ? 'active' : ''}" data-color="all">
+					<button type="button" class="pd-color-tab ${active_color === "all" ? "active" : ""}" data-color="all">
 						${this.t("all_colors")} (${all_variants.length})
 					</button>
-					${Object.keys(color_counts).map((col) => `
-						<button type="button" class="pd-color-tab ${active_color === col ? 'active' : ''}" data-color="${frappe.utils.escape_html(col)}">
+					${Object.keys(color_counts)
+						.map(
+							(col) => `
+						<button type="button" class="pd-color-tab ${
+							active_color === col ? "active" : ""
+						}" data-color="${frappe.utils.escape_html(col)}">
 							${frappe.utils.escape_html(col)} (${color_counts[col]})
 						</button>
-					`).join("")}
+					`
+						)
+						.join("")}
 				</div>
 			`;
 		}
@@ -861,10 +1012,14 @@ class ProductDetailApp {
 					<div class="pd-print-format-group">
 						<span class="pd-print-bar-label">${this.t("format_label")}:</span>
 						<div class="btn-group" role="group">
-							<button type="button" class="btn btn-sm btn-default pd-format-btn ${selected_format === 'standard' ? 'active' : ''}" data-format="standard">
+							<button type="button" class="btn btn-sm btn-default pd-format-btn ${
+								selected_format === "standard" ? "active" : ""
+							}" data-format="standard">
 								🏷️ ${this.t("format_standard")}
 							</button>
-							<button type="button" class="btn btn-sm btn-default pd-format-btn ${selected_format === 'sale' ? 'active' : ''}" data-format="sale">
+							<button type="button" class="btn btn-sm btn-default pd-format-btn ${
+								selected_format === "sale" ? "active" : ""
+							}" data-format="sale">
 								🔥 ${this.t("format_sale")}
 							</button>
 						</div>
@@ -901,7 +1056,7 @@ class ProductDetailApp {
 								<th style="width: 40px; text-align: center;">
 									<input type="checkbox" id="pd-print-check-all" checked>
 								</th>
-								${has_colors ? `<th>${this.t("color")}</th>` : ''}
+								${has_colors ? `<th>${this.t("color")}</th>` : ""}
 								<th>${this.t("size")}</th>
 								<th>${this.t("short_code")}</th>
 								<th>${this.t("barcode")}</th>
@@ -918,28 +1073,46 @@ class ProductDetailApp {
 				<div class="pd-print-summary-bar">
 					<div class="pd-print-summary-text">
 						<span class="pd-summary-selected-count">0</span> ${this.t("selected_variants")} &nbsp;|&nbsp;
-						<strong><span class="pd-summary-total-labels">0</span> ${this.t("pcs")}</strong> ${this.t("total_labels_count")}
+						<strong><span class="pd-summary-total-labels">0</span> ${this.t("pcs")}</strong> ${this.t(
+			"total_labels_count"
+		)}
 					</div>
 				</div>
 			</div>
 		`);
 
 		const renderTableRows = () => {
-			const filtered = active_color === "all" ? all_variants : all_variants.filter((v) => v.color === active_color);
+			const filtered =
+				active_color === "all" ? all_variants : all_variants.filter((v) => v.color === active_color);
 			const tbody = $wrapper.find("#pd-print-tbody");
 
-			const rowsHtml = filtered.map((v) => {
-				const hasPromo = v.discount && v.discount.has_discount;
-				const priceHtml = hasPromo
-					? `<del class="text-muted" style="font-size: 11px;">${flt(v.selling_price).toFixed(2)}</del> <strong style="color: #ef4444;">${flt(v.promo_price).toFixed(2)}</strong> <span class="indicator-pill red" style="font-size: 10px; padding: 1px 4px; margin-left: 2px;">-${v.discount_pct}%</span>`
-					: flt(v.selling_price).toFixed(2);
+			const rowsHtml = filtered
+				.map((v) => {
+					const hasPromo = v.discount && v.discount.has_discount;
+					const priceHtml = hasPromo
+						? `<del class="text-muted" style="font-size: 11px;">${flt(v.selling_price).toFixed(
+								2
+						  )}</del> <strong style="color: #ef4444;">${flt(v.promo_price).toFixed(
+								2
+						  )}</strong> <span class="indicator-pill red" style="font-size: 10px; padding: 1px 4px; margin-left: 2px;">-${
+								v.discount_pct
+						  }%</span>`
+						: flt(v.selling_price).toFixed(2);
 
-				return `
-					<tr class="${v.selected ? 'is-selected' : ''}" data-item-code="${frappe.utils.escape_html(v.item_code)}">
+					return `
+					<tr class="${v.selected ? "is-selected" : ""}" data-item-code="${frappe.utils.escape_html(v.item_code)}">
 						<td style="text-align: center;">
-							<input type="checkbox" class="pd-row-check" data-item-code="${frappe.utils.escape_html(v.item_code)}" ${v.selected ? 'checked' : ''}>
+							<input type="checkbox" class="pd-row-check" data-item-code="${frappe.utils.escape_html(v.item_code)}" ${
+						v.selected ? "checked" : ""
+					}>
 						</td>
-						${has_colors ? `<td><span class="indicator-pill gray" style="font-size: 11px;">${frappe.utils.escape_html(v.color || "-")}</span></td>` : ''}
+						${
+							has_colors
+								? `<td><span class="indicator-pill gray" style="font-size: 11px;">${frappe.utils.escape_html(
+										v.color || "-"
+								  )}</span></td>`
+								: ""
+						}
 						<td><b>${frappe.utils.escape_html(v.size)}</b></td>
 						<td class="text-muted font-monospace">${frappe.utils.escape_html(v.short_code || "-")}</td>
 						<td class="font-monospace" style="color: #1e293b;">${frappe.utils.escape_html(v.barcode)}</td>
@@ -947,14 +1120,21 @@ class ProductDetailApp {
 						<td class="text-right pd-num">${v.stock_qty}</td>
 						<td style="text-align: center;">
 							<div class="pd-stepper-wrap">
-								<button type="button" class="btn btn-default btn-xs pd-step-btn pd-step-down" data-item-code="${frappe.utils.escape_html(v.item_code)}">-</button>
-								<input type="number" min="0" max="9999" class="form-control input-xs pd-print-qty-input" data-item-code="${frappe.utils.escape_html(v.item_code)}" value="${v.print_qty}">
-								<button type="button" class="btn btn-default btn-xs pd-step-btn pd-step-up" data-item-code="${frappe.utils.escape_html(v.item_code)}">+</button>
+								<button type="button" class="btn btn-default btn-xs pd-step-btn pd-step-down" data-item-code="${frappe.utils.escape_html(
+									v.item_code
+								)}">-</button>
+								<input type="number" min="0" max="9999" class="form-control input-xs pd-print-qty-input" data-item-code="${frappe.utils.escape_html(
+									v.item_code
+								)}" value="${v.print_qty}">
+								<button type="button" class="btn btn-default btn-xs pd-step-btn pd-step-up" data-item-code="${frappe.utils.escape_html(
+									v.item_code
+								)}">+</button>
 							</div>
 						</td>
 					</tr>
 				`;
-			}).join("");
+				})
+				.join("");
 
 			tbody.html(rowsHtml);
 			updateTotals();
@@ -980,7 +1160,8 @@ class ProductDetailApp {
 			}
 
 			// Update check-all checkbox state for visible items
-			const visible = active_color === "all" ? all_variants : all_variants.filter((v) => v.color === active_color);
+			const visible =
+				active_color === "all" ? all_variants : all_variants.filter((v) => v.color === active_color);
 			const allChecked = visible.length > 0 && visible.every((v) => v.selected && v.print_qty > 0);
 			$wrapper.find("#pd-print-check-all").prop("checked", allChecked);
 		};
@@ -1003,7 +1184,8 @@ class ProductDetailApp {
 		// Presets
 		$wrapper.find(".pd-preset-btn").on("click", function () {
 			const preset = $(this).data("preset");
-			const target_variants = active_color === "all" ? all_variants : all_variants.filter((v) => v.color === active_color);
+			const target_variants =
+				active_color === "all" ? all_variants : all_variants.filter((v) => v.color === active_color);
 
 			target_variants.forEach((v) => {
 				if (preset === "1") {
@@ -1023,7 +1205,8 @@ class ProductDetailApp {
 		// Apply fixed qty
 		$wrapper.find("#pd-btn-apply-fixed").on("click", function () {
 			const val = Math.max(0, parseInt($wrapper.find("#pd-fixed-val").val() || 1, 10));
-			const target_variants = active_color === "all" ? all_variants : all_variants.filter((v) => v.color === active_color);
+			const target_variants =
+				active_color === "all" ? all_variants : all_variants.filter((v) => v.color === active_color);
 			target_variants.forEach((v) => {
 				v.print_qty = val;
 				v.selected = val > 0;
@@ -1034,7 +1217,8 @@ class ProductDetailApp {
 		// Check all
 		$wrapper.find("#pd-print-check-all").on("change", function () {
 			const checked = $(this).is(":checked");
-			const target_variants = active_color === "all" ? all_variants : all_variants.filter((v) => v.color === active_color);
+			const target_variants =
+				active_color === "all" ? all_variants : all_variants.filter((v) => v.color === active_color);
 			target_variants.forEach((v) => {
 				v.selected = checked;
 				if (checked && v.print_qty === 0) {
@@ -1108,7 +1292,8 @@ class ProductDetailApp {
 		items.forEach((item, idx) => {
 			const itemTitle = item.item_name || this.data.item_name;
 			const colorSize = [item.color, item.size].filter(Boolean).join(" / ");
-			const fullTitle = colorSize && !itemTitle.includes(item.size) ? `${itemTitle} (${colorSize})` : itemTitle;
+			const fullTitle =
+				colorSize && !itemTitle.includes(item.size) ? `${itemTitle} (${colorSize})` : itemTitle;
 			const displayArt = item.short_code || item.item_code;
 
 			if (format === "sale") {
@@ -1148,7 +1333,11 @@ class ProductDetailApp {
 						<div class="label-bottom">
 							<div class="label-meta">
 								<div>Арт: <b>${frappe.utils.escape_html(displayArt)}</b></div>
-								${item.size ? `<div>Разм: <b>${frappe.utils.escape_html(item.size)}</b></div>` : `<div>Ед: <b>${frappe.utils.escape_html(item.stock_uom)}</b></div>`}
+								${
+									item.size
+										? `<div>Разм: <b>${frappe.utils.escape_html(item.size)}</b></div>`
+										: `<div>Ед: <b>${frappe.utils.escape_html(item.stock_uom)}</b></div>`
+								}
 							</div>
 							<div class="label-price-block">
 								<span class="label-price-val">${flt(item.selling_price).toFixed(2)}</span>
@@ -1400,7 +1589,12 @@ class ProductDetailApp {
 		<body>
 			${labels_html}
 			<script>
-				var raw_items = ${JSON.stringify(items.map((it) => ({ code: String(it.barcode || it.item_code || "").trim(), format: format })))};
+				var raw_items = ${JSON.stringify(
+					items.map((it) => ({
+						code: String(it.barcode || it.item_code || "").trim(),
+						format: format,
+					}))
+				)};
 				
 				function renderBarcodes() {
 					raw_items.forEach(function(itemObj, idx) {
@@ -1456,7 +1650,9 @@ class ProductDetailApp {
 		} else {
 			let $iframe = $("#pd-hidden-print-frame");
 			if (!$iframe.length) {
-				$iframe = $('<iframe id="pd-hidden-print-frame" style="display:none;width:0;height:0;border:0;"></iframe>').appendTo("body");
+				$iframe = $(
+					'<iframe id="pd-hidden-print-frame" style="display:none;width:0;height:0;border:0;"></iframe>'
+				).appendTo("body");
 			}
 			const doc = $iframe[0].contentDocument || $iframe[0].contentWindow.document;
 			doc.open();
@@ -1465,4 +1661,3 @@ class ProductDetailApp {
 		}
 	}
 }
-

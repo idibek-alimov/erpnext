@@ -94,7 +94,7 @@ class StaffHubApp {
 		this.page.set_primary_action(
 			this.t("btn_new_staff"),
 			() => {
-				frappe.new_doc("Employee");
+				this.open_new_staff_dialog();
 			},
 			"add"
 		);
@@ -269,6 +269,13 @@ class StaffHubApp {
 				? `<span class="badge-scheme has-scheme" title="${frappe.utils.escape_html(emp.commission_scheme)}">⚡ ${frappe.utils.escape_html(emp.commission_scheme)}</span>`
 				: `<span class="badge-scheme">${this.t("no_scheme")}</span>`;
 
+			const spBadge = emp.sales_person
+				? `<span class="staff-role-tag tag-sp" title="Sales Person: ${frappe.utils.escape_html(emp.sales_person)}">🛍️ ${this.lang === "tg" ? "Фурӯшанда" : "Продавец"}</span>`
+				: "";
+			const posBadge = emp.user_id
+				? `<span class="staff-role-tag tag-pos" title="User: ${frappe.utils.escape_html(emp.user_id)}">🔐 POS</span>`
+				: "";
+
 			html += `
 				<tr class="staff-row" data-employee="${encodeURIComponent(emp.name)}">
 					<td>
@@ -276,7 +283,10 @@ class StaffHubApp {
 							${avatarHtml}
 							<div class="staff-meta">
 								<span class="staff-name">${frappe.utils.escape_html(emp.employee_name)}</span>
-								<span class="staff-role">${frappe.utils.escape_html(emp.designation)} ${emp.department ? "• " + frappe.utils.escape_html(emp.department) : ""}</span>
+								<span class="staff-role">
+									${frappe.utils.escape_html(emp.designation)} ${emp.department ? "• " + frappe.utils.escape_html(emp.department) : ""}
+									${spBadge}${posBadge}
+								</span>
 							</div>
 						</div>
 					</td>
@@ -392,5 +402,331 @@ class StaffHubApp {
 			" " +
 			curr
 		);
+	}
+
+	open_new_staff_dialog() {
+		frappe.call({
+			method: "erpnext.setup.page.staff_hub.staff_hub.get_staff_onboarding_context",
+			callback: (r) => {
+				const ctx = r.message || {};
+				this._show_staff_modal(ctx);
+			},
+		});
+	}
+
+	_show_staff_modal(ctx) {
+		const isTg = this.lang === "tg";
+		const schemes = ctx.schemes || [];
+		const sources = ctx.payment_sources || [];
+		const posProfiles = ctx.pos_profiles || [];
+
+		const schemeOptions = [
+			{ label: isTg ? "-- Бе комиссия --" : "-- Без комиссии --", value: "" },
+			...schemes.map((s) => ({
+				label: `${s.name} (${s.calculation_type}${s.fixed_rate ? ": " + s.fixed_rate + "%" : ""})`,
+				value: s.name,
+			})),
+		];
+
+		const sourceOptions = [
+			{ label: isTg ? "-- Интихоб нашудааст --" : "-- Не выбрано --", value: "" },
+			...sources.map((src) => ({
+				label: src.label,
+				value: src.account,
+			})),
+		];
+
+		const posProfileOptions = posProfiles.map((p) => ({
+			label: `${p.name}${p.warehouse ? " • " + p.warehouse : ""}`,
+			value: p.name,
+		}));
+
+		const roleDefs = [
+			{
+				key: "Sales Person",
+				icon: "🛍️",
+				title: isTg ? "Фурӯшанда (Продавец)" : "Продавец (Sales Person)",
+				desc: isTg
+					? "Корманд + Фурӯшанда барои чекҳо ва комиссия (бе логин)"
+					: "Сотрудник + Продавец в чеках и комиссиях (без входа в систему)",
+				banner: isTg
+					? "✅ Автоматӣ сохта мешавад: Профили Корманд + Фурӯшанда дар дарахти фурӯш"
+					: "✅ Будет создано: Профиль сотрудника + Продавец (Sales Person)",
+			},
+			{
+				key: "Cashier",
+				icon: "🖥️",
+				title: isTg ? "Кассир (Хазинадор)" : "Кассир (POS Cashier)",
+				desc: isTg
+					? "Корманд + Фурӯшанда + Аккаунти кассир бо ПИН-код дар POS"
+					: "Сотрудник + Продавец + Аккаунт кассира с ПИН-кодом в POS",
+				banner: isTg
+					? "✅ Автоматӣ сохта мешавад: Корманд + Фурӯшанда + Корбари POS + Пайваст ба POS Profile"
+					: "✅ Будет создано: Сотрудник + Продавец + Пользователь POS + Привязка к POS терминалу",
+			},
+			{
+				key: "Manager",
+				icon: "🔑",
+				title: isTg ? "Менеҷер / Администратор" : "Менеджер / Администратор",
+				desc: isTg
+					? "Корманд + Фурӯшанда + Ҳуқуқи менеҷер ва супервайзери POS"
+					: "Сотрудник + Продавец + Права менеджера и супервайзера POS",
+				banner: isTg
+					? "✅ Автоматӣ сохта мешавад: Корманд + Фурӯшанда + Аккаунти Менеҷер / POS Supervisor"
+					: "✅ Будет создано: Сотрудник + Продавец + Аккаунт Менеджера и Супервайзера POS",
+			},
+			{
+				key: "Non-Sales",
+				icon: "🛠️",
+				title: isTg ? "Техперсонал / Дигар" : "Техперсонал / Другое",
+				desc: isTg
+					? "Танҳо профили корманд барои маош, аванс ва хароҷот (бе фурӯш)"
+					: "Только сотрудник для учета оклада, авансов и расходов (без продаж)",
+				banner: isTg
+					? "✅ Автоматӣ сохта мешавад: Танҳо профили Корманд (бе Sales Person ва бе POS)"
+					: "✅ Будет создано: Только профиль сотрудника (без Sales Person и без POS)",
+			},
+		];
+
+		const d = new frappe.ui.Dialog({
+			title: isTg ? "➕ Иловаи корманди нав" : "➕ Новый сотрудник (Быстрое создание)",
+			size: "large",
+			fields: [
+				{
+					fieldname: "role_cards_html",
+					fieldtype: "HTML",
+				},
+				{
+					fieldname: "role_type",
+					fieldtype: "Data",
+					default: "Sales Person",
+					hidden: 1,
+				},
+				{
+					fieldtype: "Section Break",
+					label: isTg ? "👤 Маълумоти шахсӣ" : "👤 Личные данные",
+				},
+				{
+					label: isTg ? "Ном (Имя)" : "Имя",
+					fieldname: "first_name",
+					fieldtype: "Data",
+					reqd: 1,
+					placeholder: isTg ? "Масалан: Алишер" : "Например: Алишер",
+				},
+				{
+					label: isTg ? "Насаб (Фамилия)" : "Фамилия",
+					fieldname: "last_name",
+					fieldtype: "Data",
+					placeholder: isTg ? "Масалан: Каримов" : "Например: Каримов",
+				},
+				{
+					fieldtype: "Column Break",
+				},
+				{
+					label: isTg ? "Рақами телефон" : "Телефон / Мобильный",
+					fieldname: "cell_number",
+					fieldtype: "Data",
+					placeholder: "+992 92 000 0000",
+				},
+				{
+					label: isTg ? "Вазифа / Унвон (ихтиёрӣ)" : "Должность (необязательно)",
+					fieldname: "custom_designation",
+					fieldtype: "Data",
+					placeholder: isTg
+						? "Агар холӣ бошад, аз рӯи нақш гузошта мешавад"
+						: "Оставьте пустым для авто-должности по роли",
+				},
+				{
+					fieldtype: "Section Break",
+					label: isTg ? "💰 Маош ва Комиссия" : "💰 Оклад и Комиссионные",
+				},
+				{
+					label: isTg ? "Маоши асосӣ (Оклад)" : "Базовый оклад",
+					fieldname: "base_salary",
+					fieldtype: "Currency",
+					default: 0,
+				},
+				{
+					label: isTg ? "Басомади маош" : "Периодичность оклада",
+					fieldname: "salary_frequency",
+					fieldtype: "Select",
+					options: [
+						{ label: isTg ? "Моҳона (Monthly)" : "Ежемесячно (Monthly)", value: "Monthly" },
+						{ label: isTg ? "Ҳафтаина (Weekly)" : "Еженедельно (Weekly)", value: "Weekly" },
+						{ label: isTg ? "Рӯзона (Daily)" : "Ежедневно (Daily)", value: "Daily" },
+					],
+					default: "Monthly",
+				},
+				{
+					fieldtype: "Column Break",
+				},
+				{
+					label: isTg ? "Схемаи комиссия" : "Схема комиссионных",
+					fieldname: "commission_scheme",
+					fieldtype: "Select",
+					options: schemeOptions,
+					default: schemes[0] ? schemes[0].name : "",
+					depends_on: "eval:doc.role_type !== 'Non-Sales'",
+				},
+				{
+					label: isTg ? "Кассаи пешфарз (барои аванс/маош)" : "Касса по умолчанию (для выплат)",
+					fieldname: "default_cash_account",
+					fieldtype: "Select",
+					options: sourceOptions,
+					default: sources[0] ? sources[0].account : "",
+				},
+				{
+					fieldname: "pos_access_section",
+					fieldtype: "Section Break",
+					label: isTg ? "🖥️ Дастрасӣ ба POS ва Система" : "🖥️ Доступ к POS-терминалу и Системе",
+					depends_on: "eval:doc.role_type === 'Cashier' || doc.role_type === 'Manager'",
+				},
+				{
+					label: isTg ? "Терминали POS (Мағоза)" : "POS Профиль (Терминал / Касса)",
+					fieldname: "pos_profile",
+					fieldtype: "Select",
+					options: posProfileOptions,
+					default: posProfileOptions[0] ? posProfileOptions[0].value : "",
+					mandatory_depends_on: "eval:doc.role_type === 'Cashier' || doc.role_type === 'Manager'",
+				},
+				{
+					label: isTg ? "Логин ё Email барои даромад" : "Логин или Email для входа",
+					fieldname: "login_id",
+					fieldtype: "Data",
+					placeholder: isTg ? "Масалан: kassir1 ё ali@shop.tj" : "Например: kassir1 или ali@shop.tj",
+					description: isTg
+						? "Метавонед логини оддӣ (бе @) ё почтаи электронӣ ворид кунед"
+						: "Можно ввести простой логин (без @) или email",
+					mandatory_depends_on: "eval:doc.role_type === 'Cashier' || doc.role_type === 'Manager'",
+				},
+				{
+					fieldtype: "Column Break",
+				},
+				{
+					label: isTg ? "ПИН-коди POS / Парол (4–8 рақам)" : "POS ПИН-код / Пароль (4–8 цифр)",
+					fieldname: "pos_pin",
+					fieldtype: "Password",
+					placeholder: "1234",
+					description: isTg
+						? "Барои кушодани касса ва тасдиқи амалиёт дар POS Awesome (танҳо рақамҳо)"
+						: "Для входа кассира на терминале POS Awesome (4–8 цифр)",
+					mandatory_depends_on: "eval:doc.role_type === 'Cashier' || doc.role_type === 'Manager'",
+				},
+			],
+			primary_action_label: isTg ? "✅ Сохтани корманд" : "✅ Создать сотрудника",
+			primary_action: (values) => {
+				const roleType = values.role_type || "Sales Person";
+				if (roleType === "Cashier" || roleType === "Manager") {
+					const pin = String(values.pos_pin || "").trim();
+					if (!/^\d{4,8}$/.test(pin)) {
+						frappe.msgprint({
+							title: isTg ? "Хатогии ПИН-код" : "Ошибка ПИН-кода",
+							indicator: "red",
+							message: isTg
+								? "ПИН-коди POS бояд аз 4 то 8 рақам иборат бошад (масалан: 1234)."
+								: "POS ПИН-код должен состоять из 4–8 цифр (например: 1234).",
+						});
+						return;
+					}
+					if (!values.pos_profile) {
+						frappe.msgprint({
+							title: isTg ? "POS Профил" : "POS Профиль",
+							indicator: "red",
+							message: isTg
+								? "Лутфан терминали POS-ро интихоб кунед."
+								: "Пожалуйста, выберите POS Профиль (терминал).",
+						});
+						return;
+					}
+				}
+
+				d.disable_primary_action();
+				frappe.call({
+					method: "erpnext.setup.page.staff_hub.staff_hub.create_staff_member",
+					args: {
+						first_name: values.first_name,
+						last_name: values.last_name,
+						cell_number: values.cell_number,
+						role_type: roleType,
+						custom_designation: values.custom_designation,
+						base_salary: values.base_salary,
+						salary_frequency: values.salary_frequency,
+						commission_scheme: values.commission_scheme,
+						default_cash_account: values.default_cash_account,
+						login_id: values.login_id,
+						pos_pin: values.pos_pin,
+						pos_profile: values.pos_profile,
+					},
+					callback: (res) => {
+						d.enable_primary_action();
+						if (res && res.message && res.message.success) {
+							const info = res.message;
+							const createdParts = [
+								`${isTg ? "Корманд" : "Сотрудник"}: <b>${frappe.utils.escape_html(info.employee_name)}</b>`,
+							];
+							if (info.sales_person) {
+								createdParts.push(
+									`${isTg ? "Фурӯшанда" : "Продавец"}: <b>${frappe.utils.escape_html(info.sales_person)}</b>`
+								);
+							}
+							if (info.user_id) {
+								createdParts.push(
+									`POS / User: <b>${frappe.utils.escape_html(info.user_id)}</b> (${frappe.utils.escape_html(info.pos_profile || "")})`
+								);
+							}
+							frappe.show_alert(
+								{
+									message: createdParts.join("<br>"),
+									indicator: "green",
+								},
+								7
+							);
+							d.hide();
+							this.refresh();
+						}
+					},
+					error: () => {
+						d.enable_primary_action();
+					},
+				});
+			},
+		});
+
+		// Render interactive role cards inside role_cards_html
+		const $cardsWrapper = d.fields_dict.role_cards_html.$wrapper;
+		const renderRoleCards = (selectedKey) => {
+			const selectedDef = roleDefs.find((r) => r.key === selectedKey) || roleDefs[0];
+			const cardsHtml = roleDefs
+				.map(
+					(r) => `
+					<div class="staff-role-card ${r.key === selectedKey ? "selected" : ""}" data-role="${r.key}">
+						<div class="staff-role-card-icon">${r.icon}</div>
+						<div class="staff-role-card-body">
+							<div class="staff-role-card-title">${r.title}</div>
+							<div class="staff-role-card-desc">${r.desc}</div>
+						</div>
+					</div>
+				`
+				)
+				.join("");
+
+			$cardsWrapper.html(`
+				<div style="margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--text-muted, #475569);">
+					${isTg ? "Нақши кормандро интихоб кунед:" : "Выберите роль сотрудника:"}
+				</div>
+				<div class="staff-role-cards-grid">${cardsHtml}</div>
+				<div class="staff-Provision-banner">${selectedDef.banner}</div>
+			`);
+
+			$cardsWrapper.find(".staff-role-card").on("click", (e) => {
+				const nextRole = $(e.currentTarget).attr("data-role");
+				d.set_value("role_type", nextRole);
+				d.refresh_dependency();
+				renderRoleCards(nextRole);
+			});
+		};
+
+		renderRoleCards("Sales Person");
+		d.show();
 	}
 }

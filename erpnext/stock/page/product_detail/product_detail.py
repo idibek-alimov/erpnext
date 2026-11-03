@@ -3,8 +3,130 @@
 
 import frappe
 from frappe import _
-from frappe.utils import flt, cint, add_days, today, format_date, nowtime
+from frappe.utils import add_days, cint, date_diff, flt, get_first_day, getdate, nowtime, today
+
+from erpnext.accounts.report.gross_profit.gross_profit import GrossProfitGenerator
 from erpnext.stock.page.product_catalog.product_catalog import get_default_company, get_stores_warehouse
+
+
+class ProductCostLookup(GrossProfitGenerator):
+	"""Reuse ERPNext valuation without the report's invoice regrouping of returns."""
+
+	def __init__(self, rows, company):
+		self.filters = frappe._dict(company=company, to_date=today())
+		self.si_list = rows
+		self.sle = {}
+		self.average_buying_rate = {}
+		self.currency_precision = cint(frappe.db.get_default("currency_precision")) or 3
+		self.get_delivery_notes()
+		self.load_non_stock_items()
+		self.load_product_bundle()
+
+	def cost(self, row):
+		# Fallback valuation must be looked up at each transaction's date.
+		self.average_buying_rate = {}
+		row = row.copy()
+		self.filters.to_date = row.posting_date
+		if row.dn_detail:
+			row.item_row = row.dn_detail
+		bundles = self.product_bundles.get(
+			row.parenttype if row.update_stock else "Delivery Note", {}
+		).get(row.parent if row.update_stock else row.delivery_note, {})
+		if row.item_code in bundles:
+			return self.get_buying_amount_from_product_bundle(row, bundles[row.item_code])
+		return self.get_buying_amount(row, row.item_code)
+
+
+def summarize_product_sales(rows):
+	"""Keep returns on their own date; quantities are in the item's stock UOM."""
+	daily = {}
+	for row in rows:
+		key = str(row.posting_date)
+		d = daily.setdefault(key, dict(date=key, sold=0, returned=0, revenue=0, profit=0, invoices=[]))
+		qty = flt(row.qty)
+		d["sold"] += max(qty, 0)
+		d["returned"] += max(-qty, 0)
+		d["revenue"] += flt(row.base_net_amount)
+		d["profit"] += flt(row.base_net_amount) - flt(row.buying_amount)
+		if row.parent not in d["invoices"]:
+			d["invoices"].append(row.parent)
+	return sorted(daily.values(), key=lambda d: d["date"], reverse=True)
+
+
+@frappe.whitelist()
+def get_product_overview(item_code, period="month", warehouse=None, color=None):
+	if not frappe.db.exists("Item", item_code):
+		frappe.throw(_("Item not found"), frappe.DoesNotExistError)
+	item_code = frappe.db.get_value("Item", item_code, "variant_of") or item_code
+	if not frappe.has_permission("Item", "read", item_code):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	company = get_default_company()
+	frappe.has_permission("Company", "read", company, throw=True)
+	warehouses = frappe.get_list("Warehouse", filters={"company": company, "is_group": 0}, pluck="name", limit_page_length=0)
+	if warehouse and warehouse not in warehouses:
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	scope_warehouses = [warehouse] if warehouse else warehouses
+	variants = frappe.get_all("Item", filters={"variant_of": item_code}, pluck="name")
+	codes = variants or [item_code]
+	if color:
+		codes = frappe.db.sql_list("""SELECT DISTINCT parent FROM `tabItem Variant Attribute`
+			WHERE parent IN %(codes)s AND LOWER(attribute) IN ('color', 'colour')
+			AND attribute_value = %(color)s""", {"codes": codes, "color": color})
+	end = getdate(today())
+	starts = {"month": get_first_day(end), "today": end, "7d": add_days(end, -6), "30d": add_days(end, -29), "all": getdate("1900-01-01")}
+	if period not in starts:
+		frappe.throw(_("Invalid period"))
+	start = starts[period]
+	stock = []
+	if codes and scope_warehouses:
+		stock = frappe.db.sql("""SELECT item_code, SUM(actual_qty) qty, SUM(stock_value) value
+			FROM `tabBin` WHERE item_code IN %(codes)s AND warehouse IN %(warehouses)s
+			GROUP BY item_code""", {"codes": codes, "warehouses": scope_warehouses}, as_dict=True)
+	can_read_sales = frappe.has_permission("Sales Invoice", "read")
+	rows = []
+	if codes and scope_warehouses and can_read_sales:
+		# Resolve invoice permissions before reading their child rows.
+		invoices = frappe.get_list("Sales Invoice", filters={"company": company, "docstatus": 1,
+			"posting_date": ["between", [start, end]], "is_opening": "No"},
+			pluck="name", limit_page_length=0)
+		if invoices:
+			query = GrossProfitGenerator.__new__(GrossProfitGenerator)
+			query.filters = frappe._dict(company=company, from_date=start, to_date=end)
+			sii = frappe.qb.DocType("Sales Invoice Item")
+			si = frappe.qb.DocType("Sales Invoice")
+			rows = query.prepare_invoice_query().where(sii.item_code.isin(codes)).where(
+				sii.warehouse.isin(scope_warehouses)).where(si.name.isin(invoices)).run(as_dict=True)
+			costs = ProductCostLookup(rows, company)
+			for row in rows:
+				if row.is_debit_note:
+					row.qty = 0
+					row.buying_amount = 0
+				else:
+					row.buying_amount = costs.cost(row)
+	daily = summarize_product_sales(rows)
+	variant_sold = {}
+	for row in rows:
+		variant_sold[row.item_code] = variant_sold.get(row.item_code, 0) + flt(row.qty)
+	chart_start = min((getdate(d["date"]) for d in daily), default=end) if period == "all" else getdate(start)
+	# Monthly buckets keep all-time charts readable without losing history detail.
+	monthly = date_diff(end, chart_start) > 120
+	series = {}
+	for i in range(date_diff(end, chart_start) + 1):
+		day = str(add_days(chart_start, i))
+		series.setdefault(day[:7] if monthly else day, [0, 0])
+	for d in daily:
+		key = d["date"][:7] if monthly else d["date"]
+		series[key][0] += d["revenue"]
+		series[key][1] += d["profit"]
+	stock_by_code = {s.item_code: s for s in stock}
+	return dict(company=company, currency=frappe.get_cached_value("Company", company, "default_currency"),
+		warehouses=warehouses, from_date=str(chart_start), to_date=str(end), can_read_sales=can_read_sales,
+		stock=sum(flt(s.qty) for s in stock), stock_value=sum(flt(s.value) for s in stock),
+		sold=sum(d["sold"] for d in daily), returned=sum(d["returned"] for d in daily),
+		revenue=sum(d["revenue"] for d in daily), profit=sum(d["profit"] for d in daily),
+		daily=daily, labels=list(series), revenue_series=[v[0] for v in series.values()],
+		profit_series=[v[1] for v in series.values()], variant_sold=variant_sold,
+		variant_stock={c: flt(stock_by_code[c].qty) if c in stock_by_code else 0 for c in codes})
 
 
 def _generate_ean13():
@@ -72,7 +194,7 @@ def get_product_detail(item_code):
 	if item.has_variants:
 		variants = frappe.get_all(
 			"Item",
-			filters={"variant_of": item_code, "disabled": 0},
+			filters={"variant_of": item_code},
 			fields=["name", "item_name", "image", "custom_short_code"],
 			order_by="creation asc",
 		)
@@ -88,7 +210,7 @@ def get_product_detail(item_code):
 
 	codes = [v.name for v in variants] or [item_code]
 
-	# Barcodes (Ensure all variants have real EAN-13 barcodes)
+	# Reading a product must never create or replace barcodes.
 	barcode_map = {}
 	all_item_codes = list(set(codes + [item_code]))
 
@@ -103,22 +225,7 @@ def get_product_detail(item_code):
 		if b.parent not in barcode_map and b.barcode and len(b.barcode) >= 12:
 			barcode_map[b.parent] = b.barcode
 		elif b.parent not in barcode_map:
-			new_ean = _generate_ean13()
-			frappe.db.set_value("Item Barcode", b.name, {"barcode": new_ean, "barcode_type": "EAN"}, update_modified=False)
-			barcode_map[b.parent] = new_ean
-
-	for code in all_item_codes:
-		if code not in barcode_map:
-			new_ean = _generate_ean13()
-			frappe.get_doc({
-				"doctype": "Item Barcode",
-				"parent": code,
-				"parenttype": "Item",
-				"parentfield": "barcodes",
-				"barcode": new_ean,
-				"barcode_type": "EAN",
-			}).insert(ignore_permissions=True)
-			barcode_map[code] = new_ean
+			barcode_map[b.parent] = b.barcode
 
 	# Attributes (Colour / Size)
 	attr_map = {}
@@ -200,57 +307,6 @@ def get_product_detail(item_code):
 	cat_rule = active_cat_rules[0] if active_cat_rules else None
 
 
-	# All historical sales items
-	sales_records = frappe.db.sql(
-		"""SELECT sii.item_code, sii.qty, sii.amount, si.posting_date
-		FROM `tabSales Invoice Item` sii
-		JOIN `tabSales Invoice` si ON si.name = sii.parent
-		WHERE sii.item_code IN %(c)s AND si.docstatus = 1
-		ORDER BY si.posting_date ASC""",
-		{"c": codes},
-		as_dict=True,
-	)
-
-	sold_map = {}
-	total_revenue = 0.0
-	total_cost = 0.0
-	item_revenue_map = {}
-	item_cost_map = {}
-
-	for s in sales_records:
-		q = flt(s.qty)
-		amt = flt(s.amount)
-		c_code = s.item_code
-		sold_map[c_code] = sold_map.get(c_code, 0) + q
-		total_revenue += amt
-		cost = q * buy_map.get(c_code, 0)
-		total_cost += cost
-		item_revenue_map[c_code] = item_revenue_map.get(c_code, 0.0) + amt
-		item_cost_map[c_code] = item_cost_map.get(c_code, 0.0) + cost
-
-	total_profit = total_revenue - total_cost
-	margin_pct = flt((total_profit / total_revenue) * 100, 1) if total_revenue > 0 else 0.0
-
-	# 30-day Daily Sales Chart Series
-	days_list = [add_days(today(), -i) for i in range(29, -1, -1)]
-	daily_map = {}
-	daily_color_map = {}
-	for s in sales_records:
-		p_date = str(s.posting_date)
-		q = flt(s.qty)
-		daily_map[p_date] = daily_map.get(p_date, 0) + q
-		v_color = attr_map.get(s.item_code, {}).get("colour") or attr_map.get(s.item_code, {}).get("color") or ""
-		if v_color:
-			daily_color_map.setdefault(v_color, {})
-			daily_color_map[v_color][p_date] = daily_color_map[v_color].get(p_date, 0) + q
-
-	chart_labels = [format_date(d, "dd MMM") for d in days_list]
-	chart_values = [daily_map.get(str(d), 0) for d in days_list]
-
-	color_chart_values = {}
-	for col, c_data in daily_color_map.items():
-		color_chart_values[col] = [c_data.get(str(d), 0) for d in days_list]
-
 	# Group variants by color
 	colors, order = {}, []
 	for v in variants:
@@ -263,14 +319,6 @@ def get_product_detail(item_code):
 				"image": "",
 				"sizes": [],
 				"stock": 0,
-				"sold": 0,
-				"revenue": 0.0,
-				"profit": 0.0,
-				"margin_pct": 0.0,
-				"sold_last_30d": 0,
-				"velocity_per_day": 0.0,
-				"runway_days": 0,
-				"top_sizes": [],
 			}
 			order.append(color)
 
@@ -278,11 +326,8 @@ def get_product_detail(item_code):
 		if v.image and not c["image"]:
 			c["image"] = v.image
 
-		stock, sold = stock_map.get(v.name, 0), sold_map.get(v.name, 0)
+		stock = stock_map.get(v.name, 0)
 		c["stock"] += stock
-		c["sold"] += sold
-		c["revenue"] += item_revenue_map.get(v.name, 0.0)
-		c["profit"] += item_revenue_map.get(v.name, 0.0) - item_cost_map.get(v.name, 0.0)
 
 		# Check effective discount
 		eff_rule = item_rule_map.get(v.name) or item_rule_map.get(item_code)
@@ -324,81 +369,12 @@ def get_product_detail(item_code):
 				"short_code": v.custom_short_code or "",
 				"barcode": barcode_map.get(v.name) or v.custom_short_code or v.name,
 				"stock_qty": stock,
-				"sold_qty": sold,
+				"sold_qty": 0,
 				"buying_price": buy_map.get(v.name, 0),
 				"selling_price": base_sell,
 				"discount": discount_info,
 			}
 		)
-
-	# Compute stats and top sizes for each color
-	for c in colors.values():
-		c_discounts = [s["discount"] for s in c["sizes"] if s["discount"]["has_discount"]]
-		c["discount"] = c_discounts[0] if c_discounts else {"has_discount": False}
-
-		c["margin_pct"] = flt((c["profit"] / c["revenue"]) * 100, 1) if c["revenue"] > 0 else 0.0
-		c["sold_last_30d"] = sum(daily_color_map.get(c["color"], {}).values())
-		c["velocity_per_day"] = round(c["sold_last_30d"] / 30.0, 1)
-		c["runway_days"] = (
-			round(c["stock"] / c["velocity_per_day"])
-			if c["velocity_per_day"] > 0
-			else (999 if c["stock"] > 0 else 0)
-		)
-
-		# Top sizes for this color (up to 3)
-		valid_sizes = [s for s in c["sizes"] if s["sold_qty"] > 0]
-		valid_sizes.sort(key=lambda s: s["sold_qty"], reverse=True)
-		c_sold = c["sold"] or 1
-		c["top_sizes"] = [
-			{
-				"name": s["size"],
-				"qty": s["sold_qty"],
-				"pct": round((s["sold_qty"] / c_sold) * 100),
-			}
-			for s in valid_sizes[:3]
-		]
-
-	total_stock = sum(c["stock"] for c in colors.values())
-	total_sold = sum(c["sold"] for c in colors.values())
-
-	# Best selling sizes overall (up to 3)
-	size_sales = {}
-	for v in variants:
-		attrs = attr_map.get(v.name, {})
-		sz = attrs.get("size") or v.item_name
-		size_sales[sz] = size_sales.get(sz, 0) + sold_map.get(v.name, 0)
-
-	top_sizes_overall = []
-	if size_sales:
-		sorted_sizes = sorted(size_sales.items(), key=lambda x: x[1], reverse=True)
-		t_sold = total_sold or 1
-		top_sizes_overall = [
-			{"name": k, "qty": v, "pct": round((v / t_sold) * 100)}
-			for k, v in sorted_sizes[:3]
-			if v > 0
-		]
-
-	# Best selling colors overall (up to 3)
-	color_sales = {c["color"]: c["sold"] for c in colors.values() if c["color"]}
-	top_colors_overall = []
-	if color_sales:
-		sorted_colors = sorted(color_sales.items(), key=lambda x: x[1], reverse=True)
-		t_sold = total_sold or 1
-		top_colors_overall = [
-			{"name": k, "qty": v, "pct": round((v / t_sold) * 100)}
-			for k, v in sorted_colors[:3]
-			if v > 0
-		]
-
-	sold_last_30d = sum(chart_values)
-	velocity_per_day = round(sold_last_30d / 30.0, 1)
-	runway_days = round(total_stock / velocity_per_day) if velocity_per_day > 0 else (999 if total_stock > 0 else 0)
-
-	top_discount = None
-	for c in colors.values():
-		if c.get("discount", {}).get("has_discount"):
-			top_discount = c["discount"]
-			break
 
 	return {
 		"item_code": item.name,
@@ -412,20 +388,6 @@ def get_product_detail(item_code):
 		"has_variants": item.has_variants,
 		"supplier": get_supplier(item_code, codes),
 		"currency": frappe.db.get_default("currency") or "TJS",
-		"effective_discount": top_discount,
-		"total_stock": total_stock,
-		"total_sold": total_sold,
-		"total_revenue": total_revenue,
-		"total_profit": total_profit,
-		"margin_pct": margin_pct,
-		"sold_last_30d": sold_last_30d,
-		"velocity_per_day": velocity_per_day,
-		"runway_days": runway_days,
-		"top_sizes": top_sizes_overall,
-		"top_colors": top_colors_overall,
-		"chart_labels": chart_labels,
-		"chart_values": chart_values,
-		"color_chart_values": color_chart_values,
 		"colors": [colors[k] for k in order],
 	}
 

@@ -579,6 +579,15 @@ class StaffDetailApp {
 						</select>
 						<small>${this.lang === "tg" ? "Касса барои додани аванс ва маош" : "Основная касса для выплат"}</small>
 					</div>
+
+					<div class="settings-field">
+						<label>${this.lang === "tg" ? "Статуси корманд" : "Статус сотрудника"}</label>
+						<select id="setting-staff-status">
+							<option value="Active" ${emp.status === "Active" ? "selected" : ""}>${this.lang === "tg" ? "Фаъол (Active)" : "Активен (Active)"}</option>
+							<option value="Inactive" ${emp.status !== "Active" ? "selected" : ""}>${this.lang === "tg" ? "Ғайрифаъол (Inactive)" : "Неактивен (Отключен)"}</option>
+						</select>
+						<small>${this.lang === "tg" ? "Ҳангоми ғайрифаъол шудан, дастрасии POS ва Фурӯшанда низ хомӯш мешавад" : "При отключении также деактивируются Продавец и доступ к POS"}</small>
+					</div>
 				</div>
 
 				<button type="button" class="btn-action btn-settle" id="btn-save-staff-settings">
@@ -904,6 +913,7 @@ class StaffDetailApp {
 		const frequency = this.wrapper.find("#setting-salary-frequency").val();
 		const scheme = this.wrapper.find("#setting-commission-scheme").val();
 		const cash_acc = this.wrapper.find("#setting-cash-account").val();
+		const status = this.wrapper.find("#setting-staff-status").val();
 
 		frappe.call({
 			method: "erpnext.setup.page.staff_detail.staff_detail.save_staff_settings",
@@ -913,6 +923,7 @@ class StaffDetailApp {
 				custom_salary_frequency: frequency,
 				custom_commission_scheme: scheme,
 				custom_default_cash_account: cash_acc,
+				status: status,
 			},
 			freeze: true,
 			callback: (r) => {

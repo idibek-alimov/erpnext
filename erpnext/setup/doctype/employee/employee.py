@@ -80,7 +80,22 @@ class Employee(NestedSet):
 			self.update_user()
 			self.update_user_permissions()
 			self.update_user_status()
+		self.update_sales_person_status()
 		self.reset_employee_emails_cache()
+
+	def update_sales_person_status(self):
+		sales_persons = frappe.db.get_all(
+			"Sales Person",
+			filters={"employee": self.name},
+			fields=["name", "enabled"],
+		)
+		if not sales_persons:
+			return
+
+		should_enable = 1 if self.status == "Active" else 0
+		for sp in sales_persons:
+			if int(sp.enabled or 0) != should_enable:
+				frappe.db.set_value("Sales Person", sp.name, "enabled", should_enable, update_modified=False)
 
 	def update_user_permissions(self):
 		if not self.has_value_changed("user_id") and not self.has_value_changed("create_user_permission"):
