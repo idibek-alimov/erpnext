@@ -59,9 +59,13 @@ class ProductCatalogApp {
 		this.selected_category = "All";
 		this.status_filter = "all";
 		this.sort_by = "modified";
+		this.current_page = 1;
+		this.page_size = 20; // Standard ERPNext default limit
+		this.total_records = 0;
 		this.catalog_data = [];
 		this.categories = [];
 		this.currency = "TJS";
+		this.is_loading = false;
 
 		this.init();
 	}
@@ -101,6 +105,7 @@ class ProductCatalogApp {
 			col_sold_30d: { tg: "Фурӯхта шуд (30р)", ru: "Продано (30д)" },
 			col_sold_amount: { tg: "Выручка (30р)", ru: "Выручка (30д)" },
 			total_prefix: { tg: "Ҳамагӣ", ru: "Итого" },
+			total_on_page: { tg: "Ҳамагӣ дар ин саҳифа", ru: "Итого на этой странице" },
 			items_suffix: { tg: "мол", ru: "позиций" },
 			from: { tg: "аз", ru: "от" },
 			pcs: { tg: "дона", ru: "шт" },
@@ -110,6 +115,16 @@ class ProductCatalogApp {
 				tg: "Филтрҳоро тағйир диҳед ё тугмаи '+ Моли нав'-ро пахш намоед.",
 				ru: "Измените параметры фильтра или нажмите '+ Новый товар'.",
 			},
+			showing_range: {
+				tg: "Намоиши {from} - {to} аз {total}",
+				ru: "Показано {from} - {to} из {total}",
+			},
+			page_info: {
+				tg: "Саҳифаи {page} аз {pages}",
+				ru: "Стр. {page} из {pages}",
+			},
+			prev_page: { tg: "Саҳифаи қаблӣ", ru: "Предыдущая страница" },
+			next_page: { tg: "Саҳифаи навбатӣ", ru: "Следующая страница" },
 		};
 		return (dict[key] && dict[key][this.lang]) || key;
 	}
@@ -151,7 +166,7 @@ class ProductCatalogApp {
 					</div>
 				</div>
 
-				<!-- Main Product Table with Sticky Totals Footer -->
+				<!-- Main Product Table with Sticky Totals Footer and Paging Bar -->
 				<div id="catalog-content-area" class="retail-table-container">
 					<div class="text-center py-5"><span class="spinner-border text-primary"></span></div>
 				</div>
@@ -165,42 +180,91 @@ class ProductCatalogApp {
 			clearTimeout(timeout);
 			timeout = setTimeout(() => {
 				this.search_query = e.target.value.trim();
+				this.current_page = 1;
 				this.load_catalog();
 			}, 300);
 		});
 
 		this.wrapper.find("#catalog-category-filter").on("change", (e) => {
 			this.selected_category = e.target.value;
+			this.current_page = 1;
 			this.load_catalog();
 		});
 
 		this.wrapper.find("#catalog-status-filter").on("change", (e) => {
 			this.status_filter = e.target.value;
+			this.current_page = 1;
 			this.load_catalog();
 		});
 
 		this.wrapper.find("#catalog-sort-filter").on("change", (e) => {
 			this.sort_by = e.target.value;
-			this.sort_and_render();
+			this.current_page = 1;
+			this.load_catalog();
+		});
+
+		// Page length selection (20, 100, 500, 2500)
+		this.wrapper.on("click", ".btn-paging", (e) => {
+			const val = parseInt($(e.currentTarget).attr("data-value"), 10);
+			if (val && val !== this.page_size) {
+				this.page_size = val;
+				this.current_page = 1;
+				this.load_catalog();
+			}
+		});
+
+		// Previous page
+		this.wrapper.on("click", ".btn-prev", () => {
+			if (this.current_page > 1) {
+				this.current_page--;
+				this.load_catalog();
+				this.scroll_to_top();
+			}
+		});
+
+		// Next page
+		this.wrapper.on("click", ".btn-next", () => {
+			const max_pages = Math.max(1, Math.ceil(this.total_records / this.page_size));
+			if (this.current_page < max_pages) {
+				this.current_page++;
+				this.load_catalog();
+				this.scroll_to_top();
+			}
 		});
 	}
 
+	scroll_to_top() {
+		const $bar = this.wrapper.find(".retail-filter-bar");
+		if ($bar.length) {
+			$("html, body").animate({ scrollTop: $bar.offset().top - 80 }, 150);
+		}
+	}
+
 	load_catalog() {
+		const $area = this.wrapper.find("#catalog-content-area");
+		$area.find(".retail-catalog-table tbody").css({ opacity: "0.45", pointerEvents: "none" });
+
 		frappe.call({
 			method: "erpnext.stock.page.product_catalog.product_catalog.get_catalog",
 			args: {
 				search: this.search_query,
 				item_group: this.selected_category,
 				status_filter: this.status_filter,
-				page_size: 300,
+				sort_by: this.sort_by,
+				page: this.current_page,
+				page_size: this.page_size,
 			},
 			callback: (r) => {
 				if (r.message) {
 					this.catalog_data = r.message.items || [];
+					this.total_records = r.message.total || 0;
 					this.categories = r.message.categories || [];
 					this.currency = r.message.currency || "TJS";
+					this.current_page = r.message.page || this.current_page;
+					this.page_size = r.message.page_size || this.page_size;
+
 					this.update_categories_dropdown();
-					this.sort_and_render();
+					this.render_catalog_items();
 				}
 			},
 		});
@@ -208,6 +272,8 @@ class ProductCatalogApp {
 
 	update_categories_dropdown() {
 		const $select = this.wrapper.find("#catalog-category-filter");
+		if ($select.find("option").length > 1) return; // Already populated
+
 		const current = this.selected_category;
 		let options = `<option value="All">${this.t("all_categories")}</option>`;
 		this.categories.forEach((cat) => {
@@ -228,19 +294,6 @@ class ProductCatalogApp {
 		return `${this.format_num(val, 2)} ${this.currency}`;
 	}
 
-	sort_and_render() {
-		if (this.sort_by === "stock_desc") {
-			this.catalog_data.sort((a, b) => b.stock_qty - a.stock_qty);
-		} else if (this.sort_by === "stock_val_desc") {
-			this.catalog_data.sort((a, b) => b.stock_value_cost - a.stock_value_cost);
-		} else if (this.sort_by === "sold_desc") {
-			this.catalog_data.sort((a, b) => b.sold_qty - a.sold_qty);
-		} else if (this.sort_by === "name_asc") {
-			this.catalog_data.sort((a, b) => a.item_name.localeCompare(b.item_name));
-		}
-		this.render_catalog_items();
-	}
-
 	render_catalog_items() {
 		const $area = this.wrapper.find("#catalog-content-area");
 
@@ -251,6 +304,21 @@ class ProductCatalogApp {
 					<h5 style="color: var(--text-color); font-weight: 600;">${this.t("empty_title")}</h5>
 					<p class="text-muted" style="font-size: 13px;">${this.t("empty_desc")}</p>
 				</div>
+				<div class="retail-paging-wrapper">
+					<div class="list-paging-area level">
+						<div class="level-left">
+							<div class="btn-group">
+								<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 20 ? 'btn-info font-weight-bold' : ''}" data-value="20">20</button>
+								<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 100 ? 'btn-info font-weight-bold' : ''}" data-value="100">100</button>
+								<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 500 ? 'btn-info font-weight-bold' : ''}" data-value="500">500</button>
+								<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 2500 ? 'btn-info font-weight-bold' : ''}" data-value="2500">2500</button>
+							</div>
+						</div>
+						<div class="level-right">
+							<span class="text-muted pagination-info" style="font-size: 13px;">0 ${this.t("items_suffix")}</span>
+						</div>
+					</div>
+				</div>
 			`);
 			return;
 		}
@@ -260,6 +328,8 @@ class ProductCatalogApp {
 		let total_stock_cost = 0;
 		let total_sold = 0;
 		let total_revenue = 0;
+
+		const start_row_num = (this.current_page - 1) * this.page_size;
 
 		let rows_html = "";
 		this.catalog_data.forEach((p, idx) => {
@@ -279,7 +349,7 @@ class ProductCatalogApp {
 
 			const short_code = p.custom_short_code
 				? `<span class="retail-code-badge">${p.custom_short_code}</span>`
-				: `<span class="text-muted" style="font-size: 12px;">#${idx + 1}</span>`;
+				: `<span class="text-muted" style="font-size: 12px;">#${start_row_num + idx + 1}</span>`;
 
 			const image_html = p.image
 				? `<img src="${p.image}" class="retail-thumb-img" alt="${p.item_name}">`
@@ -332,6 +402,22 @@ class ProductCatalogApp {
 			`;
 		});
 
+		// Paging calculation
+		const from_idx = (this.current_page - 1) * this.page_size + 1;
+		const to_idx = Math.min(this.current_page * this.page_size, this.total_records);
+		const total_pages = Math.max(1, Math.ceil(this.total_records / this.page_size));
+		const is_prev_disabled = this.current_page <= 1;
+		const is_next_disabled = this.current_page >= total_pages;
+
+		const showing_text = this.t("showing_range")
+			.replace("{from}", this.format_num(from_idx, 0))
+			.replace("{to}", this.format_num(to_idx, 0))
+			.replace("{total}", this.format_num(this.total_records, 0));
+
+		const page_text = this.t("page_info")
+			.replace("{page}", this.current_page)
+			.replace("{pages}", total_pages);
+
 		$area.html(`
 			<div class="table-responsive retail-table-wrapper">
 				<table class="table table-bordered table-hover retail-catalog-table">
@@ -355,7 +441,7 @@ class ProductCatalogApp {
 					<tfoot>
 						<tr class="retail-totals-row">
 							<td colspan="3" class="col-totals-label text-left">
-								<strong>${this.t("total_prefix")}: ${total_items} ${this.t("items_suffix")}</strong>
+								<strong>${this.t("total_on_page")}: ${total_items} ${this.t("items_suffix")}</strong>
 							</td>
 							<td class="col-category text-center text-muted">—</td>
 							<td class="col-stock">
@@ -376,6 +462,34 @@ class ProductCatalogApp {
 						</tr>
 					</tfoot>
 				</table>
+			</div>
+
+			<!-- Standard ERPNext List Paging Area at Bottom -->
+			<div class="retail-paging-wrapper">
+				<div class="list-paging-area level">
+					<div class="level-left">
+						<div class="btn-group">
+							<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 20 ? 'btn-info font-weight-bold' : ''}" data-value="20">20</button>
+							<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 100 ? 'btn-info font-weight-bold' : ''}" data-value="100">100</button>
+							<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 500 ? 'btn-info font-weight-bold' : ''}" data-value="500">500</button>
+							<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 2500 ? 'btn-info font-weight-bold' : ''}" data-value="2500">2500</button>
+						</div>
+					</div>
+					<div class="level-right">
+						<span class="text-muted mr-3 pagination-info" style="font-size: 13px;">${showing_text}</span>
+						<div class="btn-group">
+							<button type="button" class="btn btn-default btn-sm btn-prev" ${is_prev_disabled ? 'disabled' : ''} style="min-width: 32px;" title="${this.t("prev_page")}">
+								&lsaquo;
+							</button>
+							<span class="btn btn-default btn-sm disabled pagination-page-display" style="cursor: default; font-weight: 500;">
+								${page_text}
+							</span>
+							<button type="button" class="btn btn-default btn-sm btn-next" ${is_next_disabled ? 'disabled' : ''} style="min-width: 32px;" title="${this.t("next_page")}">
+								&rsaquo;
+							</button>
+						</div>
+					</div>
+				</div>
 			</div>
 		`);
 

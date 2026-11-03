@@ -266,3 +266,57 @@
 .empty-state {
 	padding: 40px 20px;
 }
+
+/* --- ERPNext-Native List Paging Wrapper --- */
+.retail-paging-wrapper {
+	padding: 12px 16px;
+	background-color: var(--fg-color, #ffffff);
+	border-top: 1px solid var(--border-color, #e2e8f0);
+	border-bottom-left-radius: var(--border-radius-md, 8px);
+	border-bottom-right-radius: var(--border-radius-md, 8px);
+}
+
+.retail-paging-wrapper .list-paging-area {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.retail-paging-wrapper .btn-paging {
+	font-size: 12px;
+	padding: 4px 11px;
+	font-weight: 500;
+	cursor: pointer;
+}
+
+.retail-paging-wrapper .btn-paging.btn-info {
+	background-color: var(--primary, #171717) !important;
+	border-color: var(--primary, #171717) !important;
+	color: #ffffff !important;
+	font-weight: 600;
+}
+
+.retail-paging-wrapper .btn-prev,
+.retail-paging-wrapper .btn-next {
+	font-size: 15px;
+	line-height: 1;
+	padding: 4px 10px;
+	font-weight: bold;
+}
+
+.retail-paging-wrapper .pagination-page-display {
+	font-size: 12px;
+	padding: 4px 12px;
+	background: var(--bg-light-gray, #f8fafc) !important;
+	color: var(--text-color, #1e293b) !important;
+	border-color: var(--border-color, #d1d8dd) !important;
+}
+
+.retail-paging-wrapper .pagination-info {
+	font-size: 13px;
+	color: var(--text-muted, #64748b);
+	font-weight: 500;
+}
+

@@ -62,21 +62,22 @@ def get_stores_warehouse(company):
 
 
 @frappe.whitelist()
-def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_size=200, company=None):
+def get_catalog(search=None, item_group=None, status_filter=None, sort_by=None, page=1, page_size=20, company=None):
 	company = company or get_default_company()
 	stores_wh = get_stores_warehouse(company)
-	page = cint(page) or 1
-	page_size = cint(page_size) or 200
+	page = max(1, cint(page) or 1)
+	page_size = max(1, cint(page_size) or 20)
 
-	# 1. Base query for product models (templates or standalone items)
 	conditions = ["(i.variant_of IS NULL OR i.variant_of = '')", "i.disabled = 0"]
 	values = {}
 
+	# 1. Category Filter
 	if item_group and item_group != "All":
 		conditions.append("i.item_group = %(item_group)s")
 		values["item_group"] = item_group
 
-	if search:
+	# 2. Search Filter (exact short code, name, item name, barcode, variant short code)
+	if search and search.strip():
 		search_term = f"%{search.strip()}%"
 		values["search_term"] = search_term
 		values["exact_code"] = search.strip()
@@ -103,31 +104,159 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 				"(i.name LIKE %(search_term)s OR i.item_name LIKE %(search_term)s OR i.custom_short_code = %(exact_code)s)"
 			)
 
+	# 3. Status Filter (applied directly at DB level across entire catalog)
+	if status_filter == "in_stock":
+		conditions.append("COALESCE(st.total_stock, 0) > 5")
+	elif status_filter == "low_stock":
+		conditions.append("COALESCE(st.total_stock, 0) > 0 AND COALESCE(st.total_stock, 0) <= 5")
+	elif status_filter == "out_of_stock":
+		conditions.append("COALESCE(st.total_stock, 0) <= 0")
+	elif status_filter == "on_sale":
+		today_str = today()
+		values["today"] = today_str
+		discount_item_groups = frappe.db.sql_list(
+			"""
+			SELECT DISTINCT prig.item_group
+			FROM `tabPricing Rule Item Group` prig
+			JOIN `tabPricing Rule` pr ON pr.name = prig.parent
+			WHERE pr.disable = 0 AND pr.selling = 1 AND pr.discount_percentage > 0
+			  AND (pr.valid_from IS NULL OR pr.valid_from <= %(today)s)
+			  AND (pr.valid_upto IS NULL OR pr.valid_upto >= %(today)s)
+			""",
+			{"today": today_str},
+		)
+		discount_items = frappe.db.sql_list(
+			"""
+			SELECT DISTINCT pri.item_code
+			FROM `tabPricing Rule Item Code` pri
+			JOIN `tabPricing Rule` pr ON pr.name = pri.parent
+			WHERE pr.disable = 0 AND pr.selling = 1 AND pr.discount_percentage > 0
+			  AND (pr.valid_from IS NULL OR pr.valid_from <= %(today)s)
+			  AND (pr.valid_upto IS NULL OR pr.valid_upto >= %(today)s)
+			""",
+			{"today": today_str},
+		)
+		discount_parents = []
+		if discount_items:
+			discount_parents = frappe.db.sql_list(
+				"""
+				SELECT DISTINCT COALESCE(NULLIF(variant_of, ''), name)
+				FROM `tabItem`
+				WHERE name IN %(discount_items)s
+				""",
+				{"discount_items": discount_items},
+			)
+
+		sale_clauses = []
+		if discount_item_groups:
+			values["discount_item_groups"] = discount_item_groups
+			sale_clauses.append("i.item_group IN %(discount_item_groups)s")
+		if discount_parents:
+			values["discount_parents"] = discount_parents
+			sale_clauses.append("i.name IN %(discount_parents)s")
+
+		if sale_clauses:
+			conditions.append(f"({' OR '.join(sale_clauses)})")
+		else:
+			conditions.append("1=0")
+
+	# Stock Subquery for models/standalone items
+	stock_subquery = """
+		LEFT JOIN (
+			SELECT 
+				COALESCE(NULLIF(v.variant_of, ''), b.item_code) as parent_item,
+				SUM(b.actual_qty) as total_stock,
+				SUM(b.stock_value) as total_stock_value
+			FROM `tabBin` b
+			LEFT JOIN `tabItem` v ON v.name = b.item_code
+			GROUP BY parent_item
+		) st ON st.parent_item = i.name
+	"""
+
+	# 30-Day Sales Subquery (joined only if sorting by sold, otherwise calculated for paginated items)
+	start_date = add_days(today(), -30)
+	values["start_date"] = start_date
+
+	sales_subquery = ""
+	if sort_by == "sold_desc":
+		sales_subquery = """
+			LEFT JOIN (
+				SELECT 
+					COALESCE(NULLIF(v.variant_of, ''), sii.item_code) as parent_item,
+					SUM(sii.qty) as sold_qty,
+					SUM(sii.base_net_amount) as sold_amount
+				FROM `tabSales Invoice Item` sii
+				JOIN `tabSales Invoice` si ON si.name = sii.parent
+				LEFT JOIN `tabItem` v ON v.name = sii.item_code
+				WHERE si.docstatus = 1 AND si.posting_date >= %(start_date)s
+				GROUP BY parent_item
+			) sl ON sl.parent_item = i.name
+		"""
+
+	# 4. Sorting Across All Catalog Items in Database
+	if sort_by == "stock_desc":
+		order_clause = "COALESCE(st.total_stock, 0) DESC, i.modified DESC"
+	elif sort_by == "stock_val_desc":
+		order_clause = "COALESCE(st.total_stock_value, 0) DESC, i.modified DESC"
+	elif sort_by == "sold_desc":
+		order_clause = "COALESCE(sl.sold_qty, 0) DESC, i.modified DESC"
+	elif sort_by == "name_asc":
+		order_clause = "i.item_name ASC"
+	else:
+		order_clause = "i.modified DESC"
+
 	where_clause = " AND ".join(conditions)
+
+	# 5. Count Total Matching Items across entire database
+	count_query = f"""
+		SELECT COUNT(*)
+		FROM `tabItem` i
+		{stock_subquery}
+		WHERE {where_clause}
+	"""
+	total_records = frappe.db.sql(count_query, values)[0][0]
+
+	item_groups = frappe.db.sql_list(
+		"SELECT DISTINCT item_group FROM `tabItem` WHERE disabled = 0 ORDER BY item_group ASC"
+	)
+
+	if not total_records:
+		return {
+			"items": [],
+			"total": 0,
+			"page": page,
+			"page_size": page_size,
+			"categories": item_groups,
+			"currency": "TJS",
+			"stores_warehouse": stores_wh,
+		}
+
+	# 6. Fetch only the current page slice
+	offset = (page - 1) * page_size
+	values["offset"] = offset
+	values["page_size"] = page_size
 
 	items_raw = frappe.db.sql(
 		f"""
 		SELECT
 			i.name, i.item_name, i.item_group, i.image, i.has_variants,
-			i.custom_short_code, i.stock_uom, i.modified
+			i.custom_short_code, i.stock_uom, i.modified,
+			COALESCE(st.total_stock, 0) as total_stock,
+			COALESCE(st.total_stock_value, 0) as total_stock_value
 		FROM `tabItem` i
+		{stock_subquery}
+		{sales_subquery}
 		WHERE {where_clause}
-		ORDER BY i.modified DESC
-		LIMIT {(page - 1) * page_size}, {page_size}
+		ORDER BY {order_clause}
+		LIMIT %(offset)s, %(page_size)s
 		""",
 		values,
 		as_dict=True,
 	)
 
-	if not items_raw:
-		item_groups = frappe.db.sql_list(
-			"SELECT DISTINCT item_group FROM `tabItem` WHERE disabled = 0 ORDER BY item_group ASC"
-		)
-		return {"items": [], "total": 0, "categories": item_groups, "currency": "TJS"}
-
 	parent_codes = [it.name for it in items_raw]
 
-	# 2. Batch get all variants for templates
+	# 7. Batch get variants for the current page items only
 	variants_raw = frappe.db.sql(
 		"""
 		SELECT name, variant_of, custom_short_code
@@ -146,7 +275,7 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 
 	all_item_codes = list(all_item_codes)
 
-	# 3. Batch get Stock Balances and Valuation from tabBin
+	# 8. Batch get stock balances and valuation for current page items
 	bin_records = frappe.db.sql(
 		"""
 		SELECT item_code, SUM(actual_qty) as total_qty, SUM(stock_value) as total_stock_value
@@ -160,8 +289,7 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 	stock_map = {b.item_code: flt(b.total_qty) for b in bin_records}
 	stock_val_map = {b.item_code: flt(b.total_stock_value) for b in bin_records}
 
-	# 4. Batch get 30-Day Sales and Revenue from tabSales Invoice Item
-	start_date = add_days(today(), -30)
+	# 9. Batch get 30-day sales and revenue for current page items
 	sales_records = frappe.db.sql(
 		"""
 		SELECT sii.item_code, SUM(sii.qty) as sold_qty, SUM(sii.base_net_amount) as sold_amount
@@ -178,7 +306,7 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 	sales_map = {s.item_code: flt(s.sold_qty) for s in sales_records}
 	sales_amount_map = {s.item_code: flt(s.sold_amount) for s in sales_records}
 
-	# 5. Batch get Prices from tabItem Price
+	# 10. Batch get prices for current page items
 	price_records = frappe.db.sql(
 		"""
 		SELECT item_code, price_list, price_list_rate, currency
@@ -200,7 +328,7 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 		elif pr.price_list == "Standard Buying" and pr.item_code not in buying_price_map:
 			buying_price_map[pr.item_code] = flt(pr.price_list_rate)
 
-	# 6. Batch get active Pricing Rules (Discounts)
+	# 11. Batch get active pricing rules (discounts) for current page items
 	active_rules = frappe.db.sql(
 		"""
 		SELECT pri.item_code, pr.discount_percentage, pr.rate_or_discount
@@ -240,7 +368,7 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 		if cr.item_group not in category_discount_map:
 			category_discount_map[cr.item_group] = flt(cr.discount_percentage)
 
-	# Assemble final catalog items
+	# Assemble final catalog items for the page
 	catalog = []
 	for p in items_raw:
 		p_code = p.name
@@ -251,7 +379,7 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 			total_sold = sum(sales_map.get(v.name, 0) for v in variants)
 			total_sold_amount = sum(sales_amount_map.get(v.name, 0) for v in variants)
 
-			# Sizes can have different prices: show the lowest ("from") and flag a range
+			# Sizes can have different prices: show lowest and flag range
 			sell_values = [selling_price_map[v.name] for v in variants if selling_price_map.get(v.name)]
 			if not sell_values and selling_price_map.get(p_code):
 				sell_values = [selling_price_map[p_code]]
@@ -333,12 +461,6 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 			status_label_ru = "В наличии"
 			status_color = "green"
 
-		if status_filter == "on_sale":
-			if discount_pct <= 0:
-				continue
-		elif status_filter and status_filter != "all" and status != status_filter:
-			continue
-
 		catalog.append({
 			"item_code": p.name,
 			"item_name": p.item_name,
@@ -365,23 +487,11 @@ def get_catalog(search=None, item_group=None, status_filter=None, page=1, page_s
 			"currency": currency,
 		})
 
-	item_groups = frappe.db.sql_list(
-		"SELECT DISTINCT item_group FROM `tabItem` WHERE disabled = 0 ORDER BY item_group ASC"
-	)
-
-	summary = {
-		"total_items": len(catalog),
-		"total_stock_qty": flt(sum(it["stock_qty"] for it in catalog), 2),
-		"total_stock_value_cost": flt(sum(it["stock_value_cost"] for it in catalog), 2),
-		"total_stock_value_retail": flt(sum(it["stock_value_retail"] for it in catalog), 2),
-		"total_sold_qty": flt(sum(it["sold_qty"] for it in catalog), 2),
-		"total_sold_amount": flt(sum(it["sold_amount"] for it in catalog), 2),
-	}
-
 	return {
 		"items": catalog,
-		"total": len(catalog),
-		"summary": summary,
+		"total": total_records,
+		"page": page,
+		"page_size": page_size,
 		"categories": item_groups,
 		"currency": currency,
 		"stores_warehouse": stores_wh,
