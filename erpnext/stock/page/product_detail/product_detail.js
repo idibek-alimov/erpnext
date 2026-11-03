@@ -13,6 +13,12 @@ frappe.pages["product-detail"].on_page_load = function (wrapper) {
 frappe.pages["product-detail"].on_page_show = function (wrapper) {
 	const item_code = frappe.get_route()[1];
 	if (item_code) {
+		const options = frappe.route_options || {};
+		if (options.catalog_period) {
+			wrapper.product_detail.period = options.catalog_period;
+			wrapper.product_detail.warehouse = options.catalog_warehouse || "";
+			frappe.route_options = null;
+		}
 		wrapper.product_detail.load(decodeURIComponent(item_code));
 	}
 };

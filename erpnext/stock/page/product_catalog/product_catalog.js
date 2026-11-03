@@ -2,501 +2,437 @@
 // For license information, please see license.txt
 
 frappe.pages["product-catalog"].on_page_load = function (wrapper) {
-	const is_tg = frappe.boot.user.language === "tg";
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: is_tg ? __("Каталоги молҳо") : __("Каталог товаров"),
+		title: frappe.boot.user.language === "tg" ? "Каталоги молҳо" : "Каталог товаров",
 		single_column: true,
 	});
-
-	page.set_primary_action(
-		is_tg ? __("+ Моли нав") : __("+ Новый товар"),
-		() => {
-			frappe.new_doc("Quick Product Intake");
-		},
-		"add"
-	);
-
-	page.add_inner_button(
-		is_tg ? __("Таъминкунандагон") : __("Поставщики"),
-		() => {
-			frappe.set_route("supplier-hub");
-		}
-	);
-
-	page.add_inner_button(
-		is_tg ? __("Хароҷотҳо") : __("Расходы"),
-		() => {
-			frappe.set_route("expense-desk");
-		}
-	);
-
-	page.add_inner_button(
-		is_tg ? __("Хаби кормандон") : __("Сотрудники"),
-		() => {
-			frappe.set_route("staff-hub");
-		}
-	);
-
-	page.add_inner_button(
-		is_tg ? __("Навсозӣ") : __("Обновить"),
-		() => {
-			if (wrapper.product_catalog_app) {
-				wrapper.product_catalog_app.load_catalog();
-			}
-		}
-	);
-
 	wrapper.product_catalog_app = new ProductCatalogApp(page);
+};
+frappe.pages["product-catalog"].on_page_show = function (wrapper) {
+	if (wrapper.product_catalog_app?.has_loaded) wrapper.product_catalog_app.load_catalog();
 };
 
 class ProductCatalogApp {
 	constructor(page) {
 		this.page = page;
-		this.wrapper = $(this.page.body);
-		this.lang = frappe.boot.user.language === "tg" ? "tg" : "ru";
-		this.search_query = "";
-		this.selected_category = "All";
-		this.status_filter = "all";
-		this.sort_by = "modified";
+		this.wrapper = $(page.body).addClass("product-catalog-page");
+		this.lang = frappe.boot.user.language === "tg" ? 1 : 0;
+		this.filters = this.defaults();
 		this.current_page = 1;
-		this.page_size = 20; // Standard ERPNext default limit
-		this.total_records = 0;
-		this.catalog_data = [];
-		this.categories = [];
-		this.currency = "TJS";
-		this.is_loading = false;
-
-		this.init();
-	}
-
-	init() {
+		this.page_size = 20;
+		this.request_id = 0;
+		this.extra_columns = new Set();
+		this.setup_actions();
 		this.setup_ui();
-		this.bind_events();
 		this.load_catalog();
 	}
-
-	t(key) {
-		const dict = {
-			search_placeholder: {
-				tg: "Ҷустуҷӯ бо ном, код (1001), штрихкод...",
-				ru: "Поиск по названию, коду (1001), штрихкоду...",
-			},
-			new_product: { tg: "+ Моли нав", ru: "+ Новый товар" },
-			all_categories: { tg: "Ҳамаи гурӯҳҳо", ru: "Все категории" },
-			filter_all: { tg: "Ҳамаи ҳолатҳо", ru: "Все статусы" },
-			filter_in_stock: { tg: "Дар анбор", ru: "В наличии" },
-			filter_low_stock: { tg: "Кам монд (≤5)", ru: "Мало (≤5)" },
-			filter_out_of_stock: { tg: "Тамом шуд (0)", ru: "Нет в наличии (0)" },
-			filter_on_sale: { tg: "Бо тахфиф", ru: "Со скидкой" },
-			sort_recent: { tg: "Охирин иловашуда", ru: "Сначала новые" },
-			sort_stock_desc: { tg: "Аз рӯи бақия (камшавӣ)", ru: "По остатку (убыв.)" },
-			sort_stock_val_desc: { tg: "Аз рӯи маблағи бақия (камшавӣ)", ru: "По сумме остатка (убыв.)" },
-			sort_sold_desc: { tg: "Аз рӯи фурӯш (камшавӣ)", ru: "По продажам (убыв.)" },
-			sort_name_asc: { tg: "Аз рӯи ном (А-Я)", ru: "По названию (А-Я)" },
-			col_photo: { tg: "Сурат", ru: "Фото" },
-			col_code: { tg: "Код", ru: "Код" },
-			col_product: { tg: "Номи мол", ru: "Наименование товара" },
-			col_category: { tg: "Гурӯҳ", ru: "Категория" },
-			col_stock: { tg: "Бақия", ru: "Остаток" },
-			col_cost_price: { tg: "Себестоимость", ru: "Себестоимость" },
-			col_stock_value: { tg: "Маблағи бақия", ru: "Стоимость остатка" },
-			col_retail_price: { tg: "Нархи фурӯш", ru: "Цена продажи" },
-			col_sold_30d: { tg: "Фурӯхта шуд (30р)", ru: "Продано (30д)" },
-			col_sold_amount: { tg: "Выручка (30р)", ru: "Выручка (30д)" },
-			total_prefix: { tg: "Ҳамагӣ", ru: "Итого" },
-			total_on_page: { tg: "Ҳамагӣ дар ин саҳифа", ru: "Итого на этой странице" },
-			items_suffix: { tg: "мол", ru: "позиций" },
-			from: { tg: "аз", ru: "от" },
-			pcs: { tg: "дона", ru: "шт" },
-			sizes: { tg: "андоза", ru: "размеров" },
-			empty_title: { tg: "Ҳеҷ мол ёфт нашуд", ru: "Товары не найдены" },
-			empty_desc: {
-				tg: "Филтрҳоро тағйир диҳед ё тугмаи '+ Моли нав'-ро пахш намоед.",
-				ru: "Измените параметры фильтра или нажмите '+ Новый товар'.",
-			},
-			showing_range: {
-				tg: "Намоиши {from} - {to} аз {total}",
-				ru: "Показано {from} - {to} из {total}",
-			},
-			page_info: {
-				tg: "Саҳифаи {page} аз {pages}",
-				ru: "Стр. {page} из {pages}",
-			},
-			prev_page: { tg: "Саҳифаи қаблӣ", ru: "Предыдущая страница" },
-			next_page: { tg: "Саҳифаи навбатӣ", ru: "Следующая страница" },
+	defaults() {
+		return {
+			search: "",
+			item_group: "All",
+			status_filter: "all",
+			sort_by: "modified",
+			period: "month",
+			warehouse: "",
 		};
-		return (dict[key] && dict[key][this.lang]) || key;
 	}
-
+	t(key) {
+		const labels = {
+			new_product: ["Новый товар", "Моли нав"],
+			refresh: ["Обновить", "Навсозӣ"],
+			suppliers: ["Поставщики", "Таъминкунандагон"],
+			expenses: ["Расходы", "Хароҷотҳо"],
+			staff: ["Сотрудники", "Кормандон"],
+			search: ["Название, код или штрихкод", "Ном, рамз ё штрихкод"],
+			search_label: ["Поиск товара", "Ҷустуҷӯи мол"],
+			period: ["Период продаж", "Давраи фурӯш"],
+			month: ["Этот месяц", "Ин моҳ"],
+			today: ["Сегодня", "Имрӯз"],
+			"7d": ["7 дней", "7 рӯз"],
+			"30d": ["30 дней", "30 рӯз"],
+			all: ["Всё время", "Ҳамаи давра"],
+			warehouse: ["Склад", "Анбор"],
+			all_warehouses: ["Все склады", "Ҳамаи анборҳо"],
+			category: ["Категория", "Гурӯҳ"],
+			all_categories: ["Все категории", "Ҳамаи гурӯҳҳо"],
+			status: ["Наличие", "Мавҷудият"],
+			all_statuses: ["Все товары", "Ҳамаи молҳо"],
+			in_stock: ["В наличии", "Дар анбор"],
+			low_stock: ["Требуют внимания", "Диққат лозим аст"],
+			out_of_stock: ["Нет в наличии", "Тамом шуд"],
+			on_sale: ["Со скидкой", "Бо тахфиф"],
+			sort: ["Сортировка", "Тартиб"],
+			modified: ["Последние изменения", "Тағйироти охирин"],
+			name_asc: ["Название: А–Я", "Ном: А–Я"],
+			stock_desc: ["Больше остатков", "Бақияи бештар"],
+			stock_val_desc: ["Выше стоимость остатка", "Арзиши бештари бақия"],
+			sold_desc: ["Больше продаж", "Фурӯши бештар"],
+			products: ["Товары", "Молҳо"],
+			inventory_value: ["Стоимость остатка", "Арзиши бақия"],
+			attention: ["Требуют внимания", "Диққат лозим аст"],
+			out: ["Нет в наличии", "Тамом шуд"],
+			all_results: ["По всем найденным товарам", "Барои ҳамаи молҳои ёфтшуда"],
+			current_valuation: ["Текущая учётная стоимость", "Арзиши ҷории баҳисобгирӣ"],
+			attention_hint: ["Мало товара или отдельных вариантов", "Мол ё баъзе намудҳо каманд"],
+			out_hint: ["Общий остаток ≤ 0", "Бақияи умумӣ ≤ 0"],
+			product: ["Товар", "Мол"],
+			stock: ["В наличии сейчас", "Ҳоло дар анбор"],
+			sold: ["Продано, нетто", "Фурӯши холис"],
+			profit: ["Валовая прибыль", "Фоидаи умумӣ"],
+			price: ["Цена продажи", "Нархи фурӯш"],
+			cost: ["Цена закупки", "Нархи харид"],
+			revenue: ["Выручка", "Даромад"],
+			columns: ["Столбцы", "Сутунҳо"],
+			apply: ["Применить", "Татбиқ"],
+			variants: ["вариантов", "намуд"],
+			from: ["от", "аз"],
+			pcs: ["шт.", "дона"],
+			variants_out: ["вариантов нет в наличии", "намуд тамом шуд"],
+			variants_low: ["вариантов мало", "намуд кам монд"],
+			returned: ["Возвращено", "Баргардонида шуд"],
+			no_sales_access: ["Нет доступа к продажам", "Дастрасӣ ба фурӯш нест"],
+			no_price: ["Цена не задана в валюте компании", "Нарх бо асъори ширкат муайян нашудааст"],
+			empty: ["Товары не найдены", "Молҳо ёфт нашуданд"],
+			empty_hint: ["Измените поиск или фильтры.", "Ҷустуҷӯ ё филтрҳоро тағйир диҳед."],
+			reset: ["Сбросить фильтры", "Тоза кардани филтрҳо"],
+			retry: ["Повторить", "Такрор"],
+			load_error: ["Не удалось загрузить каталог", "Каталог бор нашуд"],
+			loading: ["Загрузка…", "Бор шуда истодааст…"],
+			previous: ["Назад", "Қафо"],
+			next: ["Далее", "Пеш"],
+			of: ["из", "аз"],
+			per_page: ["На странице", "Дар саҳифа"],
+			scope_note: [
+				"Остатки и стоимость — сейчас. Продажи, выручка и прибыль — за выбранный период, с учётом возвратов, без отменённых счетов и налогов.",
+				"Бақия ва арзиш — ҷорӣ. Фурӯш, даромад ва фоида — барои давраи интихобшуда, бо баргардониҳо, бе ҳисобҳои бекоршуда ва андозҳо.",
+			],
+		};
+		return labels[key]?.[this.lang] || key;
+	}
+	esc(value) {
+		return frappe.utils.escape_html(String(value ?? ""));
+	}
+	num(value) {
+		return format_number(value, null, Number.isInteger(flt(value)) ? 0 : 2);
+	}
+	money(value) {
+		return format_currency(value, this.data.currency);
+	}
+	setup_actions() {
+		this.page.set_primary_action(
+			this.t("new_product"),
+			() => frappe.new_doc("Quick Product Intake"),
+			"add"
+		);
+		this.page.set_secondary_action(this.t("refresh"), () => this.load_catalog());
+		this.page.add_inner_button(this.t("columns"), () => this.choose_columns());
+		for (const [label, route] of [
+			["suppliers", "supplier-hub"],
+			["expenses", "expense-desk"],
+			["staff", "staff-hub"],
+		])
+			this.page.add_menu_item(this.t(label), () => frappe.set_route(route));
+	}
+	select(key, label, options) {
+		return `<label class="pc-filter">${this.t(
+			label
+		)}<select class="form-control" data-filter="${key}">${options
+			.map(([v, title]) => `<option value="${this.esc(v)}">${this.esc(title)}</option>`)
+			.join("")}</select></label>`;
+	}
 	setup_ui() {
-		this.wrapper.html(`
-			<div class="retail-catalog-layout">
-				<!-- Standard ERPNext Filter Bar -->
-				<div class="retail-filter-bar">
-					<div class="filter-col search-input-col">
-						<div class="frappe-search-box">
-							<span class="frappe-search-icon">
-								<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-search"></use></svg>
-							</span>
-							<input type="text" id="catalog-search" class="form-control form-control-sm" placeholder="${this.t("search_placeholder")}">
-						</div>
-					</div>
-
-					<div class="filter-col select-group-col">
-						<select id="catalog-category-filter" class="form-control form-control-sm filter-select">
-							<option value="All">${this.t("all_categories")}</option>
-						</select>
-
-						<select id="catalog-status-filter" class="form-control form-control-sm filter-select">
-							<option value="all">${this.t("filter_all")}</option>
-							<option value="in_stock">🟢 ${this.t("filter_in_stock")}</option>
-							<option value="low_stock">🟠 ${this.t("filter_low_stock")}</option>
-							<option value="out_of_stock">🔴 ${this.t("filter_out_of_stock")}</option>
-							<option value="on_sale">🏷️ ${this.t("filter_on_sale")}</option>
-						</select>
-
-						<select id="catalog-sort-filter" class="form-control form-control-sm filter-select">
-							<option value="modified">${this.t("sort_recent")}</option>
-							<option value="stock_desc">${this.t("sort_stock_desc")}</option>
-							<option value="stock_val_desc">${this.t("sort_stock_val_desc")}</option>
-							<option value="sold_desc">${this.t("sort_sold_desc")}</option>
-							<option value="name_asc">${this.t("sort_name_asc")}</option>
-						</select>
-					</div>
-				</div>
-
-				<!-- Main Product Table with Sticky Totals Footer and Paging Bar -->
-				<div id="catalog-content-area" class="retail-table-container">
-					<div class="text-center py-5"><span class="spinner-border text-primary"></span></div>
-				</div>
-			</div>
-		`);
-	}
-
-	bind_events() {
-		let timeout = null;
-		this.wrapper.find("#catalog-search").on("input", (e) => {
-			clearTimeout(timeout);
-			timeout = setTimeout(() => {
-				this.search_query = e.target.value.trim();
+		this.wrapper.html(`<div class="pc-workspace">
+			<div class="pc-toolbar"><div class="pc-search"><label class="sr-only" for="pc-search">${this.t(
+				"search_label"
+			)}</label><input id="pc-search" class="form-control" type="search" placeholder="${this.t(
+			"search"
+		)}" autocomplete="off"></div><button class="btn btn-default btn-sm pc-reset">${this.t(
+			"reset"
+		)}</button></div>
+			<div class="pc-filters">
+			${this.select(
+				"period",
+				"period",
+				["month", "today", "7d", "30d", "all"].map((k) => [k, this.t(k)])
+			)}
+			${this.select("warehouse", "warehouse", [["", this.t("all_warehouses")]])}
+			${this.select("item_group", "category", [["All", this.t("all_categories")]])}
+			${this.select("status_filter", "status", [
+				["all", this.t("all_statuses")],
+				...["in_stock", "low_stock", "out_of_stock", "on_sale"].map((k) => [k, this.t(k)]),
+			])}
+			${this.select(
+				"sort_by",
+				"sort",
+				["modified", "name_asc", "stock_desc", "stock_val_desc", "sold_desc"].map((k) => [
+					k,
+					this.t(k),
+				])
+			)}</div>
+			<div class="pc-results" aria-busy="true"><div class="pc-summary"></div><p class="pc-scope-note text-muted"></p><div class="pc-table-area"></div><div class="pc-pagination"></div></div><div class="pc-status" role="status" aria-live="polite"></div></div>`);
+		this.wrapper.find("[data-filter]").on("change", (e) => {
+			this.filters[e.target.dataset.filter] = e.target.value;
+			this.current_page = 1;
+			this.load_catalog();
+		});
+		this.wrapper.find("#pc-search").on("input", (e) => {
+			++this.request_id;
+			this.filters.search = e.target.value;
+			clearTimeout(this.search_timer);
+			this.search_timer = setTimeout(() => {
 				this.current_page = 1;
 				this.load_catalog();
 			}, 300);
 		});
-
-		this.wrapper.find("#catalog-category-filter").on("change", (e) => {
-			this.selected_category = e.target.value;
+		this.wrapper.on("click", ".pc-reset", () => {
+			this.filters = this.defaults();
+			this.current_page = 1;
+			this.wrapper.find("#pc-search").val("");
+			this.wrapper.find("[data-filter]").each((i, el) => $(el).val(this.filters[el.dataset.filter]));
+			this.load_catalog();
+		});
+		this.wrapper.on("click", ".pc-prev, .pc-next", (e) => {
+			this.current_page += $(e.currentTarget).hasClass("pc-prev") ? -1 : 1;
+			this.load_catalog();
+		});
+		this.wrapper.on("change", ".pc-page-size", (e) => {
+			this.page_size = Number(e.target.value);
 			this.current_page = 1;
 			this.load_catalog();
 		});
-
-		this.wrapper.find("#catalog-status-filter").on("change", (e) => {
-			this.status_filter = e.target.value;
-			this.current_page = 1;
-			this.load_catalog();
-		});
-
-		this.wrapper.find("#catalog-sort-filter").on("change", (e) => {
-			this.sort_by = e.target.value;
-			this.current_page = 1;
-			this.load_catalog();
-		});
-
-		// Page length selection (20, 100, 500, 2500)
-		this.wrapper.on("click", ".btn-paging", (e) => {
-			const val = parseInt($(e.currentTarget).attr("data-value"), 10);
-			if (val && val !== this.page_size) {
-				this.page_size = val;
-				this.current_page = 1;
-				this.load_catalog();
-			}
-		});
-
-		// Previous page
-		this.wrapper.on("click", ".btn-prev", () => {
-			if (this.current_page > 1) {
-				this.current_page--;
-				this.load_catalog();
-				this.scroll_to_top();
-			}
-		});
-
-		// Next page
-		this.wrapper.on("click", ".btn-next", () => {
-			const max_pages = Math.max(1, Math.ceil(this.total_records / this.page_size));
-			if (this.current_page < max_pages) {
-				this.current_page++;
-				this.load_catalog();
-				this.scroll_to_top();
-			}
+		this.wrapper.on("click", ".pc-product-link", (e) => {
+			if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+			e.preventDefault();
+			frappe.route_options = {
+				catalog_period: this.filters.period,
+				catalog_warehouse: this.filters.warehouse,
+			};
+			frappe.set_route("product-detail", e.currentTarget.dataset.code);
 		});
 	}
-
-	scroll_to_top() {
-		const $bar = this.wrapper.find(".retail-filter-bar");
-		if ($bar.length) {
-			$("html, body").animate({ scrollTop: $bar.offset().top - 80 }, 150);
-		}
-	}
-
 	load_catalog() {
-		const $area = this.wrapper.find("#catalog-content-area");
-		$area.find(".retail-catalog-table tbody").css({ opacity: "0.45", pointerEvents: "none" });
-
+		clearTimeout(this.search_timer);
+		const request = ++this.request_id;
+		this.wrapper.find(".pc-results").attr("aria-busy", "true").addClass("pc-loading");
+		this.wrapper.find(".pc-status").text(this.t("loading")).show();
 		frappe.call({
 			method: "erpnext.stock.page.product_catalog.product_catalog.get_catalog",
-			args: {
-				search: this.search_query,
-				item_group: this.selected_category,
-				status_filter: this.status_filter,
-				sort_by: this.sort_by,
-				page: this.current_page,
-				page_size: this.page_size,
-			},
+			args: { ...this.filters, page: this.current_page, page_size: this.page_size },
 			callback: (r) => {
-				if (r.message) {
-					this.catalog_data = r.message.items || [];
-					this.total_records = r.message.total || 0;
-					this.categories = r.message.categories || [];
-					this.currency = r.message.currency || "TJS";
-					this.current_page = r.message.page || this.current_page;
-					this.page_size = r.message.page_size || this.page_size;
-
-					this.update_categories_dropdown();
-					this.render_catalog_items();
+				if (request !== this.request_id) return;
+				if (!r.message) {
+					this.show_error();
+					return;
 				}
+				this.data = r.message;
+				this.has_loaded = true;
+				this.current_page = this.data.page;
+				this.page_size = this.data.page_size;
+				this.fill_options("item_group", this.data.categories, "All", "all_categories");
+				this.fill_options("warehouse", this.data.warehouses, "", "all_warehouses");
+				this.render();
+				this.wrapper.find(".pc-results").attr("aria-busy", "false").removeClass("pc-loading").show();
+				this.wrapper.find(".pc-status").hide();
+			},
+			error: () => {
+				if (request === this.request_id) this.show_error();
 			},
 		});
 	}
-
-	update_categories_dropdown() {
-		const $select = this.wrapper.find("#catalog-category-filter");
-		if ($select.find("option").length > 1) return; // Already populated
-
-		const current = this.selected_category;
-		let options = `<option value="All">${this.t("all_categories")}</option>`;
-		this.categories.forEach((cat) => {
-			options += `<option value="${cat}" ${cat === current ? "selected" : ""}>${cat}</option>`;
+	show_error() {
+		this.wrapper.find(".pc-results").hide().attr("aria-busy", "false").removeClass("pc-loading");
+		this.wrapper
+			.find(".pc-status")
+			.empty()
+			.append($("<p>").text(this.t("load_error")))
+			.append(
+				$("<button class='btn btn-default btn-sm'>")
+					.text(this.t("retry"))
+					.on("click", () => this.load_catalog())
+			)
+			.show();
+	}
+	fill_options(key, values, empty, label) {
+		const select = this.wrapper.find(`[data-filter="${key}"]`).empty();
+		select.append($("<option>").val(empty).text(this.t(label)));
+		values.forEach((v) => select.append($("<option>").val(v).text(v)));
+		select.val(this.filters[key]);
+	}
+	choose_columns() {
+		const dialog = new frappe.ui.Dialog({
+			title: this.t("columns"),
+			fields: ["cost", "revenue"].map((k) => ({
+				fieldname: k,
+				fieldtype: "Check",
+				label: this.t(k),
+				default: this.extra_columns.has(k) ? 1 : 0,
+			})),
+			primary_action_label: this.t("apply"),
+			primary_action: (values) => {
+				this.extra_columns = new Set(["cost", "revenue"].filter((k) => values[k]));
+				dialog.hide();
+				if (this.data) this.render_table();
+			},
 		});
-		$select.html(options);
+		dialog.show();
 	}
-
-	format_num(val, decimals = 2) {
-		const n = flt(val);
-		return n.toLocaleString(undefined, {
-			minimumFractionDigits: decimals,
-			maximumFractionDigits: decimals,
-		});
+	render() {
+		const s = this.data.summary;
+		this.wrapper.find(".pc-summary").html(
+			[
+				["products", this.num(s.products), "all_results"],
+				["inventory_value", this.money(s.stock_value), "current_valuation"],
+				["attention", this.num(s.attention), "attention_hint"],
+				["out", this.num(s.out_of_stock), "out_hint"],
+			]
+				.map(
+					([k, v, hint]) =>
+						`<div class="pc-summary-item"><div class="text-muted">${this.t(
+							k
+						)}</div><div class="pc-summary-value">${v}</div><small class="text-muted">${this.t(
+							hint
+						)}</small></div>`
+				)
+				.join("")
+		);
+		const dates = this.data.from_date
+			? `${frappe.datetime.str_to_user(this.data.from_date)} – ${frappe.datetime.str_to_user(
+					this.data.to_date
+			  )}`
+			: this.t("all");
+		this.wrapper.find(".pc-scope-note").text(`${dates}. ${this.t("scope_note")}`);
+		this.render_table();
+		this.render_pagination();
 	}
-
-	format_curr(val) {
-		return `${this.format_num(val, 2)} ${this.currency}`;
-	}
-
-	render_catalog_items() {
-		const $area = this.wrapper.find("#catalog-content-area");
-
-		if (!this.catalog_data || this.catalog_data.length === 0) {
-			$area.html(`
-				<div class="empty-state text-center py-5">
-					<div class="empty-state-icon" style="font-size: 40px; margin-bottom: 12px; color: var(--text-muted);">📦</div>
-					<h5 style="color: var(--text-color); font-weight: 600;">${this.t("empty_title")}</h5>
-					<p class="text-muted" style="font-size: 13px;">${this.t("empty_desc")}</p>
-				</div>
-				<div class="retail-paging-wrapper">
-					<div class="list-paging-area level">
-						<div class="level-left">
-							<div class="btn-group">
-								<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 20 ? 'btn-info font-weight-bold' : ''}" data-value="20">20</button>
-								<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 100 ? 'btn-info font-weight-bold' : ''}" data-value="100">100</button>
-								<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 500 ? 'btn-info font-weight-bold' : ''}" data-value="500">500</button>
-								<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 2500 ? 'btn-info font-weight-bold' : ''}" data-value="2500">2500</button>
-							</div>
-						</div>
-						<div class="level-right">
-							<span class="text-muted pagination-info" style="font-size: 13px;">0 ${this.t("items_suffix")}</span>
-						</div>
-					</div>
-				</div>
-			`);
+	render_table() {
+		const d = this.data;
+		if (!d.items.length) {
+			this.wrapper
+				.find(".pc-table-area")
+				.html(
+					`<div class="pc-empty"><h4>${this.t("empty")}</h4><p class="text-muted">${this.t(
+						"empty_hint"
+					)}</p><button class="btn btn-default btn-sm pc-reset">${this.t("reset")}</button></div>`
+				);
 			return;
 		}
-
-		let total_items = this.catalog_data.length;
-		let total_stock = 0;
-		let total_stock_cost = 0;
-		let total_sold = 0;
-		let total_revenue = 0;
-
-		const start_row_num = (this.current_page - 1) * this.page_size;
-
-		let rows_html = "";
-		this.catalog_data.forEach((p, idx) => {
-			total_stock += flt(p.stock_qty);
-			total_stock_cost += flt(p.stock_value_cost);
-			total_sold += flt(p.sold_qty);
-			total_revenue += flt(p.sold_amount);
-
-			const status_label = this.lang === "tg" ? p.status_label_tg : p.status_label_ru;
-			const promo_badge = p.discount_percentage > 0
-				? `<span class="badge badge-warning retail-promo-pill">-${p.discount_percentage}%</span>`
-				: "";
-
-			const variant_pill = p.has_variants
-				? `<span class="retail-variant-pill">${p.variant_count} ${this.t("sizes")}</span>`
-				: "";
-
-			const short_code = p.custom_short_code
-				? `<span class="retail-code-badge">${p.custom_short_code}</span>`
-				: `<span class="text-muted" style="font-size: 12px;">#${start_row_num + idx + 1}</span>`;
-
-			const image_html = p.image
-				? `<img src="${p.image}" class="retail-thumb-img" alt="${p.item_name}">`
-				: `<div class="retail-thumb-placeholder">👕</div>`;
-
-			let indicator_cls = "indicator-green";
-			if (p.status === "out_of_stock") indicator_cls = "indicator-red";
-			else if (p.status === "low_stock") indicator_cls = "indicator-orange";
-
-			const prefix_from = p.price_varies ? `<span class="text-muted" style="font-size: 11px;">${this.t("from")} </span>` : "";
-
-			rows_html += `
-				<tr class="retail-table-row" data-item-code="${p.item_code}">
-					<td class="col-thumb text-center">${image_html}</td>
-					<td class="col-code text-center">${short_code}</td>
-					<td class="col-name">
-						<div class="product-title-row">
-							<span class="product-name font-weight-bold" title="${p.item_name}">${p.item_name}</span>
-							${variant_pill}
-						</div>
-					</td>
-					<td class="col-category">
-						<span class="retail-category-tag">${p.item_group}</span>
-					</td>
-					<td class="col-stock">
-						<div class="d-flex align-items-center">
-							<span class="indicator-pill ${indicator_cls}"></span>
-							<span class="font-weight-bold ml-1">${this.format_num(p.stock_qty, p.stock_qty % 1 === 0 ? 0 : 2)}</span>
-							<span class="text-muted ml-1" style="font-size: 11px;">${p.stock_uom === "Nos" ? this.t("pcs") : p.stock_uom}</span>
-						</div>
-						<div class="status-subtext text-muted" style="font-size: 11px;">${status_label}</div>
-					</td>
-					<td class="col-cost text-right">
-						<span class="text-muted">${this.format_curr(p.buying_price)}</span>
-					</td>
-					<td class="col-cost-val text-right">
-						<span class="font-weight-bold text-dark">${this.format_curr(p.stock_value_cost)}</span>
-					</td>
-					<td class="col-retail text-right">
-						<div>${prefix_from}<span class="font-weight-bold">${this.format_curr(p.discounted_price)}</span></div>
-						${promo_badge}
-					</td>
-					<td class="col-sold text-center">
-						<span class="font-weight-bold">${this.format_num(p.sold_qty, p.sold_qty % 1 === 0 ? 0 : 2)}</span>
-					</td>
-					<td class="col-revenue text-right">
-						<span class="text-dark font-weight-bold">${this.format_curr(p.sold_amount)}</span>
-					</td>
-				</tr>
-			`;
+		const columns = [
+			"product",
+			"stock",
+			"sold",
+			"profit",
+			"inventory_value",
+			"price",
+			...this.extra_columns,
+		];
+		this.wrapper
+			.find(".pc-table-area")
+			.html(
+				`<div class="pc-table-scroll"><table class="table pc-table"><thead><tr>${columns
+					.map(
+						(k) =>
+							`<th scope="col" class="pc-col-${k} ${
+								k === "product" ? "" : "text-right"
+							}">${this.t(k)}</th>`
+					)
+					.join("")}</tr></thead><tbody>${d.items
+					.map(
+						(p) =>
+							`<tr>${columns
+								.map(
+									(k) =>
+										`<td class="pc-col-${k} ${
+											k === "product" ? "" : "text-right"
+										}">${this.cell(k, p)}</td>`
+								)
+								.join("")}</tr>`
+					)
+					.join("")}</tbody></table></div>`
+			);
+		this.wrapper.find(".pc-thumbnail").on("error", function () {
+			$(this).hide().siblings(".pc-abbr").show();
 		});
-
-		// Paging calculation
-		const from_idx = (this.current_page - 1) * this.page_size + 1;
-		const to_idx = Math.min(this.current_page * this.page_size, this.total_records);
-		const total_pages = Math.max(1, Math.ceil(this.total_records / this.page_size));
-		const is_prev_disabled = this.current_page <= 1;
-		const is_next_disabled = this.current_page >= total_pages;
-
-		const showing_text = this.t("showing_range")
-			.replace("{from}", this.format_num(from_idx, 0))
-			.replace("{to}", this.format_num(to_idx, 0))
-			.replace("{total}", this.format_num(this.total_records, 0));
-
-		const page_text = this.t("page_info")
-			.replace("{page}", this.current_page)
-			.replace("{pages}", total_pages);
-
-		$area.html(`
-			<div class="table-responsive retail-table-wrapper">
-				<table class="table table-bordered table-hover retail-catalog-table">
-					<thead>
-						<tr>
-							<th class="col-thumb text-center" style="width: 50px;">${this.t("col_photo")}</th>
-							<th class="col-code text-center" style="width: 75px;">${this.t("col_code")}</th>
-							<th class="col-name">${this.t("col_product")}</th>
-							<th class="col-category" style="width: 140px;">${this.t("col_category")}</th>
-							<th class="col-stock" style="width: 140px;">${this.t("col_stock")}</th>
-							<th class="col-cost text-right" style="width: 130px;">${this.t("col_cost_price")}</th>
-							<th class="col-cost-val text-right" style="width: 160px;">${this.t("col_stock_value")}</th>
-							<th class="col-retail text-right" style="width: 140px;">${this.t("col_retail_price")}</th>
-							<th class="col-sold text-center" style="width: 120px;">${this.t("col_sold_30d")}</th>
-							<th class="col-revenue text-right" style="width: 150px;">${this.t("col_sold_amount")}</th>
-						</tr>
-					</thead>
-					<tbody>
-						${rows_html}
-					</tbody>
-					<tfoot>
-						<tr class="retail-totals-row">
-							<td colspan="3" class="col-totals-label text-left">
-								<strong>${this.t("total_on_page")}: ${total_items} ${this.t("items_suffix")}</strong>
-							</td>
-							<td class="col-category text-center text-muted">—</td>
-							<td class="col-stock">
-								<span class="font-weight-bold">${this.format_num(total_stock, total_stock % 1 === 0 ? 0 : 2)}</span>
-								<span class="text-muted ml-1" style="font-size: 11px;">${this.t("pcs")}</span>
-							</td>
-							<td class="col-cost text-center text-muted">—</td>
-							<td class="col-cost-val text-right">
-								<span class="font-weight-bold text-success" style="font-size: 13.5px;">${this.format_curr(total_stock_cost)}</span>
-							</td>
-							<td class="col-retail text-center text-muted">—</td>
-							<td class="col-sold text-center">
-								<span class="font-weight-bold">${this.format_num(total_sold, total_sold % 1 === 0 ? 0 : 2)}</span>
-							</td>
-							<td class="col-revenue text-right">
-								<span class="font-weight-bold text-primary" style="font-size: 13.5px;">${this.format_curr(total_revenue)}</span>
-							</td>
-						</tr>
-					</tfoot>
-				</table>
-			</div>
-
-			<!-- Standard ERPNext List Paging Area at Bottom -->
-			<div class="retail-paging-wrapper">
-				<div class="list-paging-area level">
-					<div class="level-left">
-						<div class="btn-group">
-							<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 20 ? 'btn-info font-weight-bold' : ''}" data-value="20">20</button>
-							<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 100 ? 'btn-info font-weight-bold' : ''}" data-value="100">100</button>
-							<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 500 ? 'btn-info font-weight-bold' : ''}" data-value="500">500</button>
-							<button type="button" class="btn btn-default btn-sm btn-paging ${this.page_size === 2500 ? 'btn-info font-weight-bold' : ''}" data-value="2500">2500</button>
-						</div>
-					</div>
-					<div class="level-right">
-						<span class="text-muted mr-3 pagination-info" style="font-size: 13px;">${showing_text}</span>
-						<div class="btn-group">
-							<button type="button" class="btn btn-default btn-sm btn-prev" ${is_prev_disabled ? 'disabled' : ''} style="min-width: 32px;" title="${this.t("prev_page")}">
-								&lsaquo;
-							</button>
-							<span class="btn btn-default btn-sm disabled pagination-page-display" style="cursor: default; font-weight: 500;">
-								${page_text}
-							</span>
-							<button type="button" class="btn btn-default btn-sm btn-next" ${is_next_disabled ? 'disabled' : ''} style="min-width: 32px;" title="${this.t("next_page")}">
-								&rsaquo;
-							</button>
-						</div>
-					</div>
-				</div>
-			</div>
-		`);
-
-		// Clicking row opens product detail
-		$area.find(".retail-table-row").on("click", (e) => {
-			const item_code = $(e.currentTarget).attr("data-item-code");
-			frappe.set_route("product-detail", item_code);
-		});
+	}
+	cell(key, p) {
+		if (key === "product") {
+			const abbr = this.esc(frappe.get_abbr(p.item_name));
+			const image = p.image
+				? `<img class="pc-thumbnail" src="${this.esc(
+						p.image
+				  )}" alt="" loading="lazy"><span class="pc-abbr" style="display:none">${abbr}</span>`
+				: `<span class="pc-abbr">${abbr}</span>`;
+			return `<div class="pc-product"><div class="pc-photo">${image}</div><div class="pc-product-info"><a class="pc-product-link" href="/app/product-detail/${encodeURIComponent(
+				p.item_code
+			)}" data-code="${this.esc(p.item_code)}">${this.esc(
+				p.item_name
+			)}</a><div class="pc-product-meta text-muted">${this.esc(
+				p.custom_short_code || p.item_code
+			)} · ${this.esc(p.item_group)}</div>${
+				p.variant_count
+					? `<small class="text-muted">${p.variant_count} ${this.t("variants")}</small>`
+					: ""
+			}</div></div>`;
+		}
+		if (key === "stock") {
+			const status = p.stock_qty <= 0 ? "out_of_stock" : p.needs_attention ? "low_stock" : "in_stock";
+			const details = [
+				p.out_variant_count ? `${p.out_variant_count} ${this.t("variants_out")}` : "",
+				p.low_variant_count ? `${p.low_variant_count} ${this.t("variants_low")}` : "",
+			].filter(Boolean);
+			return `<div class="pc-stock-number"><span class="pc-stock-dot pc-stock-${status}" aria-hidden="true"></span>${this.num(
+				p.stock_qty
+			)} <small class="text-muted">${this.esc(
+				p.stock_uom === "Nos" ? this.t("pcs") : p.stock_uom
+			)}</small></div><small class="pc-stock-description ${
+				status === "in_stock" ? "text-muted" : "pc-warning"
+			}">${details.length ? details.join(" · ") : this.t(status)}</small>`;
+		}
+		if (["sold", "profit", "revenue"].includes(key) && !this.data.can_read_sales)
+			return `<span class="text-muted" title="${this.t("no_sales_access")}">—</span>`;
+		if (key === "sold")
+			return `${this.num(p.sold_qty)}${
+				p.returned_qty
+					? `<small class="text-muted pc-cell-note">${this.t("returned")}: ${this.num(
+							p.returned_qty
+					  )}</small>`
+					: ""
+			}`;
+		if (key === "profit")
+			return `<span class="${p.gross_profit < 0 ? "text-danger" : ""}">${this.money(
+				p.gross_profit
+			)}</span>`;
+		if (key === "inventory_value") return this.money(p.stock_value_cost);
+		if (key === "revenue") return this.money(p.sold_amount);
+		const value = key === "cost" ? p.buying_price : p.discounted_price;
+		if (value == null) return `<span class="text-muted" title="${this.t("no_price")}">—</span>`;
+		return `${
+			key === "price" && p.price_varies ? `<small class="text-muted">${this.t("from")} </small>` : ""
+		}${this.money(value)}`;
+	}
+	render_pagination() {
+		const d = this.data,
+			first = d.total ? (d.page - 1) * d.page_size + 1 : 0,
+			last = Math.min(d.page * d.page_size, d.total),
+			pages = Math.max(1, Math.ceil(d.total / d.page_size));
+		this.wrapper
+			.find(".pc-pagination")
+			.html(
+				`<label>${this.t("per_page")}<select class="form-control pc-page-size">${[20, 50, 100, 500]
+					.map((n) => `<option value="${n}" ${n === d.page_size ? "selected" : ""}>${n}</option>`)
+					.join(
+						""
+					)}</select></label><div class="pc-page-navigation"><span class="text-muted">${this.num(
+					first
+				)}–${this.num(last)} ${this.t("of")} ${this.num(
+					d.total
+				)}</span><button class="btn btn-default btn-sm pc-prev" ${
+					d.page <= 1 ? "disabled" : ""
+				} aria-label="${this.t("previous")}">‹</button><span class="text-muted">${
+					d.page
+				} / ${pages}</span><button class="btn btn-default btn-sm pc-next" ${
+					d.page >= pages ? "disabled" : ""
+				} aria-label="${this.t("next")}">›</button></div>`
+			);
 	}
 }
