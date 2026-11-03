@@ -367,6 +367,9 @@ doc_events = {
 		"on_update": "erpnext.crm.utils.disable_opportunity_creation_on_contact_us_disabled",
 	},
 	"Sales Invoice": {
+		"validate": [
+			"erpnext.accounts.doctype.retail_tax_settings.retail_tax_settings.apply_exact_inclusive_retail_tax",
+		],
 		"on_submit": [
 			"erpnext.regional.create_transaction_log",
 			"erpnext.regional.italy.utils.sales_invoice_on_submit",

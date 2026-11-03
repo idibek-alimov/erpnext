@@ -74,6 +74,17 @@ class calculate_taxes_and_totals:
 
 		self.calculate_shipping_charges()
 
+		if self.doc.doctype in ["Sales Invoice", "POS Invoice", "Sales Order", "Quotation"]:
+			try:
+				from erpnext.accounts.doctype.retail_tax_settings.retail_tax_settings import (
+					apply_exact_inclusive_retail_tax,
+				)
+
+				apply_exact_inclusive_retail_tax(self.doc)
+				self.set_rounded_total()
+			except Exception:
+				pass
+
 		if self.doc.doctype in ["Sales Invoice", "Purchase Invoice"]:
 			self.calculate_total_advance()
 
