@@ -86,6 +86,7 @@ class SupplierDetailApp {
 			invoice: ["Документ", "Ҳуҷҷат"],
 			invoice_date: ["Дата", "Сана"],
 			due: ["Срок оплаты", "Муҳлати пардохт"],
+			no_deadline: ["Срок оплаты не указан", "Муҳлати пардохт муайян нест"],
 			amount: ["Сумма", "Маблағ"],
 			balance: ["Остаток", "Бақия"],
 			state: ["Статус", "Ҳолат"],
@@ -659,7 +660,9 @@ class SupplierDetailApp {
 						  )}" data-row="${index}" aria-expanded="false">${this.t("show_items")}</button>`
 				}${
 					r.is_opening ? `<small class="text-muted">${this.t("opening")}</small>` : ""
-				}</td><td>${this.date(r.posting_date)}</td><td>${this.date(r.due_date)}${
+				}</td><td>${this.date(r.posting_date)}</td><td>${
+					r.payment_deadline_not_agreed ? this.t("no_deadline") : this.date(r.due_date)
+				}${
 					r.days_overdue
 						? `<small class="sd-warning">${r.days_overdue} ${this.t("days")}</small>`
 						: ""

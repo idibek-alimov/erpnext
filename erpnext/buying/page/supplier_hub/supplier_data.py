@@ -249,7 +249,7 @@ def load_supplier_context(company=None, period="month", warehouse=None, supplier
 	can_stock = frappe.has_permission("Item", "read") and frappe.has_permission("Warehouse", "read") and frappe.has_permission("Bin", "read")
 	filters = dict(company=company, docstatus=1, posting_date=["<=", end])
 	invoices = batched_rows("Purchase Invoice", filters,
-		["name", "supplier", "posting_date", "creation", "due_date", "bill_no", "bill_date", "base_grand_total", "is_return", "is_opening", "party_account_currency", "currency", "conversion_rate", "total_advance"] +
+		["name", "supplier", "posting_date", "creation", "due_date", "payment_deadline_not_agreed", "bill_no", "bill_date", "base_grand_total", "is_return", "is_opening", "party_account_currency", "currency", "conversion_rate", "total_advance"] +
 		(["grand_total", "outstanding_amount", "status", "return_against"] if supplier else []), "supplier", names, permitted=True)
 	payments = batched_rows("Payment Entry", {**filters, "party_type": "Supplier",
 		"payment_type": ["in", ["Pay", "Receive"]]},

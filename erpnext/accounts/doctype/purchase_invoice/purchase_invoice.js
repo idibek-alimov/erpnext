@@ -74,9 +74,27 @@ erpnext.accounts.PurchaseInvoice = class PurchaseInvoice extends erpnext.buying.
 		}
 	}
 
+	payment_deadline_not_agreed() {
+		const no_deadline = this.frm.doc.payment_deadline_not_agreed;
+		for (const field of ["payment_terms_template", "payment_schedule"]) {
+			this.frm.toggle_display(field, !no_deadline);
+		}
+		if (no_deadline) {
+			this.frm.set_value({
+				due_date: null,
+				payment_terms_template: null,
+				payment_schedule: [],
+				ignore_default_payment_terms_template: 1,
+			});
+		}
+	}
+
 	refresh(doc) {
 		const me = this;
 		super.refresh();
+		for (const field of ["payment_terms_template", "payment_schedule"]) {
+			this.frm.toggle_display(field, !doc.payment_deadline_not_agreed);
+		}
 
 		hide_fields(this.frm.doc);
 		// Show / Hide button

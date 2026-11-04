@@ -8674,3 +8674,73 @@ Rate of Depreciation (%),Норма амортизации (%),
 Rejected ,Отклонено ,
 Mobile: ,Мобильный: ,
 {0} is a mandatory field.,{0} - обязательное поле.,
+Quick Product Intake,Быстрое поступление товара
+Product Name,Название товара
+Item Code / Model ID,Код товара / модели
+Has Variants (Color & Size Matrix),Есть цвета или размеры
+Warehouse & Supplier,Поставщик и поступление
+Prices,Цены
+Cost (Buying Price),Закупочная цена
+Retail (Selling Price),Цена продажи
+Markup %,Наценка %
+Colors & Sizes,Цвета и размеры
+Incoming Products,Товары и количество
+Matrix Items,Варианты товара
+Incoming Qty,Количество поступления
+Receipt Date,Дата поступления
+Supplier Invoice Number,Номер накладной поставщика
+Pay By,Оплатить до
+Payment to Record,Записать оплату
+Paid From,Счёт оплаты
+Purchase Total,Сумма закупки
+Remaining Supplier Debt,Осталось оплатить поставщику
+Payment deadline not specified,Срок оплаты не указан
+Pay by {0},Оплатить до {0}
+"Product only: no goods received, no invoice, and no supplier debt.",Товар будет создан без поступления и задолженности.
+Check quantities and payment amount before submitting,Перед проведением проверьте количество и сумму оплаты
+Product Detail,Карточка товара
+Supplier Detail,Карточка поставщика
+Generated Records & Audit Links,Созданные документы
+Added {0} variants. Existing quantities and prices were kept.,Добавлено вариантов: {0}. Введённые количества и цены сохранены.
+Could not load colors and sizes,Не удалось загрузить цвета и размеры
+No values yet,Значений пока нет
+Fill Same Qty for All,Одинаковое количество для всех
+Apply Header Prices to Rows,Применить общие цены ко всем строкам
+Matrix Actions,Действия с вариантами
+Quantity for All Rows,Количество для всех строк
+Fill Quantities,Заполнить количество
+Incoming quantity cannot be negative,Количество поступления не может быть отрицательным
+Payment Deadline Not Agreed,Срок оплаты не согласован
+"Outstanding remains payable, but has no agreed payment deadline.","Долг остаётся к оплате, но согласованного срока оплаты нет."
+Optional. Leave empty if no payment deadline was agreed.,"Необязательно. Оставьте пустым, если срок оплаты не согласован."
+Only enter a payment that has not already been recorded. Leave 0 to pay later.,"Укажите только ещё не записанную оплату. Оставьте 0, чтобы оплатить позже."
+"If empty, uses the receipt date.","Если пусто, используется дата поступления."
+"Supplier stays linked to the products, including variants with no incoming stock.","Поставщик сохраняется у всех вариантов, включая варианты без поступления."
+Leave empty to generate a code from the product name.,"Оставьте пустым, чтобы создать код из названия товара."
+Markup over cost. Cost 100 + 30% = Retail 130.,Наценка к закупочной цене: 100 + 30% = цена продажи 130.
+Add missing combinations while keeping existing quantities and prices.,"Добавляет недостающие сочетания, сохраняя введённые количества и цены."
+Payment must be between 0 and the purchase total,Оплата должна быть от 0 до суммы закупки
+Select the payment account and date,Укажите счёт и дату оплаты
+Payment date must be between the receipt date and today,Дата оплаты должна быть между датой поступления и сегодня
+Receipt date cannot be in the future,Дата поступления не может быть в будущем
+Supplier invoice date cannot be after the receipt date,Дата накладной поставщика не может быть позже даты поступления
+Payment deadline cannot be before the supplier invoice date,Срок оплаты не может быть раньше даты накладной поставщика
+Select an enabled warehouse in this company,Выберите действующий склад этой компании
+Select a warehouse for the incoming stock,Выберите склад поступления
+Select an enabled cash or bank account in the company currency,Выберите действующий кассовый или банковский счёт в валюте компании
+A product without variants must have exactly one row,Для товара без вариантов должна быть одна строка
+Select at least one color or size,Выберите хотя бы один цвет или размер
+Row {0}: Incoming quantity cannot be negative,Строка {0}: количество поступления не может быть отрицательным
+Row {0}: Buying and selling prices must be greater than 0,Строка {0}: цены закупки и продажи должны быть больше 0
+Row {0}: Fill the selected variant attributes,Строка {0}: заполните выбранные цвет и размер
+Row {0}: Duplicate color and size combination,Строка {0}: сочетание цвета и размера повторяется
+Receiving Warehouse,Склад поступления
+Supplier Bill Details,Реквизиты накладной поставщика
+Product Category,Категория товара
+Colors,Цвета
+Sizes,Размеры
+Payment Date,Дата оплаты
+Payment Document Number,Номер платёжного документа
+Amounts recorded by this intake. Open the invoice for the current balance.,Суммы на момент поступления. Текущий остаток оплаты указан в накладной.
+Product created without incoming stock or supplier debt.,Товар создан без поступления и задолженности.
+Price list {0} must be enabled and use company currency {1},Прайс-лист {0} должен быть включён и использовать валюту компании {1}

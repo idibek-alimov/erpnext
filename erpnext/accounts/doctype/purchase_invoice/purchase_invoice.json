@@ -17,6 +17,7 @@
   "posting_date",
   "posting_time",
   "set_posting_time",
+  "payment_deadline_not_agreed",
   "due_date",
   "column_break1",
   "is_paid",
@@ -261,7 +262,8 @@
    "fieldtype": "Date",
    "label": "Due Date",
    "oldfieldname": "due_date",
-   "oldfieldtype": "Date"
+   "oldfieldtype": "Date",
+   "depends_on": "eval:!doc.payment_deadline_not_agreed"
   },
   {
    "default": "0",
@@ -1656,6 +1658,13 @@
    "fieldtype": "Data",
    "is_virtual": 1,
    "label": "Last Scanned Warehouse"
+  },
+  {
+   "fieldname": "payment_deadline_not_agreed",
+   "fieldtype": "Check",
+   "default": "0",
+   "label": "Payment Deadline Not Agreed",
+   "description": "Outstanding remains payable, but has no agreed payment deadline."
   }
  ],
  "grid_page_length": 50,

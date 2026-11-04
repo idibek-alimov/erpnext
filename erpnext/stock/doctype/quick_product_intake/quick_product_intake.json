@@ -15,15 +15,20 @@
   "has_variants",
   "stock_uom",
   "sec_break_destination",
-  "company",
-  "target_warehouse",
-  "col_break2",
   "supplier",
+  "company",
+  "col_break2",
+  "target_warehouse",
+  "posting_date",
+  "supplier_bill_section",
+  "bill_no",
+  "bill_date",
   "sec_break_pricing",
   "buying_price",
   "selling_price",
   "col_break3",
   "margin_percentage",
+  "currency",
   "sec_break_attributes",
   "color_picker",
   "col_break_attr",
@@ -34,10 +39,20 @@
   "generate_matrix_btn",
   "sec_break_matrix",
   "items",
+  "payment_section",
+  "due_date",
+  "payment_amount",
+  "payment_column",
+  "payment_account",
+  "payment_date",
+  "payment_reference",
+  "summary_section",
+  "intake_summary",
   "sec_break_accounting",
   "template_item",
   "purchase_invoice",
   "col_break4",
+  "payment_entry",
   "stock_entry",
   "pricing_rule",
   "amended_from"
@@ -51,7 +66,7 @@
    "reqd": 1
   },
   {
-   "description": "Unique identifier / handle. Leave empty to auto-generate from Product Name",
+   "description": "Leave empty to generate a code from the product name.",
    "fieldname": "item_code",
    "fieldtype": "Data",
    "label": "Item Code / Model ID"
@@ -65,7 +80,7 @@
    "fieldname": "item_group",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Item Group",
+   "label": "Product Category",
    "options": "Item Group",
    "reqd": 1
   },
@@ -91,6 +106,15 @@
    "label": "Warehouse & Supplier"
   },
   {
+   "description": "Supplier stays linked to the products, including variants with no incoming stock.",
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
    "fieldname": "company",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -100,36 +124,51 @@
    "reqd": 1
   },
   {
-   "fieldname": "target_warehouse",
-   "fieldtype": "Link",
-   "label": "Target Warehouse",
-   "options": "Warehouse",
-   "reqd": 1
-  },
-  {
    "fieldname": "col_break2",
    "fieldtype": "Column Break"
   },
   {
-   "description": "A Purchase Invoice is always created for this supplier.",
-   "fieldname": "supplier",
+   "fieldname": "target_warehouse",
    "fieldtype": "Link",
-   "label": "Supplier",
-   "options": "Supplier",
-   "reqd": 1,
-   "in_list_view": 1
+   "label": "Receiving Warehouse",
+   "options": "Warehouse",
+   "mandatory_depends_on": "eval:(doc.items || []).some(row => row.qty > 0)"
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Receipt Date",
+   "default": "Today",
+   "reqd": 1
+  },
+  {
+   "fieldname": "supplier_bill_section",
+   "fieldtype": "Section Break",
+   "label": "Supplier Bill Details",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "bill_no",
+   "fieldtype": "Data",
+   "label": "Supplier Invoice Number"
+  },
+  {
+   "fieldname": "bill_date",
+   "fieldtype": "Date",
+   "label": "Supplier Invoice Date",
+   "description": "If empty, uses the receipt date."
   },
   {
    "fieldname": "sec_break_pricing",
    "fieldtype": "Section Break",
-   "label": "Default Pricing & Margin"
+   "label": "Prices"
   },
   {
    "fieldname": "buying_price",
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Cost (Buying Price)",
-   "options": "Company:company:default_currency",
+   "options": "currency",
    "reqd": 1
   },
   {
@@ -137,7 +176,7 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Retail (Selling Price)",
-   "options": "Company:company:default_currency",
+   "options": "currency",
    "reqd": 1
   },
   {
@@ -145,10 +184,38 @@
    "fieldtype": "Column Break"
   },
   {
+   "fieldname": "margin_percentage",
+   "fieldtype": "Float",
+   "label": "Markup %",
+   "description": "Markup over cost. Cost 100 + 30% = Retail 130."
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "options": "Currency",
+   "label": "Currency",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
    "depends_on": "eval:doc.has_variants == 1",
    "fieldname": "sec_break_attributes",
    "fieldtype": "Section Break",
-   "label": "Matrix Attributes"
+   "label": "Colors & Sizes"
+  },
+  {
+   "fieldname": "color_picker",
+   "fieldtype": "HTML",
+   "label": "Colors"
+  },
+  {
+   "fieldname": "col_break_attr",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "size_picker",
+   "fieldtype": "HTML",
+   "label": "Sizes"
   },
   {
    "fieldname": "colors",
@@ -172,12 +239,13 @@
    "depends_on": "eval:doc.has_variants == 1",
    "fieldname": "generate_matrix_btn",
    "fieldtype": "Button",
-   "label": "⚡ Generate Matrix Rows (Эҷоди андозаҳо)"
+   "label": "Create Variants",
+   "description": "Add missing combinations while keeping existing quantities and prices."
   },
   {
    "fieldname": "sec_break_matrix",
    "fieldtype": "Section Break",
-   "label": "Products & Stock Matrix"
+   "label": "Incoming Products"
   },
   {
    "fieldname": "items",
@@ -187,10 +255,65 @@
    "reqd": 1
   },
   {
+   "fieldname": "payment_section",
+   "fieldtype": "Section Break",
+   "label": "Payment"
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "label": "Pay By",
+   "description": "Optional. Leave empty if no payment deadline was agreed."
+  },
+  {
+   "fieldname": "payment_amount",
+   "fieldtype": "Currency",
+   "label": "Payment to Record",
+   "default": "0",
+   "options": "currency",
+   "description": "Only enter a payment that has not already been recorded. Leave 0 to pay later."
+  },
+  {
+   "fieldname": "payment_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payment_account",
+   "fieldtype": "Link",
+   "label": "Paid From",
+   "options": "Account",
+   "depends_on": "eval:doc.payment_amount > 0",
+   "mandatory_depends_on": "eval:doc.payment_amount > 0"
+  },
+  {
+   "fieldname": "payment_date",
+   "fieldtype": "Date",
+   "label": "Payment Date",
+   "default": "Today",
+   "depends_on": "eval:doc.payment_amount > 0",
+   "mandatory_depends_on": "eval:doc.payment_amount > 0"
+  },
+  {
+   "fieldname": "payment_reference",
+   "fieldtype": "Data",
+   "label": "Payment Document Number",
+   "depends_on": "eval:doc.payment_amount > 0"
+  },
+  {
+   "fieldname": "summary_section",
+   "fieldtype": "Section Break",
+   "label": "Summary"
+  },
+  {
+   "fieldname": "intake_summary",
+   "fieldtype": "HTML"
+  },
+  {
    "collapsible": 1,
    "fieldname": "sec_break_accounting",
    "fieldtype": "Section Break",
-   "label": "Generated Records & Audit Links"
+   "label": "Generated Records & Audit Links",
+   "collapsible_depends_on": "eval:doc.docstatus == 0"
   },
   {
    "fieldname": "template_item",
@@ -211,6 +334,14 @@
   {
    "fieldname": "col_break4",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "options": "Payment Entry",
+   "label": "Payment Entry",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "stock_entry",
@@ -236,26 +367,6 @@
    "options": "Quick Product Intake",
    "print_hide": 1,
    "read_only": 1
-  },
-  {
-   "fieldname": "margin_percentage",
-   "fieldtype": "Float",
-   "label": "Margin %",
-   "description": "Margin over cost. Cost 100 + 30% = Retail 130. Editing either updates the other."
-  },
-  {
-   "fieldname": "color_picker",
-   "fieldtype": "HTML",
-   "label": "Colors"
-  },
-  {
-   "fieldname": "col_break_attr",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "size_picker",
-   "fieldtype": "HTML",
-   "label": "Sizes"
   }
  ],
  "is_submittable": 1,
@@ -308,11 +419,12 @@
    "write": 1
   }
  ],
- "quick_entry": 1,
+ "quick_entry": 0,
  "row_format": "Dynamic",
  "search_fields": "item_name, item_code, item_group",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
- "title_field": "item_name"
+ "title_field": "item_name",
+ "track_changes": 1
 }

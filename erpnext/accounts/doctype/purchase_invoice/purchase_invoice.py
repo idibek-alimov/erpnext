@@ -344,6 +344,9 @@ class PurchaseInvoice(BuyingController):
 				self.remarks = _("No Remarks")
 
 	def set_missing_values(self, for_validate=False):
+		if self.get("payment_deadline_not_agreed"):
+			self.ignore_default_payment_terms_template = 1
+			self.payment_terms_template = None
 		if not self.credit_to:
 			self.credit_to = get_party_account("Supplier", self.supplier, self.company)
 			self.party_account_currency = frappe.get_cached_value(
@@ -366,6 +369,21 @@ class PurchaseInvoice(BuyingController):
 			self.set_onload("supplier_tds", tds_category)
 
 		super().set_missing_values(for_validate)
+		if self.get("payment_deadline_not_agreed"):
+			# Party defaults must not turn an open-ended agreement into a deadline.
+			self.due_date = None
+
+	def set_payment_schedule(self):
+		if self.get("payment_deadline_not_agreed"):
+			self.due_date = None
+			self.payment_terms_template = None
+			self.set("payment_schedule", [])
+			return
+		super().set_payment_schedule()
+
+	def validate_due_date(self):
+		if not self.get("payment_deadline_not_agreed"):
+			super().validate_due_date()
 
 	def validate_credit_to_acc(self):
 		if not self.credit_to:

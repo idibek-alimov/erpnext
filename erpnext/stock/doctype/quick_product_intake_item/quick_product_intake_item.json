@@ -23,18 +23,19 @@
    "fieldname": "color",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Color"
+   "label": "Color",
+   "columns": 2
   },
   {
    "fieldname": "size",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Size"
+   "label": "Size",
+   "columns": 2
   },
   {
    "fieldname": "variant_title",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "description": "Name shown in POS",
    "label": "POS Display Name"
   },
@@ -44,7 +45,8 @@
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Incoming Qty",
-   "reqd": 1
+   "reqd": 1,
+   "columns": 2
   },
   {
    "fieldname": "col_break1",
@@ -53,19 +55,22 @@
   {
    "fieldname": "buying_price",
    "fieldtype": "Currency",
+   "options": "currency",
    "in_list_view": 1,
-   "label": "Cost (Buying Price)"
+   "label": "Cost (Buying Price)",
+   "columns": 2
   },
   {
    "fieldname": "selling_price",
    "fieldtype": "Currency",
+   "options": "currency",
    "in_list_view": 1,
-   "label": "Retail (Selling Price)"
+   "label": "Retail (Selling Price)",
+   "columns": 2
   },
   {
    "fieldname": "custom_short_code",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "label": "Short Code",
    "read_only": 1
   },

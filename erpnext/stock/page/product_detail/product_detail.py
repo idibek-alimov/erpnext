@@ -159,7 +159,7 @@ def fix_all_legacy_barcodes():
 
 
 @frappe.whitelist()
-def get_product_detail(item_code):
+def get_product_detail(item_code, company=None):
 	if not item_code:
 		frappe.throw(_("Укажите код товара."))
 
@@ -181,6 +181,8 @@ def get_product_detail(item_code):
 
 	if not frappe.has_permission("Item", "read", item_code):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	company = company or get_default_company()
+	frappe.get_cached_doc("Company", company).check_permission("read")
 
 	item = frappe.db.get_value(
 		"Item",
@@ -384,26 +386,26 @@ def get_product_detail(item_code):
 		"short_code": item.custom_short_code or "",
 		"stock_uom": item.stock_uom or "шт",
 		"barcode": barcode_map.get(item.name) or item.custom_short_code or item.name,
-		"company_name": frappe.db.get_single_value("Global Defaults", "default_company") or frappe.defaults.get_user_default("company") or "Radolfa",
+		"company_name": company,
 		"has_variants": item.has_variants,
-		"supplier": get_supplier(item_code, codes),
-		"currency": frappe.db.get_default("currency") or "TJS",
+		"supplier": get_supplier(item_code, codes, company),
+		"currency": frappe.get_cached_value("Company", company, "default_currency"),
 		"colors": [colors[k] for k in order],
 	}
 
 
-def get_supplier(item_code, codes):
-	supplier = frappe.db.get_value("Item Default", {"parent": item_code}, "default_supplier")
-	if supplier:
-		return supplier
-	row = frappe.db.sql(
-		"""SELECT pi.supplier FROM `tabPurchase Invoice Item` pii
-		JOIN `tabPurchase Invoice` pi ON pi.name = pii.parent
-		WHERE pii.item_code IN %(c)s AND pi.docstatus = 1
-		ORDER BY pi.posting_date DESC, pi.creation DESC LIMIT 1""",
-		{"c": codes},
-	)
-	return row[0][0] if row else ""
+def get_supplier(item_code, codes, company=None):
+	company = company or get_default_company()
+	if not frappe.has_permission("Supplier", "read"):
+		return ""
+	supplier = frappe.db.get_value("Item Default", {"parent": item_code, "company": company}, "default_supplier")
+	if not supplier and frappe.has_permission("Purchase Invoice", "read"):
+		# Resolve native invoice permissions before looking up the supplier.
+		invoices = frappe.get_list("Purchase Invoice", filters=[["Purchase Invoice", "company", "=", company],
+			["Purchase Invoice", "docstatus", "=", 1], ["Purchase Invoice Item", "item_code", "in", codes]], fields=["name", "supplier"],
+			order_by="`tabPurchase Invoice`.posting_date desc, `tabPurchase Invoice`.creation desc", limit_page_length=1)
+		supplier = invoices[0].supplier if invoices else None
+	return supplier if supplier and frappe.has_permission("Supplier", "read", doc=supplier) else ""
 
 
 @frappe.whitelist()

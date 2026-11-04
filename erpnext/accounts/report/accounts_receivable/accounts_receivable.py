@@ -506,7 +506,7 @@ class ReceivablePayableReport:
 					"company": self.filters.company,
 					"docstatus": 1,
 				},
-				fields=["name", "due_date", "bill_no", "bill_date"],
+				fields=["name", "due_date", "bill_no", "bill_date", "payment_deadline_not_agreed"],
 			)
 
 			for pi in invoices:
@@ -803,7 +803,10 @@ class ReceivablePayableReport:
 		if self.filters.ageing_based_on == "Due Date":
 			# use posting date as a fallback for advances posted via journal and payment entry
 			# when ageing viewed by due date
-			entry_date = row.due_date or row.posting_date
+			entry_date = (
+				None if row.voucher_type == "Purchase Invoice" and row.get("payment_deadline_not_agreed")
+				else row.due_date or row.posting_date
+			)
 		elif self.filters.ageing_based_on == "Supplier Invoice Date":
 			entry_date = row.bill_date
 		else:
@@ -812,7 +815,7 @@ class ReceivablePayableReport:
 		self.get_ageing_data(entry_date, row)
 
 		# ageing buckets should not have amounts if due date is not reached
-		if getdate(entry_date) > getdate(self.age_as_on):
+		if not entry_date or getdate(entry_date) > getdate(self.age_as_on):
 			[setattr(row, f"range{i}", 0.0) for i in self.range_numbers]
 
 		row.total_due = sum(row[f"range{i}"] for i in self.range_numbers)

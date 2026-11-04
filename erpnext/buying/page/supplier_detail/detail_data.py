@@ -30,6 +30,7 @@ def invoice_rows(context):
 		outstanding = sum(max(flt(t.get("outstanding")), 0) for t in terms) if context["can_payables"] else None
 		rows.append(dict(name=invoice.name, doctype="Purchase Invoice", posting_date=str(invoice.posting_date),
 			bill_no=invoice.bill_no or "", amount=flt(invoice.base_grand_total), outstanding=outstanding,
+			payment_deadline_not_agreed=bool(invoice.get("payment_deadline_not_agreed")),
 			due_date=str(due or invoice.due_date) if due or invoice.due_date else None,
 			days_overdue=max(0, (context["end"] - due).days) if due else 0,
 			is_return=bool(invoice.is_return), is_opening=invoice.is_opening == "Yes",

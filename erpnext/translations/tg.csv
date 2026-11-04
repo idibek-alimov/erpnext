@@ -8670,3 +8670,73 @@ Rate of Depreciation (%),Меъёри амортизатсия (%),
 Rejected ,Рад карда шуд,
 Mobile: ,Мобилӣ:,
 {0} is a mandatory field.,{0} майдони ҳатмӣ аст.,
+Quick Product Intake,Қабули зуди мол
+Product Name,Номи мол
+Item Code / Model ID,Рамзи мол / модел
+Has Variants (Color & Size Matrix),Рангҳо ё андозаҳо дорад
+Warehouse & Supplier,Таъминкунанда ва қабул
+Prices,Нархҳо
+Cost (Buying Price),Нархи харид
+Retail (Selling Price),Нархи фурӯш
+Markup %,Болонархӣ %
+Colors & Sizes,Рангҳо ва андозаҳо
+Incoming Products,Молҳо ва миқдор
+Matrix Items,Намудҳои мол
+Incoming Qty,Миқдори қабул
+Receipt Date,Санаи қабул
+Supplier Invoice Number,Рақами борхати таъминкунанда
+Pay By,Пардохт то
+Payment to Record,Сабти пардохт
+Paid From,Ҳисоби пардохт
+Purchase Total,Маблағи харид
+Remaining Supplier Debt,Бақияи пардохт ба таъминкунанда
+Payment deadline not specified,Муҳлати пардохт муайян нест
+Pay by {0},Пардохт то {0}
+"Product only: no goods received, no invoice, and no supplier debt.",Мол бе қабул ва қарздорӣ эҷод мешавад.
+Check quantities and payment amount before submitting,Пеш аз тасдиқ миқдор ва маблағи пардохтро санҷед
+Product Detail,Маълумоти мол
+Supplier Detail,Маълумоти таъминкунанда
+Generated Records & Audit Links,Ҳуҷҷатҳои эҷодшуда
+Added {0} variants. Existing quantities and prices were kept.,Намудҳои иловашуда: {0}. Миқдор ва нархҳои воридшуда нигоҳ дошта шуданд.
+Could not load colors and sizes,Боркунии рангҳо ва андозаҳо муяссар нашуд
+No values yet,Ҳоло арзишҳо нестанд
+Fill Same Qty for All,Миқдори якхела барои ҳама
+Apply Header Prices to Rows,Татбиқи нархҳои умумӣ ба ҳамаи сатрҳо
+Matrix Actions,Амалҳо бо намудҳо
+Quantity for All Rows,Миқдор барои ҳамаи сатрҳо
+Fill Quantities,Пур кардани миқдор
+Incoming quantity cannot be negative,Миқдори қабул манфӣ буда наметавонад
+Payment Deadline Not Agreed,Муҳлати пардохт мувофиқа нашудааст
+"Outstanding remains payable, but has no agreed payment deadline.","Қарз боқӣ мемонад, вале муҳлати пардохт мувофиқа нашудааст."
+Optional. Leave empty if no payment deadline was agreed.,"Ихтиёрӣ. Агар муҳлати пардохт мувофиқа нашуда бошад, холӣ гузоред."
+Only enter a payment that has not already been recorded. Leave 0 to pay later.,Танҳо пардохти ҳанӯз сабтнашударо ворид кунед. Барои пардохти дертар 0 гузоред.
+"If empty, uses the receipt date.","Агар холӣ бошад, санаи қабул истифода мешавад."
+"Supplier stays linked to the products, including variants with no incoming stock.","Таъминкунанда бо ҳамаи намудҳо, аз ҷумла намудҳои бе қабул, алоқаманд мемонад."
+Leave empty to generate a code from the product name.,Барои эҷоди рамз аз номи мол холӣ гузоред.
+Markup over cost. Cost 100 + 30% = Retail 130.,Болонархӣ ба нархи харид: 100 + 30% = нархи фурӯш 130.
+Add missing combinations while keeping existing quantities and prices.,Омезишҳои намерасидаро бо нигоҳ доштани миқдор ва нархҳои воридшуда илова мекунад.
+Payment must be between 0 and the purchase total,Пардохт бояд аз 0 то маблағи харид бошад
+Select the payment account and date,Ҳисоб ва санаи пардохтро муайян кунед
+Payment date must be between the receipt date and today,Санаи пардохт бояд байни санаи қабул ва имрӯз бошад
+Receipt date cannot be in the future,Санаи қабул дар оянда буда наметавонад
+Supplier invoice date cannot be after the receipt date,Санаи борхати таъминкунанда аз санаи қабул дертар буда наметавонад
+Payment deadline cannot be before the supplier invoice date,Муҳлати пардохт аз санаи борхати таъминкунанда пештар буда наметавонад
+Select an enabled warehouse in this company,Анбори фаъоли ин ширкатро интихоб кунед
+Select a warehouse for the incoming stock,Анбори қабули молро интихоб кунед
+Select an enabled cash or bank account in the company currency,Ҳисоби фаъоли хазинавӣ ё бонкиро бо асъори ширкат интихоб кунед
+A product without variants must have exactly one row,Моли бе намудҳо бояд як сатр дошта бошад
+Select at least one color or size,Ҳадди ақал як ранг ё андозаро интихоб кунед
+Row {0}: Incoming quantity cannot be negative,Сатри {0}: миқдори қабул манфӣ буда наметавонад
+Row {0}: Buying and selling prices must be greater than 0,Сатри {0}: нархҳои харид ва фурӯш бояд аз 0 зиёд бошанд
+Row {0}: Fill the selected variant attributes,Сатри {0}: ранг ва андозаи интихобшударо пур кунед
+Row {0}: Duplicate color and size combination,Сатри {0}: омезиши ранг ва андоза такрор шудааст
+Receiving Warehouse,Анбори қабул
+Supplier Bill Details,Маълумоти борхати таъминкунанда
+Product Category,Гурӯҳи мол
+Colors,Рангҳо
+Sizes,Андозаҳо
+Payment Date,Санаи пардохт
+Payment Document Number,Рақами ҳуҷҷати пардохт
+Amounts recorded by this intake. Open the invoice for the current balance.,Маблағҳо дар вақти қабул. Бақияи ҷории пардохт дар борхат нишон дода шудааст.
+Product created without incoming stock or supplier debt.,Мол бе қабул ва қарздорӣ эҷод шуд.
+Price list {0} must be enabled and use company currency {1},Рӯйхати нархҳои {0} бояд фаъол бошад ва асъори ширкат {1}-ро истифода барад

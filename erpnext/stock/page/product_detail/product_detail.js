@@ -140,7 +140,7 @@ class ProductDetailApp {
 		);
 		frappe.call({
 			method: "erpnext.stock.page.product_detail.product_detail.get_product_detail",
-			args: { item_code },
+			args: { item_code, company: this.company },
 			callback: (r) => {
 				if (request !== this.overview_request) return;
 				if (!r.message) return;

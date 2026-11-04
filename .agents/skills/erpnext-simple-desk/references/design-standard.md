@@ -112,3 +112,24 @@ validation and row permissions. Tab-only requests reuse the current header and a
 inventory work. Browser-held results are revalidated against committed document changes,
 current access, and a short expiry; explicit Refresh and returning from native documents
 request fresh data. Keep totals independent of pagination and test uncached timings.
+
+## Quick Product Intake
+
+The owner confirmed that suppliers do not always agree a payment deadline. Keep the
+deadline optional: no agreed deadline must not silently become today's deadline or
+produce an overdue warning. An unpaid balance without a deadline still counts as
+outstanding supplier debt. Carry this meaning through the native source documents and
+supplier summaries when implementing the reviewed intake improvements.
+
+Allow creating products and variants with zero incoming quantity. Preserve their supplier
+relationship even without a purchase invoice. When all quantities are zero, clearly show
+that only products were created: no goods were received and no invoice or supplier debt
+was created. Quick Product Restock remains outside this intake review's scope.
+
+The approved intake layout follows Product, Receiving, Prices and variants, Payment,
+then Summary. Keep supplier bill details and generated document links secondary. Use
+one native Create Variants action, preserve quantities and row price overrides, label
+the cost-based percentage as markup, and show incoming quantity, purchase total,
+payment to record, and remaining debt before submission. Submitted intake summaries
+describe the intake transaction; link to the invoice for its current balance. Preserve
+company scope when opening Product Detail or Supplier Detail.
