@@ -146,3 +146,21 @@ the cost-based percentage as markup, and show incoming quantity, purchase total,
 payment to record, and remaining debt before submission. Submitted intake summaries
 describe the intake transaction; link to the invoice for its current balance. Preserve
 company scope when opening Product Detail or Supplier Detail.
+
+## Quick Product Restock
+
+Keep the existing color/size receiving workflow in a native Desk form, ordered Product,
+Delivery, Quantities and Prices, Payment, then Summary. Show incoming quantity, purchase
+total, payment to record, and remaining supplier debt. Stock belongs to the selected
+permitted receiving warehouse; quantities and prices use stock units. Preserve row
+overrides when applying shared prices. Show previous retail prices and changed-price
+text. Additional colors stay behind Add color; never silently resolve a partial product
+name to the first search result.
+
+Payment deadlines are optional, with the same no-agreed-deadline meaning as Intake.
+Use native invoices/payment allocations and permissions. Price-only submissions require
+an explicit choice and create no stock or debt. Explain that cancellation reverses the
+generated payment/invoice but does not restore published prices. Keep generated record
+links and company-scoped Product/Supplier Detail navigation. Submitted summaries describe
+the restock transaction; current debt belongs to its invoice. See
+`docs/quick-product-restock.md` for supported workflows and activation requirements.

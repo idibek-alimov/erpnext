@@ -14,15 +14,33 @@
   "col_break1",
   "company",
   "target_warehouse",
+  "price_only",
   "sec_break_delivery",
   "supplier",
   "col_break2",
   "posting_date",
+  "supplier_bill_section",
+  "bill_no",
+  "bill_date",
   "sec_break_matrix",
   "restock_matrix",
   "items",
+  "payment_section",
+  "due_date",
+  "payment_amount",
+  "payment_column",
+  "payment_account",
+  "payment_date",
+  "payment_reference",
+  "summary_section",
+  "restock_summary",
+  "currency",
+  "total_qty",
+  "purchase_total",
+  "remaining_debt",
   "sec_break_links",
   "purchase_invoice",
+  "payment_entry",
   "amended_from",
   "initial_color"
  ],
@@ -66,12 +84,19 @@
    "fieldtype": "Link",
    "label": "Receiving Warehouse",
    "options": "Warehouse",
-   "reqd": 1
+   "mandatory_depends_on": "eval:!doc.price_only"
+  },
+  {
+   "fieldname": "price_only",
+   "fieldtype": "Check",
+   "label": "Price update only",
+   "default": "0",
+   "description": "Enable only when changing prices without receiving goods."
   },
   {
    "fieldname": "sec_break_delivery",
    "fieldtype": "Section Break",
-   "label": "This Delivery"
+   "label": "Delivery"
   },
   {
    "description": "Supplier who delivered this batch",
@@ -94,9 +119,25 @@
    "reqd": 1
   },
   {
+   "fieldname": "supplier_bill_section",
+   "fieldtype": "Section Break",
+   "label": "Supplier Invoice Details",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "bill_no",
+   "fieldtype": "Data",
+   "label": "Supplier Invoice Number"
+  },
+  {
+   "fieldname": "bill_date",
+   "fieldtype": "Date",
+   "label": "Supplier Invoice Date"
+  },
+  {
    "fieldname": "sec_break_matrix",
    "fieldtype": "Section Break",
-   "label": "Colors, Sizes & Quantities"
+   "label": "Quantities and Prices"
   },
   {
    "depends_on": "eval:doc.docstatus==0",
@@ -112,10 +153,96 @@
    "options": "Quick Product Restock Item"
   },
   {
+   "fieldname": "payment_section",
+   "fieldtype": "Section Break",
+   "label": "Payment"
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "label": "Pay By",
+   "description": "Optional. Leave empty if no payment deadline was agreed."
+  },
+  {
+   "fieldname": "payment_amount",
+   "fieldtype": "Currency",
+   "label": "Payment to Record",
+   "default": "0",
+   "options": "currency",
+   "description": "Only enter a payment that has not already been recorded. Leave 0 to pay later."
+  },
+  {
+   "fieldname": "payment_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payment_account",
+   "fieldtype": "Link",
+   "label": "Paid From",
+   "options": "Account",
+   "depends_on": "eval:doc.payment_amount > 0",
+   "mandatory_depends_on": "eval:doc.payment_amount > 0"
+  },
+  {
+   "fieldname": "payment_date",
+   "fieldtype": "Date",
+   "label": "Payment Date",
+   "default": "Today",
+   "depends_on": "eval:doc.payment_amount > 0",
+   "mandatory_depends_on": "eval:doc.payment_amount > 0"
+  },
+  {
+   "fieldname": "payment_reference",
+   "fieldtype": "Data",
+   "label": "Payment Reference",
+   "depends_on": "eval:doc.payment_amount > 0"
+  },
+  {
+   "fieldname": "summary_section",
+   "fieldtype": "Section Break",
+   "label": "Summary"
+  },
+  {
+   "fieldname": "restock_summary",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_qty",
+   "fieldtype": "Float",
+   "label": "Incoming Qty",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "purchase_total",
+   "fieldtype": "Currency",
+   "label": "Purchase Total",
+   "options": "currency",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "remaining_debt",
+   "fieldtype": "Currency",
+   "label": "Remaining Supplier Debt",
+   "options": "currency",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
    "collapsible": 1,
    "fieldname": "sec_break_links",
    "fieldtype": "Section Break",
-   "label": "Generated Records"
+   "label": "Generated Records",
+   "collapsible_depends_on": "eval:doc.docstatus == 0"
   },
   {
    "fieldname": "purchase_invoice",
@@ -124,6 +251,14 @@
    "no_copy": 1,
    "options": "Purchase Invoice",
    "read_only": 1
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "amended_from",
@@ -198,5 +333,6 @@
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
- "title_field": "item_name"
+ "title_field": "item_name",
+ "track_changes": 1
 }

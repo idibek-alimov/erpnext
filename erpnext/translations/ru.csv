@@ -4558,7 +4558,7 @@ Is Paid,Оплачено,
 Is Return (Debit Note),Возврат (дебетовая заметка),
 Apply Tax Withholding Amount,Применять сумму удержания налога,
 Accounting Dimensions ,Бухгалтерские измерения ,
-Supplier Invoice Details,Подробная информация о поставщике счета,
+Supplier Invoice Details,Данные накладной поставщика,
 Supplier Invoice Date,Дата выставления счета поставщиком,
 Return Against Purchase Invoice,Вернуться против счет покупки,
 Select Supplier Address,Выбрать адрес поставщика,
@@ -8744,3 +8744,93 @@ Payment Document Number,Номер платёжного документа
 Amounts recorded by this intake. Open the invoice for the current balance.,Суммы на момент поступления. Текущий остаток оплаты указан в накладной.
 Product created without incoming stock or supplier debt.,Товар создан без поступления и задолженности.
 Price list {0} must be enabled and use company currency {1},Прайс-лист {0} должен быть включён и использовать валюту компании {1}
+Add color,Добавить цвет
+Add size,Добавить размер
+Add sizes,Добавить размеры
+Add sizes to {0},Добавить размеры: {0}
+After receipt,После приёмки
+All available colors are already selected,Все доступные цвета уже выбраны
+All available sizes are already added for this color.,Все доступные размеры для этого цвета уже добавлены.
+Amounts recorded by this restock. Open the invoice for the current balance.,Суммы на момент этой приёмки. Текущий остаток долга указан в накладной.
+Apply delivery cost,Применить закупочную цену
+Apply retail price,Применить розничную цену
+Choose a product from the search results or scan its code,Выберите товар из результатов поиска или отсканируйте его код
+Colors in this delivery,Цвета в этой поставке
+"Colors, Sizes & Quantities","Цвета, размеры и количество"
+Cost (This Delivery),Закупочная цена поставки
+Cost per piece in THIS delivery,Закупочная цена за единицу в этой поставке
+Could not find product matching '{0}',Товар «{0}» не найден
+Could not load product. Check access and try again.,Не удалось загрузить товар. Проверьте доступ и повторите попытку.
+Enter a received quantity or enable Price update only,Укажите принятое количество или включите «Только изменение цен»
+"Enter received quantities first, or enable Price update only",Сначала укажите принятое количество или включите «Только изменение цен»
+Generated Records,Созданные документы
+Initial Color,Исходный цвет
+Invoice total differs from the summary. Use the Purchase Invoice form for taxes or additional charges.,Итог накладной отличается от сводки. Для налогов и дополнительных расходов используйте форму закупочной накладной.
+Loading product…,Загрузка товара…
+NEW Retail Price,Новая розничная цена
+New Size / Color,Новый размер / цвет
+New color,Новый цвет
+No color selected yet. Tick a color above to see its sizes.,"Выберите цвет выше, чтобы увидеть его размеры."
+No sizes yet. Use the button to add sizes.,"Размеров пока нет. Нажмите кнопку, чтобы добавить."
+"No stock, invoice, or supplier debt will be created.","Товар не будет принят, накладная и долг поставщику не будут созданы."
+Not permitted to receive this item,Нет доступа для приёмки этого товара
+Not set,Не указана
+Nothing to add.,Нечего добавлять.
+Old Retail Price,Предыдущая розничная цена
+Pieces that arrived in THIS delivery,"Количество единиц, поступивших в этой поставке"
+Please enter the received quantity for at least one size.,Укажите принятое количество хотя бы для одного размера.
+Please select a Product.,Выберите товар.
+Please select at least one size.,Выберите хотя бы один размер.
+"Please select the main product, not a single size/color variant.","Выберите основной товар, а не отдельный вариант размера или цвета."
+Previous price,Предыдущая цена
+Price changed,Цена изменена
+Price changes apply to future sales. Cancelling this restock does not restore previous prices.,Новые цены действуют для дальнейших продаж. Отмена приёмки не восстанавливает прежние цены.
+Price customers will pay from now on,Розничная цена для дальнейших продаж
+Price must be greater than 0,Цена должна быть больше 0
+Price update only,Только изменение цен
+"Price update only: no goods received, no invoice, and no supplier debt.","Только изменение цен: без приёмки товара, накладной и долга поставщику."
+Prices and quantities are per stock unit,Цены и количество указаны в складских единицах
+Product Code (ID),Код товара (ID)
+Product numeric ID or barcode,Числовой код или штрихкод товара
+Product with Code/ID '{0}' not found,Товар с кодом «{0}» не найден
+Quantities and Prices,Количество и цены
+Quick Product Restock,Быстрая приёмка товара
+Received Qty (+),Принято (+)
+Remove,Удалить
+Replace individual price overrides,"Заменить цены, изменённые вручную"
+Retail Price,Розничная цена
+Retry,Повторить
+Row {0}: A new size/color needs a Received Qty greater than 0,Строка {0}: для нового размера или цвета укажите количество больше 0
+Row {0}: Item does not belong to the selected product,Строка {0}: позиция не относится к выбранному товару
+Row {0}: Item is listed twice,Строка {0}: товар указан дважды
+Row {0}: NEW Retail Price must be greater than 0,Строка {0}: новая розничная цена должна быть больше 0
+Row {0}: Please enter a Color,Строка {0}: укажите цвет
+Row {0}: Please enter a Size,Строка {0}: укажите размер
+Row {0}: Please enter the Cost of this delivery,Строка {0}: укажите закупочную цену поставки
+Row {0}: Quantity must be a whole number for this unit,Строка {0}: для этой единицы количество должно быть целым
+Row {0}: Received Qty cannot be negative,Строка {0}: принятое количество не может быть отрицательным
+"Row {0}: This product has no sizes/colors, new rows cannot be added.","Строка {0}: у товара нет размеров и цветов, новые строки добавить нельзя."
+Row {0}: This variant already exists. Reload the product.,Строка {0}: этот вариант уже существует. Загрузите товар заново.
+Row {0}: {1} / {2} is listed twice,Строка {0}: {1} / {2} указаны дважды
+Search and choose product by name,Найдите и выберите товар по названию
+Select a Product to receive stock.,Выберите товар для приёмки.
+Select a receiving warehouse to see current stock,"Выберите склад приёмки, чтобы увидеть остаток"
+Select an enabled stock product,Выберите активный складской товар
+Select an enabled supplier,Выберите активного поставщика
+Short Code,Короткий код
+Sizes & Colors,Размеры и цвета
+Stock Now,Текущий остаток
+Stock in receiving warehouse,Остаток на складе приёмки
+Stock in the receiving warehouse when this draft was loaded.,Остаток на складе приёмки на момент загрузки черновика.
+Stock received via Quick Product Restock {0} ({1}),Товар принят через быструю приёмку {0} ({1})
+Supplier is required for receiving stock delivery.,Для приёмки поставки укажите поставщика.
+Supplier who delivered this batch,Поставщик этой партии
+This code matches more than one product. Select the product by name.,Этому коду соответствует несколько товаров. Выберите товар по названию.
+"This product has no Color or Size attribute, so new sizes cannot be added.",У товара нет атрибутов цвета или размера. Добавить размеры нельзя.
+Tick every color that arrived in the box.,"Отметьте все цвета, поступившие в этой поставке."
+Turn off Price update only to receive stock,Отключите «Только изменение цен» для приёмки товара
+Use the Item form for products with additional variant attributes,Для товаров с дополнительными атрибутами вариантов используйте форму товара
+Wait for the product to finish loading,Дождитесь загрузки товара
+new for this product,новый для этого товара
+Stock unit,Ед.
+Enable only when changing prices without receiving goods.,Включайте только для изменения цен без приёмки товара.

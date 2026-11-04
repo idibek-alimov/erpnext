@@ -17,7 +17,8 @@
   "item_code",
   "custom_short_code",
   "barcode",
-  "is_new_variant"
+  "is_new_variant",
+  "stock_uom"
  ],
  "fields": [
   {
@@ -39,7 +40,7 @@
   {
    "columns": 1,
    "default": "0",
-   "description": "Current stock in all warehouses",
+   "description": "Stock in the receiving warehouse when this draft was loaded.",
    "fieldname": "current_stock",
    "fieldtype": "Float",
    "in_list_view": 1,
@@ -61,7 +62,8 @@
    "fieldname": "buying_price",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "Cost (This Delivery)"
+   "label": "Cost (This Delivery)",
+   "options": "parent.currency"
   },
   {
    "columns": 2,
@@ -69,7 +71,8 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Old Retail Price",
-   "read_only": 1
+   "read_only": 1,
+   "options": "parent.currency"
   },
   {
    "columns": 2,
@@ -78,13 +81,13 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "NEW Retail Price",
-   "reqd": 1
+   "reqd": 1,
+   "options": "parent.currency"
   },
   {
    "fieldname": "item_code",
    "fieldtype": "Link",
    "label": "Item",
-   "no_copy": 1,
    "options": "Item",
    "read_only": 1
   },
@@ -107,6 +110,13 @@
    "fieldtype": "Check",
    "hidden": 1,
    "label": "New Size / Color"
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Link",
+   "options": "UOM",
+   "label": "Stock UOM",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,

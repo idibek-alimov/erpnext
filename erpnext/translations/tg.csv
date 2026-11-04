@@ -8740,3 +8740,93 @@ Payment Document Number,Рақами ҳуҷҷати пардохт
 Amounts recorded by this intake. Open the invoice for the current balance.,Маблағҳо дар вақти қабул. Бақияи ҷории пардохт дар борхат нишон дода шудааст.
 Product created without incoming stock or supplier debt.,Мол бе қабул ва қарздорӣ эҷод шуд.
 Price list {0} must be enabled and use company currency {1},Рӯйхати нархҳои {0} бояд фаъол бошад ва асъори ширкат {1}-ро истифода барад
+Add color,Иловаи ранг
+Add size,Иловаи андоза
+Add sizes,Иловаи андозаҳо
+Add sizes to {0},Иловаи андозаҳо ба {0}
+After receipt,Баъди қабул
+All available colors are already selected,Ҳамаи рангҳои дастрас аллакай интихоб шудаанд
+All available sizes are already added for this color.,Ҳамаи андозаҳои дастрас барои ин ранг аллакай илова шудаанд.
+Amounts recorded by this restock. Open the invoice for the current balance.,Маблағҳо дар вақти ин қабул. Барои бақияи ҷории қарз ҳисобномаро кушоед.
+Apply delivery cost,Татбиқи нархи харид
+Apply retail price,Татбиқи нархи чакана
+Choose a product from the search results or scan its code,Молро аз натиҷаҳои ҷустуҷӯ интихоб кунед ё рамзи онро скан кунед
+Colors in this delivery,Рангҳо дар ин таҳвил
+"Colors, Sizes & Quantities","Рангҳо, андозаҳо ва миқдор"
+Cost (This Delivery),Нархи хариди ин таҳвил
+Cost per piece in THIS delivery,Нархи хариди як воҳид дар ин таҳвил
+Could not find product matching '{0}',Моли «{0}» ёфт нашуд
+Could not load product. Check access and try again.,Боркунии мол нашуд. Дастрасиро санҷед ва боз кӯшиш кунед.
+Enter a received quantity or enable Price update only,Миқдори қабулшударо ворид кунед ё «Танҳо тағйири нархҳо»-ро фаъол кунед
+"Enter received quantities first, or enable Price update only",Аввал миқдори қабулшударо ворид кунед ё «Танҳо тағйири нархҳо»-ро фаъол кунед
+Generated Records,Ҳуҷҷатҳои сохташуда
+Initial Color,Ранги ибтидоӣ
+Invoice total differs from the summary. Use the Purchase Invoice form for taxes or additional charges.,Маблағи ҳисобнома аз ҷамъбаст фарқ мекунад. Барои андозҳо ё хароҷоти иловагӣ шакли ҳисобномаи харидро истифода баред.
+Loading product…,Боркунии мол…
+NEW Retail Price,Нархи нави чакана
+New Size / Color,Андоза / ранги нав
+New color,Ранги нав
+No color selected yet. Tick a color above to see its sizes.,Барои дидани андозаҳо ранги болоро интихоб кунед.
+No sizes yet. Use the button to add sizes.,Андозаҳо ҳоло нестанд. Барои илова тугмаро пахш кунед.
+"No stock, invoice, or supplier debt will be created.","Мол қабул намешавад, ҳисобнома ва қарз ба таъминкунанда сохта намешаванд."
+Not permitted to receive this item,Барои қабули ин мол иҷозат нест
+Not set,Муайян нашудааст
+Nothing to add.,Чизе барои илова нест.
+Old Retail Price,Нархи пешинаи чакана
+Pieces that arrived in THIS delivery,Миқдори воҳидҳои воридшуда дар ин таҳвил
+Please enter the received quantity for at least one size.,Миқдори қабулшударо ҳадди ақал барои як андоза ворид кунед.
+Please select a Product.,Молро интихоб кунед.
+Please select at least one size.,Ҳадди ақал як андозаро интихоб кунед.
+"Please select the main product, not a single size/color variant.","Моли асосиро интихоб кунед, на варианти алоҳидаи андоза ё рангро."
+Previous price,Нархи пешина
+Price changed,Нарх тағйир ёфт
+Price changes apply to future sales. Cancelling this restock does not restore previous prices.,Нархҳои нав барои фурӯшҳои минбаъда амал мекунанд. Бекор кардани қабул нархҳои пешинаро барқарор намекунад.
+Price customers will pay from now on,Нархи чакана барои фурӯшҳои минбаъда
+Price must be greater than 0,Нарх бояд аз 0 зиёд бошад
+Price update only,Танҳо тағйири нархҳо
+"Price update only: no goods received, no invoice, and no supplier debt.","Танҳо тағйири нархҳо: бе қабули мол, ҳисобнома ва қарз ба таъминкунанда."
+Prices and quantities are per stock unit,Нархҳо ва миқдор бо воҳиди анборӣ нишон дода шудаанд
+Product Code (ID),Рамзи мол (ID)
+Product numeric ID or barcode,Рамзи рақамӣ ё штрихкоди мол
+Product with Code/ID '{0}' not found,Мол бо рамзи «{0}» ёфт нашуд
+Quantities and Prices,Миқдор ва нархҳо
+Quick Product Restock,Қабули зуди мол
+Received Qty (+),Қабул шуд (+)
+Remove,Нест кардан
+Replace individual price overrides,Иваз кардани нархҳои дастӣ тағйирёфта
+Retail Price,Нархи чакана
+Retry,Боз кӯшидан
+Row {0}: A new size/color needs a Received Qty greater than 0,Сатри {0}: барои андоза ё ранги нав миқдори аз 0 зиёдро ворид кунед
+Row {0}: Item does not belong to the selected product,Сатри {0}: ин номгӯй ба моли интихобшуда тааллуқ надорад
+Row {0}: Item is listed twice,Сатри {0}: мол ду маротиба нишон дода шудааст
+Row {0}: NEW Retail Price must be greater than 0,Сатри {0}: нархи нави чакана бояд аз 0 зиёд бошад
+Row {0}: Please enter a Color,Сатри {0}: рангро ворид кунед
+Row {0}: Please enter a Size,Сатри {0}: андозаро ворид кунед
+Row {0}: Please enter the Cost of this delivery,Сатри {0}: нархи хариди ин таҳвилро ворид кунед
+Row {0}: Quantity must be a whole number for this unit,Сатри {0}: барои ин воҳид миқдор бояд адади бутун бошад
+Row {0}: Received Qty cannot be negative,Сатри {0}: миқдори қабулшуда манфӣ шуда наметавонад
+"Row {0}: This product has no sizes/colors, new rows cannot be added.","Сатри {0}: мол андоза ва ранг надорад, сатри нав илова карда намешавад."
+Row {0}: This variant already exists. Reload the product.,Сатри {0}: ин вариант аллакай вуҷуд дорад. Молро аз нав бор кунед.
+Row {0}: {1} / {2} is listed twice,Сатри {0}: {1} / {2} ду маротиба нишон дода шудаанд
+Search and choose product by name,Молро аз рӯи ном ёфта интихоб кунед
+Select a Product to receive stock.,Молро барои қабул интихоб кунед.
+Select a receiving warehouse to see current stock,Барои дидани бақия анбори қабулро интихоб кунед
+Select an enabled stock product,Моли фаъоли анбориро интихоб кунед
+Select an enabled supplier,Таъминкунандаи фаъолро интихоб кунед
+Short Code,Рамзи кӯтоҳ
+Sizes & Colors,Андозаҳо ва рангҳо
+Stock Now,Бақияи ҷорӣ
+Stock in receiving warehouse,Бақия дар анбори қабул
+Stock in the receiving warehouse when this draft was loaded.,Бақия дар анбори қабул ҳангоми боркунии ин сиёҳнавис.
+Stock received via Quick Product Restock {0} ({1}),Мол тавассути қабули зуд қабул шуд: {0} ({1})
+Supplier is required for receiving stock delivery.,Барои қабули таҳвил таъминкунандаро нишон диҳед.
+Supplier who delivered this batch,Таъминкунандаи ин таҳвил
+This code matches more than one product. Select the product by name.,Ин рамз ба чанд мол мувофиқ аст. Молро аз рӯи ном интихоб кунед.
+"This product has no Color or Size attribute, so new sizes cannot be added.",Мол хусусияти ранг ё андоза надорад. Андозаҳои нав илова карда намешаванд.
+Tick every color that arrived in the box.,Ҳамаи рангҳои дар ин таҳвил воридшударо интихоб кунед.
+Turn off Price update only to receive stock,Барои қабули мол «Танҳо тағйири нархҳо»-ро хомӯш кунед
+Use the Item form for products with additional variant attributes,Барои молҳои дорои хусусиятҳои иловагии вариант шакли молро истифода баред
+Wait for the product to finish loading,То анҷоми боркунии мол интизор шавед
+new for this product,нав барои ин мол
+Stock unit,Воҳид
+Enable only when changing prices without receiving goods.,Танҳо барои тағйири нархҳо бе қабули мол фаъол кунед.
