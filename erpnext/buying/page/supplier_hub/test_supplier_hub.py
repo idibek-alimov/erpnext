@@ -6,11 +6,15 @@ from frappe.utils import getdate
 
 from erpnext.buying.page.supplier_hub.supplier_data import (
 	SupplierPayables, expand_links, filter_and_summarize, financial_rows, inventory_rows,
+	linked_product_profit, profit_rows,
 )
 
 
 class TestSupplierHub(unittest.TestCase):
 	def setUp(self):
+		if not getattr(frappe.local, "qb", None):
+			from frappe.query_builder import get_query_builder
+			frappe.local.qb = get_query_builder("mariadb")
 		self.suppliers = [frappe._dict(name=name, supplier_name=name, supplier_group="Local",
 			mobile_no="123" if name == "A" else "", email_id="", disabled=0) for name in ("A", "B")]
 		self.start, self.end = getdate("2026-11-01"), getdate("2026-11-04")
@@ -89,6 +93,58 @@ class TestSupplierHub(unittest.TestCase):
 		self.assertIsNone(next(r for r in rows if r["name"] == "A")["stock_uom"])
 		result = filter_and_summarize(rows, stock, stock_filter="gte", stock_qty=5)
 		self.assertEqual([r["name"] for r in result["suppliers"]], ["B"])
+
+	def test_profit_follows_filtered_products_without_double_counting_shared_skus(self):
+		rows, stock = self.inventory()
+		profits = {"BLUE": 50, "RED": -20, "METRES": 10}
+		profit_rows(rows, profits)
+		self.assertEqual([r["gross_profit"] for r in rows], [40, 50])
+		full = filter_and_summarize(rows, stock, profits=profits)
+		self.assertEqual(full["summary"]["gross_profit"], 40)
+		self.assertEqual(filter_and_summarize(rows, stock, page=2, page_size=1, profits=profits)["summary"], full["summary"])
+		filtered = filter_and_summarize(rows, stock, search="B", profits=profits)
+		self.assertEqual(filtered["summary"]["gross_profit"], 50)
+		self.assertEqual(filter_and_summarize(rows, stock, supplier_group="Missing", profits=profits)["summary"]["gross_profit"], 0)
+		self.assertEqual(filter_and_summarize(rows, stock, sort_by="profit_desc", profits=profits)["suppliers"][0]["name"], "B")
+
+	def test_profit_unavailable_is_not_zero(self):
+		rows, stock = self.inventory()
+		profit_rows(rows, None)
+		self.assertTrue(all(r["gross_profit"] is None for r in rows))
+		self.assertIsNone(filter_and_summarize(rows, stock)["summary"]["gross_profit"])
+		profit_rows(rows, {"BLUE": None})
+		self.assertTrue(all(r["gross_profit"] is None for r in rows))
+		self.assertIsNone(filter_and_summarize(rows, stock, profits={"BLUE": None})["summary"]["gross_profit"])
+
+	@patch("frappe.has_permission", return_value=False)
+	@patch("erpnext.buying.page.supplier_hub.supplier_data.readable")
+	def test_profit_denied_before_invoice_query(self, query, permission):
+		self.assertIsNone(linked_product_profit({"A": {"BLUE"}}, "Company", ["Stores"], self.start, self.end))
+		query.assert_not_called()
+
+	@patch("frappe.has_permission", return_value=True)
+	@patch("erpnext.buying.page.supplier_hub.supplier_data.readable")
+	@patch("erpnext.accounts.report.gross_profit.gross_profit.GrossProfitGenerator.prepare_invoice_query")
+	@patch("erpnext.stock.page.product_detail.product_detail.ProductCostLookup")
+	def test_profit_uses_historical_cost_returns_and_revenue_only_debit_notes(self, lookup, prepare, invoices, permission):
+		invoices.return_value = [frappe._dict(name="PERMITTED")]
+		query = prepare.return_value
+		query.where.return_value = query
+		query.run.return_value = [frappe._dict(item_code="BLUE", base_net_amount=200, is_debit_note=0),
+			frappe._dict(item_code="BLUE", base_net_amount=-50, is_debit_note=0),
+			frappe._dict(item_code="BLUE", base_net_amount=10, is_debit_note=1),
+			frappe._dict(item_code="UNLINKED", base_net_amount=999, is_debit_note=0)]
+		lookup.return_value.cost.side_effect = [120, -30]
+		profits = linked_product_profit({"A": {"BLUE"}}, "Company", ["Stores"], self.start, self.end)
+		self.assertEqual(profits, {"BLUE": 70})
+		self.assertEqual(lookup.return_value.cost.call_count, 2)
+		invoices.assert_called_once_with("Sales Invoice", dict(company="Company", docstatus=1,
+			posting_date=["between", [self.start, self.end]], is_opening="No"), ["name"])
+		conditions = [str(c.args[0]) for c in query.where.call_args_list]
+		self.assertTrue(any("PERMITTED" in c and "name" in c for c in conditions))
+		self.assertTrue(any("Stores" in c and "warehouse" in c for c in conditions))
+		self.assertNotIn("UNLINKED", profits)
+		self.assertTrue(all(row.item_code == "BLUE" for row in lookup.call_args.args[0]))
 
 	def test_missing_permissions_are_unavailable_not_zero_or_settled(self):
 		rows = inventory_rows(self.rows(permissions=(False, False, False)), {}, {}, {}, False)

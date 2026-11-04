@@ -58,7 +58,7 @@ class SupplierHubApp {
 			with_debt: ["Есть долг", "Қарз доранд"],
 			overdue_status: ["Есть просрочка", "Қарзи муҳлатгузашта доранд"],
 			settled: ["Без долга", "Бе қарз"],
-			period: ["Период закупок", "Давраи харид"],
+			period: ["Период", "Давра"],
 			month: ["Этот месяц", "Ин моҳ"],
 			today: ["Сегодня", "Имрӯз"],
 			"7d": ["7 дней", "7 рӯз"],
@@ -81,29 +81,30 @@ class SupplierHubApp {
 			sort: ["Сортировка", "Тартиб"],
 			debt_desc: ["Больше долга", "Қарзи бештар"],
 			overdue_desc: ["Больше просрочки", "Қарзи муҳлатгузаштаи бештар"],
+			profit_desc: ["Больше валовой прибыли", "Фоидаи умумии бештар"],
 			stock_val_desc: ["Выше стоимость остатка", "Арзиши бештари бақия"],
 			purchased_desc: ["Больше закупок за период", "Хариди бештар дар давра"],
 			last_purchase_desc: ["Последние закупки", "Харидҳои охирин"],
 			name_asc: ["Название: А–Я", "Ном: А–Я"],
 			reset: ["Сбросить фильтры", "Тоза кардани филтрҳо"],
 			outstanding: ["Долг поставщикам", "Қарз ба таъминкунандагон"],
-			overdue: ["Просрочено", "Муҳлатгузашта"],
+			gross_profit: ["Валовая прибыль", "Фоидаи умумӣ"],
 			purchases: ["Закупки за период", "Харид дар давра"],
 			stock_value: ["Стоимость остатка", "Арзиши бақия"],
 			now: ["Сейчас", "Ҳоло"],
-			overdue_hint: [
-				"Неоплаченные суммы с истёкшим сроком",
-				"Маблағҳои пардохтнашуда бо муҳлати гузашта",
+			profit_hint: [
+				"Продажи минус себестоимость за период",
+				"Фурӯш бо тарҳи арзиши аслӣ дар давра",
 			],
 			purchase_hint: ["С налогами, за вычетом возвратов", "Бо андозҳо, бо тарҳи баргардониҳо"],
 			stock_hint: ["Связанные товары, без повторного счёта", "Молҳои алоқаманд, бе ҳисоби такрорӣ"],
 			scope_note: [
-				"Долг, просрочка и остатки — сейчас. Период относится к закупкам и платежам. Все суммы — в валюте компании; отменённые документы исключены.",
-				"Қарз, муҳлатгузашта ва бақияҳо — ҷорӣ. Давра ба харид ва пардохтҳо дахл дорад. Ҳамаи маблағҳо бо асъори ширкатанд; ҳуҷҷатҳои бекоршуда истисно шудаанд.",
+				"Долг и остатки — сейчас. Период относится к прибыли, закупкам и платежам. Все суммы — в валюте компании; отменённые документы исключены.",
+				"Қарз ва бақияҳо — ҷорӣ. Давра ба фоида, харид ва пардохтҳо дахл дорад. Ҳамаи маблағҳо бо асъори ширкатанд; ҳуҷҷатҳои бекоршуда истисно шудаанд.",
 			],
 			shared_note: [
-				"Один товар может быть связан с несколькими поставщиками. В строках показан его полный остаток, в общем итоге он учитывается один раз.",
-				"Як мол метавонад бо чанд таъминкунанда алоқаманд бошад. Дар сатрҳо бақияи пурраи он нишон дода мешавад, дар ҷамъбаст як бор ҳисоб мешавад.",
+				"Один товар может быть связан с несколькими поставщиками. Его остаток и прибыль показаны у каждого, в общем итоге учитываются один раз. Прибыль относится к связанным товарам, а не к конкретным партиям поставщика.",
+				"Як мол метавонад бо чанд таъминкунанда алоқаманд бошад. Бақия ва фоидаи он назди ҳар як таъминкунанда нишон дода мешаванд, дар ҷамъбаст як бор ҳисоб мешаванд. Фоида ба молҳои алоқаманд дахл дорад, на ба партияҳои мушаххаси таъминкунанда.",
 			],
 			credits: [
 				"Неиспользованные авансы и кредиты",
@@ -156,7 +157,17 @@ class SupplierHubApp {
 	money(value) {
 		return value == null
 			? `<span class="text-muted" title="${this.t("no_access")}">—</span>`
-			: format_currency(value, this.data.currency);
+			: format_number(
+					value,
+					get_number_format(this.data.currency),
+					frappe.boot.sysdefaults.currency_precision || null
+			  );
+	}
+	amount_class(key, value) {
+		if (value == null) return "";
+		if (key === "outstanding" || key === "debt") return "sh-warning";
+		if (key === "gross_profit") return value < 0 ? "sh-warning" : "sh-profit";
+		return "";
 	}
 	setup_actions() {
 		this.page.set_secondary_action(this.t("refresh"), () => this.load_data(true));
@@ -215,6 +226,7 @@ class SupplierHubApp {
 			[
 				"debt_desc",
 				"overdue_desc",
+				"profit_desc",
 				"stock_val_desc",
 				"purchased_desc",
 				"last_purchase_desc",
@@ -380,7 +392,7 @@ class SupplierHubApp {
 			s = d.summary;
 		const cards = [
 			["outstanding", s.total_debt, "now"],
-			["overdue", s.overdue, "overdue_hint"],
+			["gross_profit", s.gross_profit, "profit_hint"],
 			["purchases", s.purchases, "purchase_hint"],
 			["stock_value", s.total_stock_value, "stock_hint"],
 		];
@@ -392,9 +404,10 @@ class SupplierHubApp {
 						([label, value, hint]) =>
 							`<div class="sh-summary-item"><span>${this.t(
 								label
-							)}</span><div class="sh-summary-value ${
-								label === "overdue" && value > 0 ? "sh-warning" : ""
-							}">${this.money(value)}</div><small class="text-muted">${
+							)}</span><div class="sh-summary-value ${this.amount_class(
+								label,
+								value
+							)}">${this.money(value)}</div><small class="text-muted">${
 								value == null ? this.t("no_access") : this.t(hint)
 							}</small></div>`
 					)
@@ -406,9 +419,9 @@ class SupplierHubApp {
 		this.wrapper
 			.find(".sh-scope")
 			.text(
-				`${d.company} · ${this.filters.warehouse || this.t("all_warehouses")} · ${this.t(
-					this.filters.period
-				)} (${period}). ${this.t("scope_note")}`
+				`${d.company} · ${d.currency} · ${
+					this.filters.warehouse || this.t("all_warehouses")
+				} · ${this.t(this.filters.period)} (${period}). ${this.t("scope_note")}`
 			);
 		let notes = s.has_shared_products ? `<p>${this.t("shared_note")}</p>` : "";
 		if (s.credits > 0)
@@ -427,7 +440,7 @@ class SupplierHubApp {
 		const columns = [
 			"supplier",
 			"debt",
-			"overdue",
+			"gross_profit",
 			"stock_value",
 			"purchases",
 			"last_purchase",
@@ -505,8 +518,14 @@ class SupplierHubApp {
 				: `<span class="text-muted">${row.skus_count ? this.t("mixed_units") : "—"}</span>`;
 		if (["models_count", "skus_count"].includes(key))
 			return row[key] == null ? this.money(null) : format_number(row[key], null, 0);
-		if (key === "overdue")
-			return `<span class="${row.overdue > 0 ? "sh-warning" : ""}">${this.money(row.overdue)}</span>`;
+		if (key === "debt" || key === "gross_profit") {
+			const value = row[key === "debt" ? "current_debt" : key];
+			return `<span class="${this.amount_class(key, value)}">${this.money(value)}</span>${
+				key === "gross_profit" && row.shared_products
+					? `<small class="sh-cell-note text-muted">${this.t("shared")}</small>`
+					: ""
+			}`;
+		}
 		return this.money(row[key === "debt" ? "current_debt" : key]);
 	}
 	render_pagination() {

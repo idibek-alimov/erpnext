@@ -71,6 +71,39 @@ class TestSupplierDetail(unittest.TestCase):
 		self.assertEqual(sum(r["stock_value"] for r in rows), 35)
 		self.assertEqual(next(r for r in rows if r["name"] == "MODEL")["variants"], 1)
 
+	@patch.object(sd, "current_revision", return_value="REV")
+	@patch.object(sd, "load_supplier_context")
+	@patch.object(sd, "linked_product_profit", return_value={"BLUE": 50, "RED": -10})
+	@patch.object(sd, "supplier_profile", return_value={"name": "S"})
+	@patch.object(sd, "doc_permission", return_value=True)
+	@patch("frappe.get_list", return_value=[])
+	@patch("frappe.get_cached_value", return_value="TJS")
+	@patch("frappe.has_permission", return_value=True)
+	@patch("frappe.get_doc")
+	@patch("frappe.get_cached_doc")
+	def test_profit_shares_hub_scope_respects_access_and_skips_partial_refresh(self,
+		cached, doc, permission, currency, listing, doc_permission, profile, profits, context, revision):
+		start, end = getdate("2026-11-01"), getdate("2026-11-04")
+		context.return_value = dict(company="Company", start=start, end=end,
+			rows=[dict(name="S", _stock_codes={"BLUE", "RED"})], links={"S": {"BLUE", "RED"}},
+			warehouse_names=["Stores", "Other"], can_stock=True, can_payables=True,
+			can_purchases=True, can_payments=True)
+		full = sd.build_detail("S", "Company", warehouse="Stores", tab="details")
+		self.assertEqual(full["summary"]["gross_profit"], 40)
+		self.assertTrue(full["permissions"]["profit"])
+		self.assertNotIn("_stock_codes", full["summary"])
+		profits.assert_called_once_with({"S": {"BLUE", "RED"}}, "Company", ["Stores"], start, end)
+		profits.reset_mock()
+		partial = sd.build_detail("S", "Company", tab="details", summary_revision="REV")
+		self.assertTrue(partial["partial"])
+		self.assertNotIn("summary", partial)
+		profits.assert_not_called()
+		permission.side_effect = lambda doctype, *args, **kwargs: doctype != "Sales Invoice"
+		denied = sd.build_detail("S", "Company", tab="details")
+		self.assertIsNone(denied["summary"]["gross_profit"])
+		self.assertFalse(denied["permissions"]["profit"])
+		profits.assert_not_called()
+
 	@patch("frappe.has_permission", side_effect=frappe.PermissionError)
 	@patch("frappe.get_doc")
 	@patch("frappe.get_cached_doc")

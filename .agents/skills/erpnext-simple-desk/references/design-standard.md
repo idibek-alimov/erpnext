@@ -73,9 +73,12 @@ particular local products are not durable design assets or test specifications.
 
 ## Supplier Hub
 
-The owner approved a payables-first Supplier Hub: current outstanding, overdue,
-period purchases (initially this month), and current linked stock value. Keep the
-default table to Supplier, Outstanding, Overdue, Stock value, Period purchases,
+The owner approved a Supplier Hub with current outstanding in red, period gross profit
+in green (losses remain red), period purchases (initially this month), and current linked
+stock value. Show amounts without repeated currency symbols; state company currency
+in the scope text. Gross profit replaces overdue in the summary and default rows;
+overdue remains available through the payment filter and Supplier Detail. Keep the
+default table to Supplier, Outstanding, Gross profit, Stock value, Period purchases,
 and Last purchase. Put counts, quantity, payments, and lifetime purchases in optional
 columns; put company, warehouse, numeric stock conditions, and sorting in additional
 filters. Keep unrelated module links in the page menu.
@@ -86,17 +89,27 @@ payable allocation and company currency, keep unallocated credits/advances separ
 and source payment activity from Payment Entries rather than purchases minus debt.
 Supplier stock means linked products, not proven ownership of particular units. A
 product may appear in several supplier rows; count it once in the summary and explain
-shared links. Restrict inventory to permitted items/warehouses within the company.
+shared links. The same linked-product scope applies to gross profit: use net sales less
+historical costs for the selected period/company/warehouses, including returns, with
+Sales Invoice permissions. Count shared product profit once in the filtered summary.
+Do not imply stock-lot supplier attribution. Restrict inventory to permitted
+items/warehouses within the company.
 
 ## Supplier Detail
 
 The owner approved an invoice-first record view in the same restrained style as Product
 Detail. Show compact supplier identity/contact links, four current/period summary figures
-(outstanding, overdue, period purchases, current linked stock value), then Invoices,
+(outstanding, period gross profit, period purchases, current linked stock value), then Invoices,
 Payments, Products, and Details tabs. Default to unpaid invoices across all posting dates;
 the purchase/payment period must never hide older unpaid debt. Use due dates and overdue
 days, expandable invoice contents, native document links, and complete paginated history.
 Use the Hub's shared accounting/inventory source and keep unallocated credits separate.
+Match the Hub's amounts without repeated currency symbols, red debt, and green gross
+profit (red losses). Use the same historical-cost, linked-product profit calculation
+and company/warehouse/period scope; invoice search/status/date filters affect the list
+only. Keep unpaid invoice status text (including “Не оплачено”) and positive remaining
+balances red. Retain overdue invoice status, due dates, and overdue days in the list.
+Foreign-currency document contents/allocations retain their currency code for clarity.
 
 Keep contact details readable; editing opens the native Supplier form and selected primary
 Contact/Address records. A supplier statement opens native General Ledger with supplier,

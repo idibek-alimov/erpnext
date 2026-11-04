@@ -36,10 +36,11 @@ class SupplierDetailApp {
 			details: ["Реквизиты", "Маълумот"],
 			debt: ["Осталось оплатить", "Бақияи пардохт"],
 			overdue: ["Просрочено", "Муҳлатгузашта"],
+			gross_profit: ["Валовая прибыль", "Фоидаи умумӣ"],
 			purchases: ["Закупки за период", "Харид дар давра"],
 			stock_value: ["Стоимость остатка", "Арзиши бақия"],
 			now: ["Сейчас", "Ҳоло"],
-			period: ["Период закупок и платежей", "Давраи харид ва пардохт"],
+			period: ["Период", "Давра"],
 			month: ["Этот месяц", "Ин моҳ"],
 			today: ["Сегодня", "Имрӯз"],
 			"7d": ["7 дней", "7 рӯз"],
@@ -50,9 +51,10 @@ class SupplierDetailApp {
 			all_warehouses: ["Все доступные склады", "Ҳамаи анборҳои дастрас"],
 			additional: ["Компания и склад", "Ширкат ва анбор"],
 			scope: [
-				"Долг и остатки — сейчас. Период меняет закупки и платежи. Суммы — в валюте компании.",
-				"Қарз ва бақияҳо ҷорӣ ҳастанд. Давра харид ва пардохтҳоро тағйир медиҳад. Маблағҳо бо асъори ширкатанд.",
+				"Долг и остатки — сейчас. Период меняет прибыль, закупки и платежи. Суммы — в валюте компании. Прибыль рассчитана по связанным товарам, а не по партиям поставщика.",
+				"Қарз ва бақияҳо ҷорӣ ҳастанд. Давра фоида, харид ва пардохтҳоро тағйир медиҳад. Маблағҳо бо асъори ширкатанд. Фоида аз рӯи молҳои алоқаманд ҳисоб шудааст, на аз рӯи партияҳои таъминкунанда.",
 			],
+			profit_hint: ["Продажи минус себестоимость за период", "Фурӯш бо тарҳи арзиши аслӣ дар давра"],
 			purchase_hint: ["С налогами, за вычетом возвратов", "Бо андозҳо, бо тарҳи баргардониҳо"],
 			stock_hint: ["Связанные товары в выбранных складах", "Молҳои алоқаманд дар анборҳои интихобшуда"],
 			credits: ["Нераспределённые авансы и кредиты", "Пешпардохтҳо ва кредитҳои тақсимнашуда"],
@@ -177,7 +179,19 @@ class SupplierDetailApp {
 		return frappe.utils.escape_html(String(value ?? ""));
 	}
 	money(value, currency) {
-		return value == null ? "—" : format_currency(value, currency || this.data.currency);
+		if (value == null) return "—";
+		const amount = format_number(
+			value,
+			get_number_format(currency || this.data.currency),
+			frappe.boot.sysdefaults.currency_precision || null
+		);
+		return currency && currency !== this.data.currency ? `${amount} ${this.esc(currency)}` : amount;
+	}
+	amount_class(key, value) {
+		if (value == null) return "";
+		if (key === "debt") return "sd-warning";
+		if (key === "gross_profit") return value < 0 ? "sd-warning" : "sd-profit";
+		return "";
 	}
 	date(value) {
 		return value ? this.esc(frappe.datetime.str_to_user(value)) : "—";
@@ -478,7 +492,7 @@ class SupplierDetailApp {
 		this.wrapper.find(".sd-metrics").html(
 			[
 				["debt", k.current_debt, "now"],
-				["overdue", k.overdue, "now"],
+				["gross_profit", k.gross_profit, "profit_hint"],
 				["purchases", k.purchases, "purchase_hint"],
 				["stock_value", k.stock_value, "stock_hint"],
 			]
@@ -486,9 +500,9 @@ class SupplierDetailApp {
 					([label, value, hint]) =>
 						`<div class="sd-metric"><span class="text-muted">${this.t(
 							label
-						)}</span><div class="sd-metric-value ${
-							label === "overdue" && value > 0 ? "sd-warning" : ""
-						}">${this.money(value)}</div><small class="text-muted">${this.t(
+						)}</span><div class="sd-metric-value ${this.amount_class(label, value)}">${this.money(
+							value
+						)}</div><small class="text-muted">${this.t(
 							value == null ? "no_access" : hint
 						)}</small></div>`
 				)
@@ -518,7 +532,7 @@ class SupplierDetailApp {
 		this.wrapper
 			.find(".sd-period-caption")
 			.text(
-				`${d.company} · ${this.warehouse || this.t("all_warehouses")} · ${
+				`${d.company} · ${d.currency} · ${this.warehouse || this.t("all_warehouses")} · ${
 					this.period === "all" ? this.t("all_time") : frappe.datetime.str_to_user(d.from_date)
 				} — ${frappe.datetime.str_to_user(d.to_date)}`
 			);
@@ -618,7 +632,9 @@ class SupplierDetailApp {
 				? `${this.t("stock_value")}: ${this.money(list.stock_value)}`
 				: `${this.t("amount")}: ${this.money(list.amount)}`;
 		if (this.tab === "invoices" && list.outstanding != null)
-			totals += ` · ${this.t("balance")}: ${this.money(list.outstanding)}`;
+			totals += ` · ${this.t("balance")}: <span class="sd-warning">${this.money(
+				list.outstanding
+			)}</span>`;
 		const content = !list.rows.length
 			? `<div class="sd-empty"><h4>${this.t("empty")}</h4><p>${this.t(
 					"empty_hint"
@@ -666,11 +682,11 @@ class SupplierDetailApp {
 					r.days_overdue
 						? `<small class="sd-warning">${r.days_overdue} ${this.t("days")}</small>`
 						: ""
-				}</td><td class="text-right">${this.money(r.amount)}</td><td class="text-right">${this.money(
-					r.outstanding
-				)}</td><td><span class="${r.days_overdue ? "sd-warning" : "text-muted"}">${this.t(
-					state
-				)}</span>${
+				}</td><td class="text-right">${this.money(r.amount)}</td><td class="text-right ${
+					r.outstanding > 0 ? "sd-warning" : ""
+				}">${this.money(r.outstanding)}</td><td><span class="${
+					["outstanding", "overdue"].includes(state) ? "sd-warning" : "text-muted"
+				}">${this.t(state)}</span>${
 					r.can_pay && this.data.permissions.pay
 						? `<button class="sd-text-button sd-pay-invoice" data-invoice="${this.esc(
 								r.name

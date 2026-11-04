@@ -177,8 +177,60 @@ def inventory_rows(rows, links, items, stock, can_stock):
 	return rows
 
 
+def linked_product_profit(links, company, warehouses, start, end):
+	"""Historical gross profit by linked SKU, before supplier overlap is applied.
+
+	A link is not a stock-lot provenance claim. Shared SKUs appear in each supplier's
+	row, but the filtered summary counts each SKU once, just like linked inventory.
+	"""
+	from erpnext.accounts.report.gross_profit.gross_profit import GrossProfitGenerator
+	from erpnext.stock.page.product_detail.product_detail import ProductCostLookup
+
+	if not frappe.has_permission("Sales Invoice", "read"):
+		return None
+	codes = set().union(*links.values()) if links else set()
+	if not codes or not warehouses:
+		return {}
+	# Resolve parent permissions first. Bound every generated IN clause.
+	invoices = readable("Sales Invoice", dict(company=company, docstatus=1,
+		posting_date=["between", [start, end]], is_opening="No"), ["name"])
+	if not invoices:
+		return {}
+	query = GrossProfitGenerator.__new__(GrossProfitGenerator)
+	query.filters = frappe._dict(company=company, from_date=start, to_date=end)
+	sii, si = frappe.qb.DocType("Sales Invoice Item"), frappe.qb.DocType("Sales Invoice")
+	base = query.prepare_invoice_query()
+	rows = []
+	# Fetch permitted sales once per invoice/warehouse batch, then discard unlinked
+	# SKUs. Avoid multiplying sales queries by a potentially huge variant catalog.
+	for warehouse_offset in range(0, len(warehouses), QUERY_BATCH_SIZE):
+		for invoice_offset in range(0, len(invoices), QUERY_BATCH_SIZE):
+			batch = (base.where(sii.warehouse.isin(warehouses[warehouse_offset:warehouse_offset + QUERY_BATCH_SIZE]))
+				.where(si.name.isin([i.name for i in invoices[invoice_offset:invoice_offset + QUERY_BATCH_SIZE]]))
+				.run(as_dict=True))
+			rows.extend(row for row in batch if row.item_code in codes)
+	profits = defaultdict(float)
+	if rows:
+		costs = ProductCostLookup(rows, company)
+		for row in rows:
+			# Native debit notes adjust revenue without another stock movement.
+			cost = 0 if row.is_debit_note else costs.cost(row)
+			if cost is None:
+				profits[row.item_code] = None
+			elif profits[row.item_code] is not None:
+				profits[row.item_code] += flt(row.base_net_amount) - flt(cost)
+	return dict(profits)
+
+
+def profit_rows(rows, profits):
+	for row in rows:
+		values = [profits.get(code, 0) for code in row["_stock_codes"]] if profits is not None else []
+		row["gross_profit"] = sum(values) if profits is not None and None not in values else None
+	return rows
+
+
 def filter_and_summarize(rows, stock, search="", supplier_group=None, debt_filter=None,
-	stock_filter="all", stock_qty=0, sort_by="debt_desc", page=1, page_size=20):
+	stock_filter="all", stock_qty=0, sort_by="debt_desc", page=1, page_size=20, *, profits=None):
 	term = (search or "").strip().casefold()
 	matched = []
 	for row in rows:
@@ -203,7 +255,7 @@ def filter_and_summarize(rows, stock, search="", supplier_group=None, debt_filte
 			(stock_filter == "zero" and row["in_stock"])):
 			continue
 		matched.append(row)
-	keys = {"debt_desc": "current_debt", "overdue_desc": "overdue", "stock_val_desc": "stock_value",
+	keys = {"debt_desc": "current_debt", "overdue_desc": "overdue", "profit_desc": "gross_profit", "stock_val_desc": "stock_value",
 		"purchased_desc": "purchases", "last_purchase_desc": "last_purchase_date"}
 	if sort_by == "name_asc":
 		matched.sort(key=lambda r: (r["supplier_name"].casefold(), r["name"]))
@@ -219,6 +271,8 @@ def filter_and_summarize(rows, stock, search="", supplier_group=None, debt_filte
 		suppliers_count=len(matched), suppliers_with_debt_count=sum((r["current_debt"] or 0) > 0 for r in matched),
 		shared_products=sum(n > 1 for n in Counter(c for r in matched for c in r["_stock_codes"]).values()))
 	summary["has_shared_products"] = any(r["shared_products"] for r in matched)
+	values = [profits.get(code, 0) for code in codes] if profits is not None else []
+	summary["gross_profit"] = sum(values) if profits is not None and None not in values else None
 	page_size = min(100, max(1, cint(page_size) or 20))
 	page = min(max(1, cint(page)), max(1, (len(matched) + page_size - 1) // page_size))
 	visible = [{k: v for k, v in r.items() if k != "_stock_codes"} for r in matched[(page - 1) * page_size:page * page_size]]
@@ -300,7 +354,12 @@ def build_supplier_hub(search=None, supplier_group=None, debt_filter="all", comp
 	rows, stock, suppliers = context["rows"], context["stock"], context["suppliers"]
 	can_payables, can_purchases, can_payments, can_stock = (context[k] for k in
 		("can_payables", "can_purchases", "can_payments", "can_stock"))
-	result = filter_and_summarize(rows, stock, search, supplier_group, debt_filter, stock_filter, stock_qty, sort_by, page, page_size)
+	can_profit = can_stock and frappe.has_permission("Sales Invoice", "read")
+	profits = linked_product_profit(context["links"], company,
+		[warehouse] if warehouse else context["warehouse_names"], start, end) if can_profit else None
+	profit_rows(rows, profits)
+	result = filter_and_summarize(rows, stock, search, supplier_group, debt_filter, stock_filter, stock_qty, sort_by, page, page_size,
+		profits=profits)
 	# Empty restricted scopes must still show unavailable, never a misleading zero.
 	for allowed, keys in ((can_payables, ("total_debt", "overdue", "credits")), (can_purchases, ("purchases",)), (can_stock, ("total_stock_value",))):
 		if not allowed:
@@ -310,5 +369,5 @@ def build_supplier_hub(search=None, supplier_group=None, debt_filter="all", comp
 		companies=frappe.get_list("Company", pluck="name", limit_page_length=0), warehouses=context["warehouse_names"],
 		supplier_groups=sorted({s.supplier_group for s in suppliers if s.supplier_group}),
 		from_date=str(start) if period != "all" else None, to_date=str(end),
-		permissions=dict(payables=bool(can_payables), purchases=bool(can_purchases), payments=bool(can_payments), stock=bool(can_stock),
+		permissions=dict(payables=bool(can_payables), purchases=bool(can_purchases), payments=bool(can_payments), stock=bool(can_stock), profit=bool(can_profit),
 			create_supplier=frappe.has_permission("Supplier", "create")))

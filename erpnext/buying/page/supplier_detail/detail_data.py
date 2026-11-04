@@ -7,7 +7,9 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt, getdate
 
-from erpnext.buying.page.supplier_hub.supplier_data import batched_rows, load_supplier_context, readable
+from erpnext.buying.page.supplier_hub.supplier_data import (
+	batched_rows, linked_product_profit, load_supplier_context, profit_rows, readable,
+)
 from erpnext.buying.page.supplier_hub.supplier_revision import current_revision
 
 
@@ -201,6 +203,11 @@ def build_detail(supplier, company=None, period="month", warehouse=None, tab="in
 	context["currency"] = frappe.get_cached_value("Company", context["company"], "default_currency")
 	if not context["rows"]:
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	can_profit = context["can_stock"] and frappe.has_permission("Sales Invoice", "read")
+	if include_summary:
+		profits = linked_product_profit(context["links"], context["company"],
+			[warehouse] if warehouse else context["warehouse_names"], context["start"], context["end"]) if can_profit else None
+		profit_rows(context["rows"], profits)
 	source = invoice_rows(context) if tab == "invoices" else payment_rows(context) if tab == "payments" else product_rows(context, supplier) if tab == "products" else []
 	matched = filter_rows(source, tab, search, status, context["start"], context["end"], date_from, date_to)
 	listing = paginate(matched, page, page_size)
@@ -216,7 +223,7 @@ def build_detail(supplier, company=None, period="month", warehouse=None, tab="in
 		company=context["company"], currency=context["currency"],
 		from_date=str(context["start"]), to_date=str(context["end"]),
 		permissions=dict(payables=bool(context["can_payables"]), purchases=bool(context["can_purchases"]),
-			payments=bool(context["can_payments"]), stock=bool(context["can_stock"]),
+			payments=bool(context["can_payments"]), stock=bool(context["can_stock"]), profit=bool(can_profit),
 			pay=bool(can_pay and context["can_payables"]), edit=doc_permission("Supplier", supplier, "write"),
 			receive=bool(frappe.has_permission("Quick Product Restock", "create")),
 			statement=bool(frappe.get_cached_doc("Report", "General Ledger").is_permitted())))
