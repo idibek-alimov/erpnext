@@ -17,6 +17,8 @@ def get_supplier_detail(supplier, company=None):
 		frappe.throw(_("Supplier is required"))
 
 	company = company or get_default_company()
+	frappe.has_permission("Company", "read", company, throw=True)
+	frappe.has_permission("Supplier", "read", supplier, throw=True)
 	currency = frappe.db.get_value("Company", company, "default_currency") or "TJS"
 
 	# 1. Basic Supplier Doc

@@ -115,13 +115,18 @@ class SupplierDetailApp {
 	}
 
 	load(supplier_name) {
+		const route_company =
+			frappe.route_options?.supplier_company ||
+			new URLSearchParams(window.location.search).get("supplier_company");
+		this.company = route_company || (this.supplier === supplier_name ? this.company : null);
+		if (frappe.route_options) delete frappe.route_options.supplier_company;
 		this.supplier = supplier_name;
 		this.active_tab = "tab-general"; // General info tab is always opened first
 		this.wrapper.html('<div class="text-center py-5"><span class="spinner-border text-primary"></span><div class="mt-2 text-muted">Загрузка данных...</div></div>');
 
 		frappe.call({
 			method: "erpnext.buying.page.supplier_detail.supplier_detail.get_supplier_detail",
-			args: { supplier: supplier_name },
+			args: { supplier: supplier_name, company: this.company },
 			callback: (r) => {
 				if (!r.message) return;
 				this.data = r.message;
@@ -1129,6 +1134,7 @@ class SupplierDetailApp {
 
 		frappe.call({
 			method: "erpnext.buying.page.supplier_hub.supplier_hub.get_payment_options",
+			args: { company: this.company },
 			callback: (r) => {
 				const opts = r.message || {};
 				const wallets = opts.wallets || [];
@@ -1309,6 +1315,7 @@ class SupplierDetailApp {
 							method: "erpnext.buying.page.supplier_hub.supplier_hub.make_quick_supplier_payment",
 							args: {
 								supplier: this.supplier,
+								company: this.company,
 								purchase_invoice: current_inv.name,
 								amount: pay_amount,
 								wallet: selected_wallet,
