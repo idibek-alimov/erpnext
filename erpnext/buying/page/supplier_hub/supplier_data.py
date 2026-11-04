@@ -9,12 +9,65 @@ from frappe.utils import cint, flt, getdate
 
 from erpnext.accounts.report.accounts_receivable.accounts_receivable import ReceivablePayableReport
 from erpnext.stock.page.product_catalog.catalog_data import period_dates
+from erpnext.buying.page.supplier_hub.supplier_revision import current_revision
 
 
 def readable(doctype, filters, fields):
 	if not frappe.has_permission(doctype, "read"):
 		return []
 	return frappe.get_list(doctype, filters=filters, fields=fields, limit_page_length=0)
+
+
+QUERY_BATCH_SIZE = 200
+
+
+def batched_rows(doctype, filters, fields, key, values, *, permitted=False, **kwargs):
+	"""Bound generated IN clauses while retaining native document/row permissions."""
+	if permitted and not frappe.has_permission(doctype, "read"):
+		return []
+	query = frappe.get_list if permitted else frappe.get_all
+	values = sorted(set(values))
+	rows = []
+	for offset in range(0, len(values), QUERY_BATCH_SIZE):
+		rows.extend(query(doctype, filters={**filters, key: ["in", values[offset:offset + QUERY_BATCH_SIZE]]},
+			fields=fields, limit_page_length=0, **kwargs))
+	return rows
+
+
+def linked_inventory(names, invoices, filters, company, scope, detailed=False):
+	"""Discover supplier links first; fetch only permitted linked items and their models."""
+	direct = defaultdict(set)
+	for doctype, parents in (("Purchase Invoice", invoices), ("Purchase Receipt",
+		batched_rows("Purchase Receipt", filters, ["name", "supplier"], "supplier", names, permitted=True))):
+		parent_map = {p.name: p.supplier for p in parents}
+		for child in batched_rows(doctype + " Item", {"parenttype": doctype}, ["parent", "item_code"], "parent", parent_map):
+			if child.item_code:
+				direct[parent_map[child.parent]].add(child.item_code)
+	# These candidates do not reach the response until Item row permissions are applied below.
+	for default in batched_rows("Item Default", {"company": company}, ["parent", "default_supplier"],
+		"default_supplier", names):
+		direct[default.default_supplier].add(default.parent)
+	fields = ["name", "variant_of", "has_variants", "stock_uom"] + (
+		["item_name", "item_group", "image", "custom_short_code", "disabled"] if detailed else [])
+	candidates = set().union(*direct.values()) if direct else set()
+	items = {i.name: i for i in batched_rows("Item", {}, fields, "name", candidates, permitted=True)}
+	templates = [i.name for i in items.values() if i.has_variants]
+	items.update({i.name: i for i in batched_rows("Item", {}, fields, "variant_of", templates, permitted=True)})
+	if detailed:
+		parents = {i.variant_of for i in items.values() if i.variant_of} - set(items)
+		items.update({i.name: i for i in batched_rows("Item", {}, fields, "name", parents, permitted=True)})
+	links = expand_links(direct, items)
+	codes = set().union(*links.values()) if links else set()
+	stock = {}
+	# Both dimensions stay bounded, even on sites with many warehouses.
+	for offset in range(0, len(scope), QUERY_BATCH_SIZE):
+		for row in batched_rows("Bin", {"warehouse": ["in", scope[offset:offset + QUERY_BATCH_SIZE]]},
+			["item_code", "sum(actual_qty) as qty", "sum(stock_value) as value"], "item_code", codes,
+			permitted=True, group_by="item_code"):
+			balance = stock.setdefault(row.item_code, dict(qty=0, value=0))
+			balance["qty"] += flt(row.qty)
+			balance["value"] += flt(row.value)
+	return items, links, stock
 
 
 class SupplierPayables(ReceivablePayableReport):
@@ -169,10 +222,16 @@ def filter_and_summarize(rows, stock, search="", supplier_group=None, debt_filte
 	page_size = min(100, max(1, cint(page_size) or 20))
 	page = min(max(1, cint(page)), max(1, (len(matched) + page_size - 1) // page_size))
 	visible = [{k: v for k, v in r.items() if k != "_stock_codes"} for r in matched[(page - 1) * page_size:page * page_size]]
-	return dict(suppliers=visible, summary=summary, total=len(matched), page=page, page_size=page_size)
+	result = dict(suppliers=visible, summary=summary, total=len(matched), page=page, page_size=page_size)
+	# Small supplier lists can page through an already-authorized browser snapshot.
+	# Bound the payload; large lists continue using normal server pagination.
+	if len(matched) <= 500:
+		result["matching_rows"] = [{k: v for k, v in row.items() if k != "_stock_codes"} for row in matched]
+	return result
 
 
-def load_supplier_context(company=None, period="month", warehouse=None, supplier=None):
+def load_supplier_context(company=None, period="month", warehouse=None, supplier=None,
+	*, include_stock=True, include_payables=True):
 	"""One permission-aware source for both the hub and supplier detail."""
 	from erpnext.stock.page.product_catalog.product_catalog import get_default_company
 
@@ -189,21 +248,21 @@ def load_supplier_context(company=None, period="month", warehouse=None, supplier
 	can_payables = can_purchases and frappe.get_cached_doc("Report", "Accounts Payable").is_permitted()
 	can_stock = frappe.has_permission("Item", "read") and frappe.has_permission("Warehouse", "read") and frappe.has_permission("Bin", "read")
 	filters = dict(company=company, docstatus=1, posting_date=["<=", end])
-	invoices = readable("Purchase Invoice", {**filters, "supplier": ["in", names]},
+	invoices = batched_rows("Purchase Invoice", filters,
 		["name", "supplier", "posting_date", "creation", "due_date", "bill_no", "bill_date", "base_grand_total", "is_return", "is_opening", "party_account_currency", "currency", "conversion_rate", "total_advance"] +
-		(["grand_total", "outstanding_amount", "status", "return_against"] if supplier else [])) if names else []
-	payments = readable("Payment Entry", {**filters, "party_type": "Supplier", "party": ["in", names],
+		(["grand_total", "outstanding_amount", "status", "return_against"] if supplier else []), "supplier", names, permitted=True)
+	payments = batched_rows("Payment Entry", {**filters, "party_type": "Supplier",
 		"payment_type": ["in", ["Pay", "Receive"]]},
 		["name", "party", "posting_date", "payment_type", "base_paid_amount", "base_received_amount"] +
-		(["creation", "mode_of_payment", "paid_from", "paid_to", "reference_no", "remarks", "owner", "paid_amount", "received_amount", "paid_from_account_currency", "paid_to_account_currency"] if supplier else [])) if names else []
+		(["creation", "mode_of_payment", "paid_from", "paid_to", "reference_no", "remarks", "owner", "paid_amount", "received_amount", "paid_from_account_currency", "paid_to_account_currency"] if supplier else []), "party", names, permitted=True)
 	payables = []
-	if can_payables and names:
+	if include_payables and can_payables and names:
 		journals = readable("Journal Entry", filters, ["name", "due_date", "bill_no", "bill_date"])
 		schedules = defaultdict(list)
 		if invoices:
-			for term in frappe.get_all("Payment Schedule", filters={"parent": ["in", [i.name for i in invoices]], "parenttype": "Purchase Invoice"},
-				fields=["parent", "due_date", "payment_term", "payment_amount", "base_payment_amount", "description", "paid_amount", "base_paid_amount", "discounted_amount"],
-				order_by="paid_amount desc, due_date asc", limit_page_length=0):
+			for term in batched_rows("Payment Schedule", {"parenttype": "Purchase Invoice"},
+				["parent", "due_date", "payment_term", "payment_amount", "base_payment_amount", "description", "paid_amount", "base_paid_amount", "discounted_amount"],
+				"parent", [i.name for i in invoices], order_by="paid_amount desc, due_date asc"):
 				schedules[term.parent].append(term)
 		payables = SupplierPayables(company, {s.name: s for s in suppliers}, {i.name: i for i in invoices},
 			{j.name: j for j in journals}, {p.name: p for p in payments}, schedules).run(dict(account_type="Payable", naming_by=["Buying Settings", "supp_master_name"]))[1]
@@ -214,27 +273,9 @@ def load_supplier_context(company=None, period="month", warehouse=None, supplier
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 	scope = [warehouse] if warehouse else warehouse_names
 	items, links, stock = {}, {}, {}
-	if can_stock and names:
-		items = {i.name: i for i in readable("Item", {}, ["name", "variant_of", "has_variants", "stock_uom"] +
-			(["item_name", "item_group", "image", "custom_short_code", "disabled"] if supplier else []))}
-		direct = defaultdict(set)
-		# Restrict child queries by permission-checked parent names first.
-		for doctype, parents in (("Purchase Invoice", invoices), ("Purchase Receipt", readable("Purchase Receipt", {**filters, "supplier": ["in", names]}, ["name", "supplier"]))):
-			if not parents:
-				continue
-			parent_map = {p.name: p.supplier for p in parents}
-			for child in frappe.get_all(doctype + " Item", filters={"parent": ["in", list(parent_map)], "parenttype": doctype}, fields=["parent", "item_code"], limit_page_length=0):
-				if child.item_code in items:
-					direct[parent_map[child.parent]].add(child.item_code)
-		if items:
-			for default in frappe.get_all("Item Default", filters={"company": company, "parent": ["in", list(items)], "default_supplier": ["in", names]}, fields=["parent", "default_supplier"], limit_page_length=0):
-				direct[default.default_supplier].add(default.parent)
-		links = expand_links(direct, items)
-		codes = set().union(*links.values()) if links else set()
-		if codes and scope:
-			stock = {b.item_code: b for b in frappe.get_list("Bin", filters={"item_code": ["in", list(codes)], "warehouse": ["in", scope]},
-				fields=["item_code", "sum(actual_qty) as qty", "sum(stock_value) as value"], group_by="item_code", limit_page_length=0)}
-	rows = inventory_rows(rows, links, items, stock, can_stock)
+	if include_stock and can_stock and names:
+		items, links, stock = linked_inventory(names, invoices, filters, company, scope, detailed=bool(supplier))
+	rows = inventory_rows(rows, links, items, stock, can_stock and include_stock)
 	return dict(company=company, start=start, end=end, suppliers=suppliers, rows=rows,
 		invoices=invoices, payments=payments, payables=payables, items=items, links=links, stock=stock,
 		warehouse_names=warehouse_names, can_payables=can_payables, can_purchases=can_purchases,
@@ -242,9 +283,18 @@ def load_supplier_context(company=None, period="month", warehouse=None, supplier
 
 
 def build_supplier_hub(search=None, supplier_group=None, debt_filter="all", company=None,
-	period="month", warehouse=None, stock_filter="all", stock_qty=0, sort_by="debt_desc", page=1, page_size=20):
+	period="month", warehouse=None, stock_filter="all", stock_qty=0, sort_by="debt_desc", page=1, page_size=20,
+	known_revision=None):
 	if debt_filter not in (None, "all", "with_debt", "settled", "overdue", "in_stock") or stock_filter not in ("all", "gte", "lte", "zero"):
 		frappe.throw(_("Invalid filter"))
+	frappe.has_permission("Supplier", "read", throw=True)
+	from erpnext.stock.page.product_catalog.product_catalog import get_default_company
+
+	company = company or get_default_company()
+	frappe.get_cached_doc("Company", company).check_permission("read")
+	revision = current_revision((company, period, warehouse or ""))
+	if known_revision and known_revision == revision:
+		return dict(unchanged=True, revision=revision)
 	context = load_supplier_context(company, period, warehouse)
 	company, start, end = context["company"], context["start"], context["end"]
 	rows, stock, suppliers = context["rows"], context["stock"], context["suppliers"]
@@ -256,7 +306,7 @@ def build_supplier_hub(search=None, supplier_group=None, debt_filter="all", comp
 		if not allowed:
 			for key in keys:
 				result["summary"][key] = None
-	return dict(**result, company=company, currency=frappe.get_cached_value("Company", company, "default_currency"),
+	return dict(**result, revision=revision, company=company, currency=frappe.get_cached_value("Company", company, "default_currency"),
 		companies=frappe.get_list("Company", pluck="name", limit_page_length=0), warehouses=context["warehouse_names"],
 		supplier_groups=sorted({s.supplier_group for s in suppliers if s.supplier_group}),
 		from_date=str(start) if period != "all" else None, to_date=str(end),

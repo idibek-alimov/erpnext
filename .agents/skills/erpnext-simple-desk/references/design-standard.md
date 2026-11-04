@@ -87,3 +87,28 @@ and source payment activity from Payment Entries rather than purchases minus deb
 Supplier stock means linked products, not proven ownership of particular units. A
 product may appear in several supplier rows; count it once in the summary and explain
 shared links. Restrict inventory to permitted items/warehouses within the company.
+
+## Supplier Detail
+
+The owner approved an invoice-first record view in the same restrained style as Product
+Detail. Show compact supplier identity/contact links, four current/period summary figures
+(outstanding, overdue, period purchases, current linked stock value), then Invoices,
+Payments, Products, and Details tabs. Default to unpaid invoices across all posting dates;
+the purchase/payment period must never hide older unpaid debt. Use due dates and overdue
+days, expandable invoice contents, native document links, and complete paginated history.
+Use the Hub's shared accounting/inventory source and keep unallocated credits separate.
+
+Keep contact details readable; editing opens the native Supplier form and selected primary
+Contact/Address records. A supplier statement opens native General Ledger with supplier,
+company, and date filters, retaining native print/export and opening/closing balances.
+The compact payment dialog pays one invoice through a permitted existing account/wallet,
+with native Payment Entry construction and create/submit permissions. Foreign currency
+and payments involving deductions/discounts use the full ERPNext payment workflow.
+Opening the page or account chooser must never initialize wallets or write business data.
+
+Supplier loading must stay responsive with large variant catalogs: discover supplier links
+before fetching Item metadata, keep generated IN lists bounded, and retain native query
+validation and row permissions. Tab-only requests reuse the current header and avoid
+inventory work. Browser-held results are revalidated against committed document changes,
+current access, and a short expiry; explicit Refresh and returning from native documents
+request fresh data. Keep totals independent of pagination and test uncached timings.

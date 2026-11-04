@@ -10,7 +10,7 @@ frappe.pages["supplier-hub"].on_page_load = function (wrapper) {
 	wrapper.supplier_hub_app = new SupplierHubApp(page);
 };
 frappe.pages["supplier-hub"].on_page_show = function (wrapper) {
-	if (wrapper.supplier_hub_app?.has_loaded) wrapper.supplier_hub_app.load_data();
+	if (wrapper.supplier_hub_app?.has_loaded) wrapper.supplier_hub_app.load_data(true);
 };
 
 class SupplierHubApp {
@@ -159,7 +159,7 @@ class SupplierHubApp {
 			: format_currency(value, this.data.currency);
 	}
 	setup_actions() {
-		this.page.set_secondary_action(this.t("refresh"), () => this.load_data());
+		this.page.set_secondary_action(this.t("refresh"), () => this.load_data(true));
 		this.page.add_inner_button(this.t("columns"), () => this.choose_columns());
 		for (const [label, route] of [
 			["products", "product-catalog"],
@@ -269,24 +269,69 @@ class SupplierHubApp {
 		this.wrapper.find(".sh-results").attr("aria-busy", "true").addClass("sh-loading");
 		this.wrapper.find(".sh-status").text(this.t("loading")).show();
 	}
-	load_data() {
+	load_data(force = false) {
 		clearTimeout(this.search_timer);
 		const request = ++this.request_id;
+		const args = { ...this.filters, page: this.current_page, page_size: this.page_size };
+		const key = JSON.stringify(args);
+		const scope = JSON.stringify(this.filters);
+		this.response_cache ||= new Map();
+		let cached = force ? null : this.response_cache.get(key);
+		if (
+			!cached &&
+			!force &&
+			this.query_snapshot?.scope === scope &&
+			this.query_snapshot.data.matching_rows
+		) {
+			const snapshot = this.query_snapshot;
+			const page_size = Math.min(100, Math.max(1, Number(this.page_size) || 20));
+			const page = Math.min(
+				Math.max(1, this.current_page),
+				Math.max(1, Math.ceil(snapshot.data.total / page_size))
+			);
+			cached = {
+				time: snapshot.time,
+				data: {
+					...snapshot.data,
+					page,
+					page_size,
+					suppliers: snapshot.data.matching_rows.slice((page - 1) * page_size, page * page_size),
+				},
+			};
+		}
+		if (cached?.data.revision && Date.now() - cached.time < 20000)
+			args.known_revision = cached.data.revision;
 		this.set_loading();
 		frappe.call({
 			method: "erpnext.buying.page.supplier_hub.supplier_hub.get_supplier_hub_data",
-			args: { ...this.filters, page: this.current_page, page_size: this.page_size },
+			args,
 			callback: (r) => {
 				if (request !== this.request_id) return;
 				if (!r.message) {
 					this.show_error();
 					return;
 				}
-				this.data = r.message;
+				if (r.message.unchanged && !cached) return this.show_error();
+				this.data = r.message.unchanged ? cached.data : r.message;
 				this.has_loaded = true;
 				this.current_page = this.data.page;
 				this.page_size = this.data.page_size;
 				this.filters.company = this.data.company;
+				const response_key = JSON.stringify({
+					...this.filters,
+					page: this.current_page,
+					page_size: this.page_size,
+				});
+				if (!r.message.unchanged) {
+					this.response_cache.set(response_key, { data: this.data, time: Date.now() });
+					this.query_snapshot = {
+						scope: JSON.stringify(this.filters),
+						data: this.data,
+						time: Date.now(),
+					};
+					if (this.response_cache.size > 20)
+						this.response_cache.delete(this.response_cache.keys().next().value);
+				}
 				this.fill_options("company", this.data.companies);
 				this.fill_options("warehouse", this.data.warehouses, ["", this.t("all_warehouses")]);
 				this.fill_options("supplier_group", this.data.supplier_groups, ["All", this.t("all_groups")]);

@@ -306,6 +306,8 @@ has_website_permission = {
 
 before_tests = "erpnext.setup.utils.before_tests"
 
+clear_cache = "erpnext.buying.page.supplier_hub.supplier_revision.clear_supplier_revision"
+
 
 period_closing_doctypes = [
 	"Sales Invoice",
@@ -330,6 +332,9 @@ period_closing_doctypes = [
 
 doc_events = {
 	"*": {
+		"on_change": "erpnext.buying.page.supplier_hub.supplier_revision.invalidate_supplier_pages",
+		"after_delete": "erpnext.buying.page.supplier_hub.supplier_revision.invalidate_supplier_pages",
+		"after_rename": "erpnext.buying.page.supplier_hub.supplier_revision.invalidate_supplier_pages",
 		"validate": [
 			"erpnext.support.doctype.service_level_agreement.service_level_agreement.apply",
 			"erpnext.setup.doctype.transaction_deletion_record.transaction_deletion_record.check_for_running_deletion_job",

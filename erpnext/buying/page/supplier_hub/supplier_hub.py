@@ -12,13 +12,13 @@ from erpnext.stock.page.product_catalog.product_catalog import get_default_compa
 def get_supplier_hub_data(
 	search=None, supplier_group=None, debt_filter="all", company=None,
 	period="month", warehouse=None, stock_filter="all", stock_qty=0,
-	sort_by="debt_desc", page=1, page_size=20,
+	sort_by="debt_desc", page=1, page_size=20, known_revision=None,
 ):
 	from erpnext.buying.page.supplier_hub.supplier_data import build_supplier_hub
 
 	return build_supplier_hub(
 		search, supplier_group, debt_filter, company, period,
-		warehouse, stock_filter, stock_qty, sort_by, page, page_size,
+		warehouse, stock_filter, stock_qty, sort_by, page, page_size, known_revision,
 	)
 
 
@@ -163,65 +163,9 @@ def get_supplier_details(supplier, company=None):
 
 @frappe.whitelist()
 def get_payment_options(company=None):
-	"""Returns payment modes, Money Hub wallets with live balances, and cash/bank accounts for the payment dialog."""
-	from erpnext.accounts.utils import get_balance_on
-	from erpnext.accounts.page.money_hub.money_hub import import_existing_accounts
+	from erpnext.buying.page.supplier_detail.detail_data import payment_options
 
-	company = company or get_default_company()
-	default_cash = frappe.get_cached_value("Company", company, "default_cash_account") or "Cash - R"
-	default_bank = frappe.get_cached_value("Company", company, "default_bank_account")
-	default_payable = frappe.get_cached_value("Company", company, "default_payable_account") or "Creditors - R"
-	currency = frappe.db.get_value("Company", company, "default_currency") or "TJS"
-
-	# Ensure Money Wallets are initialized
-	try:
-		import_existing_accounts(company)
-	except Exception:
-		pass
-
-	wallets_raw = frappe.db.get_all(
-		"Money Wallet",
-		filters={"company": company, "enabled": 1},
-		fields=["name", "wallet_name", "wallet_type", "account", "mode_of_payment", "icon", "color", "sort_order"],
-		order_by="sort_order asc, creation asc",
-	)
-	wallets = []
-	for w in wallets_raw:
-		bal = flt(get_balance_on(w.account, company=company)) if w.account else 0.0
-		wallets.append({
-			"name": w.name,
-			"wallet_name": w.wallet_name,
-			"wallet_type": w.wallet_type,
-			"account": w.account,
-			"mode_of_payment": w.mode_of_payment,
-			"icon": w.icon or ("💵" if w.wallet_type == "Till" else "🔐" if w.wallet_type == "Safe" else "📱" if w.wallet_type == "Mobile Wallet" else "🏦"),
-			"color": w.color or "#3182ce",
-			"balance": bal,
-			"formatted_balance": f"{bal:,.2f} {currency}",
-			"label": f"{w.icon or '💳'} {w.wallet_name} ({bal:,.2f} {currency})",
-		})
-
-	# Get active modes of payment
-	mops = frappe.db.sql(
-		"""
-		SELECT mop.name, mop.type, COALESCE(mopa.default_account, '') as default_account
-		FROM `tabMode of Payment` mop
-		LEFT JOIN `tabMode of Payment Account` mopa ON mopa.parent = mop.name AND mopa.company = %(company)s
-		WHERE mop.enabled = 1
-		ORDER BY mop.idx ASC, mop.name ASC
-		""",
-		{"company": company},
-		as_dict=True,
-	)
-
-	return {
-		"wallets": wallets,
-		"modes": mops,
-		"default_cash_account": default_cash,
-		"default_bank_account": default_bank,
-		"default_payable_account": default_payable,
-		"currency": currency,
-	}
+	return payment_options(company or get_default_company())
 
 
 @frappe.whitelist()
@@ -247,147 +191,16 @@ def get_unpaid_invoices(supplier, company=None):
 	return invoices
 
 
-@frappe.whitelist()
-def make_quick_supplier_payment(supplier, amount, purchase_invoice, mode_of_payment=None, wallet=None, posting_date=None, reference_no=None, remarks=None, company=None):
-	"""Explicit payment creation to a supplier against a chosen Purchase Invoice credit via Money Hub Wallet."""
-	if not supplier:
-		frappe.throw(_("Supplier is required"))
-
-	if not purchase_invoice:
-		frappe.throw(_("Пожалуйста, выберите накладную для оплаты"))
-
-	amount = flt(amount)
-	if amount <= 0:
-		frappe.throw(_("Payment amount must be greater than zero"))
+@frappe.whitelist(methods=["POST"])
+def make_quick_supplier_payment(supplier, amount, purchase_invoice, mode_of_payment=None, wallet=None,
+	posting_date=None, reference_no=None, remarks=None, company=None):
+	from erpnext.buying.page.supplier_detail.detail_data import record_payment
 
 	company = company or get_default_company()
-	posting_date = posting_date or today()
-
-	# Validate specific Purchase Invoice
-	inv = frappe.db.get_value(
-		"Purchase Invoice",
-		{"name": purchase_invoice, "supplier": supplier, "company": company, "docstatus": 1},
-		["name", "grand_total", "outstanding_amount", "bill_no"],
-		as_dict=True,
-	)
-	if not inv:
-		frappe.throw(_("Накладная {0} не найдена или не принадлежит поставщику {1}").format(purchase_invoice, supplier))
-
-	outstanding = flt(inv.outstanding_amount, 2)
-	if outstanding <= 0:
-		frappe.throw(_("Накладная {0} уже полностью оплачена").format(purchase_invoice))
-
-	# User cannot pay more than the outstanding debt on this invoice
-	if amount > (outstanding + 0.001):
-		frappe.throw(
-			_("Сумма оплаты ({0}) не может превышать остаток по накладной {1} ({2})").format(
-				frappe.format(amount, {"fieldtype": "Currency"}),
-				purchase_invoice,
-				frappe.format(outstanding, {"fieldtype": "Currency"}),
-			)
-		)
-
-	# Cap amount to exact outstanding if small float rounding discrepancy
-	if amount > outstanding:
-		amount = outstanding
-
-	# Resolve Accounts
-	paid_from = None
-	wallet_name = None
-	if wallet and frappe.db.exists("Money Wallet", wallet):
-		w_data = frappe.db.get_value("Money Wallet", wallet, ["account", "mode_of_payment", "wallet_name"], as_dict=True)
-		if w_data and w_data.account:
-			paid_from = w_data.account
-			wallet_name = w_data.wallet_name
-			if not mode_of_payment and w_data.mode_of_payment:
-				mode_of_payment = w_data.mode_of_payment
-
-	if not paid_from and mode_of_payment:
-		paid_from = frappe.db.get_value(
-			"Mode of Payment Account",
-			{"parent": mode_of_payment, "company": company},
-			"default_account",
-		)
-
-	if not paid_from:
-		paid_from = (
-			frappe.get_cached_value("Company", company, "default_cash_account")
-			or frappe.get_cached_value("Company", company, "default_bank_account")
-			or "Cash - R"
-		)
-
-	if not mode_of_payment:
-		mode_of_payment = frappe.db.get_value(
-			"Mode of Payment Account",
-			{"default_account": paid_from, "company": company},
-			"parent"
-		)
-	if not mode_of_payment:
-		mode_of_payment = "Cash"
-
-	paid_to = frappe.get_cached_value("Company", company, "default_payable_account") or "Creditors - R"
-
-	pe = frappe.new_doc("Payment Entry")
-	pe.payment_type = "Pay"
-	pe.party_type = "Supplier"
-	pe.party = supplier
-	pe.company = company
-	pe.posting_date = posting_date
-	pe.mode_of_payment = mode_of_payment
-	pe.paid_from = paid_from
-	pe.paid_to = paid_to
-	pe.paid_amount = amount
-	pe.received_amount = amount
-	pe.reference_no = reference_no
-	pe.reference_date = posting_date
-	pe.custom_remarks = 1
-	wallet_suffix = f" (через {wallet_name})" if wallet_name else ""
-	pe.remarks = (remarks or "").strip() or _("Оплата по накладной {0}{1}").format(purchase_invoice, wallet_suffix)
-
-	pe.setup_party_account_field()
-	pe.set_missing_values()
-
-	# Explicit allocation strictly to the chosen Purchase Invoice
-	pe.append(
-		"references",
-		{
-			"reference_doctype": "Purchase Invoice",
-			"reference_name": inv.name,
-			"total_amount": inv.grand_total,
-			"outstanding_amount": inv.outstanding_amount,
-			"allocated_amount": amount,
-		},
-	)
-
-	pe.flags.ignore_permissions = True
-	pe.insert()
-	pe.submit()
-
-	# Calculate new updated debt for supplier
-	updated_debt = frappe.db.sql(
-		"""
-		SELECT COALESCE(SUM(outstanding_amount), 0)
-		FROM `tabPurchase Invoice`
-		WHERE supplier = %s AND docstatus = 1 AND company = %s
-		""",
-		(supplier, company),
-	)[0][0]
-
-	new_inv_outstanding = max(0.0, flt(outstanding - amount, 2))
-
-	wallet_msg = f" через кошелёк «{wallet_name}»" if wallet_name else ""
-	return {
-		"success": True,
-		"payment_entry": pe.name,
-		"paid_amount": amount,
-		"wallet": wallet_name,
-		"purchase_invoice": purchase_invoice,
-		"invoice_remaining_debt": new_inv_outstanding,
-		"updated_debt": flt(updated_debt, 2),
-		"message": _("Оплата {0} на сумму {1}{2} по накладной {3} успешно проведена").format(
-			pe.name, frappe.format(amount, {"fieldtype": "Currency"}), wallet_msg, purchase_invoice
-		),
-	}
+	account = frappe.db.get_value("Mode of Payment Account",
+		{"parent": mode_of_payment, "company": company}, "default_account") if mode_of_payment else None
+	return record_payment(supplier, purchase_invoice, company, amount, account, wallet,
+		posting_date, reference_no, remarks, mode_of_payment)
 
 
 @frappe.whitelist()

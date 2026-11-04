@@ -54,14 +54,14 @@ def summarize_product_sales(rows):
 
 
 @frappe.whitelist()
-def get_product_overview(item_code, period="month", warehouse=None, color=None):
+def get_product_overview(item_code, period="month", warehouse=None, color=None, company=None):
 	if not frappe.db.exists("Item", item_code):
 		frappe.throw(_("Item not found"), frappe.DoesNotExistError)
 	item_code = frappe.db.get_value("Item", item_code, "variant_of") or item_code
 	if not frappe.has_permission("Item", "read", item_code):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
-	company = get_default_company()
-	frappe.has_permission("Company", "read", company, throw=True)
+	company = company or get_default_company()
+	frappe.get_cached_doc("Company", company).check_permission("read")
 	warehouses = frappe.get_list("Warehouse", filters={"company": company, "is_group": 0}, pluck="name", limit_page_length=0)
 	if warehouse and warehouse not in warehouses:
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
@@ -443,7 +443,7 @@ def update_color_image(item_code, color=None, image_url=None):
 
 
 @frappe.whitelist()
-def reconcile_stock(item_code, changes, reason=None, warehouse=None):
+def reconcile_stock(item_code, changes, reason=None, warehouse=None, company=None):
 	"""Adjusts stock balance for variants using an official Stock Reconciliation entry."""
 	if not frappe.has_permission("Item", "write", item_code):
 		frappe.throw(_("Not permitted to adjust stock for this item"), frappe.PermissionError)
@@ -454,9 +454,15 @@ def reconcile_stock(item_code, changes, reason=None, warehouse=None):
 	if not changes or not isinstance(changes, list):
 		return {"success": True, "reconciled": False, "message": "No changes"}
 
-	company = get_default_company()
+	company = company or get_default_company()
+	frappe.get_cached_doc("Company", company).check_permission("read")
 	if not warehouse:
 		warehouse = get_stores_warehouse(company)
+	if warehouse:
+		warehouse_doc = frappe.get_doc("Warehouse", warehouse)
+		warehouse_doc.check_permission("read")
+		if warehouse_doc.company != company or warehouse_doc.is_group:
+			frappe.throw(_("Invalid warehouse for this company"))
 
 	if not warehouse:
 		frappe.throw(_("No default store warehouse found for company {0}").format(company))

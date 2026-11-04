@@ -14,6 +14,10 @@ frappe.pages["product-detail"].on_page_show = function (wrapper) {
 	const item_code = frappe.get_route()[1];
 	if (item_code) {
 		const options = frappe.route_options || {};
+		const query = new URLSearchParams(window.location.search);
+		wrapper.product_detail.company = options.catalog_company || query.get("company") || null;
+		if (query.has("company") || query.has("warehouse"))
+			wrapper.product_detail.warehouse = query.get("warehouse") || "";
 		if (options.catalog_period) {
 			wrapper.product_detail.period = options.catalog_period;
 			wrapper.product_detail.warehouse = options.catalog_warehouse || "";
@@ -485,6 +489,7 @@ class ProductDetailApp {
 					changes: JSON.stringify(changes),
 					warehouse: this.warehouse,
 					reason: reason,
+					company: this.company,
 				},
 				callback: (r) => {
 					$btn.prop("disabled", false).text(this.t("save_stock"));
@@ -517,6 +522,8 @@ class ProductDetailApp {
 		this.page.set_title(esc(d.item_name));
 		this.page.set_primary_action(L("Receive stock", "Приёмка товара", "Қабули мол"), () =>
 			frappe.new_doc("Quick Product Restock", {
+				company: this.overview?.company || this.company,
+				...(this.warehouse ? { target_warehouse: this.warehouse } : {}),
 				item: this.item_code,
 				item_name: d.item_name,
 				short_code: d.short_code,
@@ -647,6 +654,7 @@ class ProductDetailApp {
 				period: this.period,
 				warehouse: this.warehouse,
 				color: this.selected_color?.color || "",
+				company: this.company,
 			},
 			callback: (r) => {
 				if (request !== this.overview_request || !r.message) return;
