@@ -1,150 +1,89 @@
-// Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and contributors
-// For license information, please see license.txt
-
+// All suggestions come from the same server policy used by posting.
 frappe.ui.form.on("Quick Expense", {
 	setup(frm) {
-		frm.set_query("paid_from", function () {
-			return {
-				filters: {
-					company: frm.doc.company,
-					is_group: 0,
-					account_type: ["in", ["Cash", "Bank"]],
-				},
-			};
-		});
-
-		frm.set_query("expense_account", function () {
-			return {
-				filters: {
-					company: frm.doc.company,
-					is_group: 0,
-					root_type: "Expense",
-				},
-			};
-		});
-
-		frm.set_query("cost_center", function () {
-			return {
-				filters: {
-					company: frm.doc.company,
-					is_group: 0,
-				},
-			};
-		});
+		frm.set_query("paid_from", () => ({
+			filters: { name: ["in", (frm.expense_options?.payment_sources || []).map((s) => s.account)] },
+		}));
+		frm.set_query("expense_category", () => ({
+			filters: { name: ["in", (frm.expense_options?.categories || []).map((c) => c.name)] },
+		}));
 	},
-
-	refresh(frm) {
-		if (frm.doc.docstatus === 1) {
-			if (frm.doc.purchase_invoice) {
-				frm.add_custom_button(__("Purchase Invoice"), () => {
-					frappe.set_route("Form", "Purchase Invoice", frm.doc.purchase_invoice);
-				}, __("View"));
-			}
-			if (frm.doc.payment_entry) {
-				frm.add_custom_button(__("Payment Entry"), () => {
-					frappe.set_route("Form", "Payment Entry", frm.doc.payment_entry);
-				}, __("View"));
-			}
-			if (frm.doc.journal_entry) {
-				frm.add_custom_button(__("Journal Entry"), () => {
-					frappe.set_route("Form", "Journal Entry", frm.doc.journal_entry);
-				}, __("View"));
-			}
+	async refresh(frm) {
+		if (frm.doc.docstatus === 0 && frm.doc.company) await frm.trigger("load_expense_options");
+		for (const [field, label] of [
+			["journal_entry", "Journal Entry"],
+			["payment_entry", "Payment Entry"],
+			["purchase_invoice", "Purchase Invoice"],
+		]) {
+			if (frm.doc[field])
+				frm.add_custom_button(
+					__(label),
+					() => frappe.set_route("Form", label, frm.doc[field]),
+					__("View"),
+				);
 		}
 	},
-
+	async load_expense_options(frm) {
+		const sequence = (frm.expense_options_sequence || 0) + 1;
+		frm.expense_options_sequence = sequence;
+		frm.expense_options = { payment_sources: [], categories: [] };
+		if (!frm.doc.company || frm.doc.docstatus !== 0) return;
+		if (frm.doc.entry_context && frm.doc.entry_context !== "Desk" && !frm.doc.pos_opening_shift) return;
+		const response = await frappe.call({
+			method: "erpnext.accounts.page.expense_desk.expense_desk.get_expense_options",
+			args: {
+				company: frm.doc.company,
+				pos_profile: frm.doc.pos_profile,
+				pos_opening_shift: frm.doc.pos_opening_shift,
+				entry_context: frm.doc.entry_context,
+			},
+		});
+		if (sequence !== frm.expense_options_sequence) return;
+		frm.expense_options = response.message;
+		if (response.message.pos_profile) await frm.set_value("pos_profile", response.message.pos_profile);
+		if (frm.doc.expense_category) await frm.trigger("expense_category");
+	},
+	async company(frm) {
+		await frm.trigger("load_expense_options");
+	},
+	async pos_opening_shift(frm) {
+		await frm.trigger("load_expense_options");
+	},
+	async entry_context(frm) {
+		await frm.trigger("load_expense_options");
+	},
 	expense_category(frm) {
-		if (!frm.doc.expense_category) return;
-
-		// Suggest party type based on category
-		if (frm.doc.expense_category === "Staff Bonus") {
-			if (!frm.doc.party_type) frm.set_value("party_type", "Employee");
-		} else if (["Rent", "Electricity"].includes(frm.doc.expense_category)) {
-			if (!frm.doc.party_type) frm.set_value("party_type", "Supplier");
-		}
-
-		// Auto-populate expense account
-		if (frm.doc.company) {
-			frappe.call({
-				method: "frappe.client.get_list",
-				args: {
-					doctype: "Account",
-					filters: {
-						company: frm.doc.company,
-						is_group: 0,
-						root_type: "Expense",
-					},
-					fields: ["name", "account_name"],
-					limit_page_length: 100,
-				},
-				callback: function (r) {
-					if (!r.message) return;
-					const map = {
-						"Rent": ["Office Rent", "Rent"],
-						"Electricity": ["Electricity Expenses", "Utility Expenses"],
-						"Internet & Phone": ["Internet and Communications", "Telephone Expenses", "Utility Expenses"],
-						"Staff Bonus": ["Staff Bonuses and Incentives", "Salary"],
-						"Store & Office Supplies": ["Store Supplies and Consumables", "Print and Stationery", "Office Maintenance Expenses"],
-						"Transportation & Taxi": ["Travel Expenses"],
-						"Repairs & Maintenance": ["Office Maintenance Expenses"],
-						"Food & Refreshments": ["Entertainment Expenses", "Miscellaneous Expenses"],
-						"Other Expense": ["Miscellaneous Expenses"],
-					};
-					const targets = map[frm.doc.expense_category] || ["Miscellaneous Expenses"];
-					for (const target of targets) {
-						const found = r.message.find(acc => acc.account_name === target);
-						if (found) {
-							frm.set_value("expense_account", found.name);
-							break;
-						}
-					}
-				},
-			});
-		}
+		const category = frm.expense_options?.categories.find((c) => c.name === frm.doc.expense_category);
+		frm.set_value({
+			expense_account: category?.default_account || "",
+			cost_center: category?.cost_center || "",
+		});
 	},
-
-	mode_of_payment(frm) {
-		if (frm.doc.mode_of_payment && frm.doc.company) {
-			frappe.call({
-				method: "frappe.client.get_value",
-				args: {
-					doctype: "Mode of Payment Account",
-					filters: {
-						parent: frm.doc.mode_of_payment,
-						company: frm.doc.company,
-					},
-					fieldname: "default_account",
-				},
-				callback: function (r) {
-					if (r.message && r.message.default_account) {
-						frm.set_value("paid_from", r.message.default_account);
-					}
-				},
-			});
-		}
+	paid_from(frm) {
+		const source = frm.expense_options?.payment_sources.find((s) => s.account === frm.doc.paid_from);
+		frm.set_value("mode_of_payment", source?.mode_of_payment || "");
 	},
-
-	company(frm) {
-		if (frm.doc.company) {
-			// Fetch company default cash account
-			frappe.call({
-				method: "frappe.client.get_value",
-				args: {
-					doctype: "Company",
-					filters: { name: frm.doc.company },
-					fieldname: ["default_cash_account", "cost_center"],
+	async before_cancel(frm) {
+		await new Promise((resolve, reject) => {
+			const dialog = frappe.prompt(
+				[
+					{
+						fieldname: "reason",
+						fieldtype: "Small Text",
+						label: __("Reason for cancellation"),
+						reqd: 1,
+					},
+				],
+				({ reason }) => {
+					frm.doc.cancellation_reason = reason;
+					resolve();
 				},
-				callback: function (r) {
-					if (r.message) {
-						if (r.message.default_cash_account && !frm.doc.paid_from) {
-							frm.set_value("paid_from", r.message.default_cash_account);
-						}
-						if (r.message.cost_center && !frm.doc.cost_center) {
-							frm.set_value("cost_center", r.message.cost_center);
-						}
-					}
-				},
-			});
-		}
+				__("Cancel expense"),
+				__("Continue"),
+			);
+			dialog.onhide = () => {
+				if (!frm.doc.cancellation_reason) reject(new Error(__("Cancellation reason is required")));
+			};
+		});
 	},
 });

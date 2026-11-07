@@ -65,3 +65,10 @@
 .rh-pnl-head { font-weight: 700; }
 .rh-pnl-total { font-size: 17px; font-weight: 800; border-bottom: none; }
 .rh-pnl-note { font-size: 11px; color: var(--text-muted, #718096); padding: 8px 0 10px; }
+
+/* Keep the posted-results explanation and long RU/TG labels readable on mobile. */
+.rh-layout .rh-pnl-row { gap: 16px; align-items: baseline; }
+.rh-layout .rh-pnl-row > span:first-child { min-width: 0; }
+.rh-layout .rh-pnl-row > span:last-child { flex-shrink: 0; white-space: nowrap; }
+.rh-layout .rh-pnl-note { font-size: 12px; line-height: 1.5; }
+.rh-layout .rh-pnl-source { display: inline-block; margin-bottom: 10px; }

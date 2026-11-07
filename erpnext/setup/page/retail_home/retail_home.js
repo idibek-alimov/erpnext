@@ -30,6 +30,8 @@ class RetailHomeApp {
 		this.from_date = null;
 		this.to_date = null;
 		this.pnl = null;
+		this.load_sequence = 0;
+		this.pnl_sequence = 0;
 	}
 
 	t(ru, tg) {
@@ -37,35 +39,53 @@ class RetailHomeApp {
 	}
 
 	fmt(v) {
-		return Number(v || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		if (v === null || v === undefined) return "—";
+		return Number(v).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	}
 
 	load() {
+		const sequence = ++this.load_sequence;
+		++this.pnl_sequence;
+		this.wrapper.html(`<div class="text-muted" role="status">${this.t("Загрузка…", "Боргирӣ…")}</div>`);
 		frappe.call({
 			method: "erpnext.setup.page.retail_home.retail_home.get_business_pulse",
 			callback: (r) => {
-				if (!r.message) return;
+				if (sequence !== this.load_sequence) return;
+				if (!r.message) return this.show_error();
 				this.data = r.message;
 				this.pnl = r.message.pnl;
+				this.period = "month";
 				this.render();
 			},
+			error: () => { if (sequence === this.load_sequence) this.show_error(); },
 		});
 	}
 
+	show_error() {
+		this.wrapper.html(`<div class="text-muted" role="alert">${this.t("Не удалось загрузить данные или доступ ограничен.", "Маълумот бор нашуд ё дастрасӣ маҳдуд аст.")} <button class="btn btn-default btn-sm rh-retry">${this.t("Повторить", "Такрор")}</button></div>`);
+		this.wrapper.find(".rh-retry").on("click", () => this.load());
+	}
+
 	load_pnl() {
+		const sequence = ++this.pnl_sequence;
+		const load_sequence = this.load_sequence;
+		this.wrapper.find(".rh-pnl").html(`<div role="status">${this.t("Загрузка…", "Боргирӣ…")}</div>`);
 		frappe.call({
 			method: "erpnext.setup.page.retail_home.retail_home.get_pnl",
 			args: { period: this.period, from_date: this.from_date, to_date: this.to_date },
 			callback: (r) => {
+				if (sequence !== this.pnl_sequence || load_sequence !== this.load_sequence) return;
+				if (!r.message) return this.show_error();
 				this.pnl = r.message;
 				this.render();
 			},
+			error: () => { if (sequence === this.pnl_sequence && load_sequence === this.load_sequence) this.show_error(); },
 		});
 	}
 
 	render() {
 		const d = this.data;
-		const cur = d.currency;
+		const cur = frappe.utils.escape_html(d.currency);
 		this.wrapper.empty();
 
 		const delta =
@@ -98,14 +118,14 @@ class RetailHomeApp {
 						<span>${a.icon}</span><span>${frappe.utils.escape_html(a.text)}</span></div>`
 					)
 					.join("")
-			: `<div class="rh-alert rh-alert-ok">✅ ${this.t("Всё в порядке — срочных дел нет", "Ҳама чиз хуб аст")}</div>`;
+			: `<div class="rh-alert rh-alert-ok">✅ ${this.t("Нет доступных уведомлений по выбранной компании", "Барои ширкати интихобшуда огоҳии дастрас нест")}</div>`;
 
 		const layout = $(`
 			<div class="rh-layout">
 				<div class="rh-pulse">
-					${pulse("💵", this.t("Выручка сегодня", "Фурӯши имрӯза"), `${this.fmt(d.revenue_today)} <small>${cur}</small>`, delta, "rh-card-main")}
+					${pulse("💵", this.t("Продажи по счетам сегодня", "Фурӯши ҳисобҳои имрӯза"), `${this.fmt(d.revenue_today)} <small>${cur}</small>`, delta, "rh-card-main")}
 					${pulse("🛍️", this.t("Чеков пробито", "Чекҳо"), d.checks, `${this.t("Средний чек", "Чеки миёна")}: ${this.fmt(d.avg_check)} ${cur}`)}
-					${d.hide_profit ? pulse("🔒", this.t("Только для владельца", "Танҳо барои соҳиб"), "—", "") : pulse("📈", this.t("Чистая прибыль сегодня", "Фоидаи софи"), `${this.fmt(d.net_profit_today)} <small>${cur}</small>`, `${this.t("За месяц", "Дар моҳ")}: ${this.fmt(d.net_profit_month)} ${cur}`, d.net_profit_today < 0 ? "rh-neg" : "")}
+					${d.hide_profit ? pulse("🔒", this.t("Доступ ограничен", "Дастрасӣ маҳдуд аст"), "—", "") : pulse("📈", this.t("Результат по проводкам сегодня", "Натиҷаи сабтҳои имрӯза"), `${this.fmt(d.net_profit_today)} <small>${cur}</small>`, `${this.t("За месяц", "Дар моҳ")}: ${this.fmt(d.net_profit_month)} ${cur}`, d.net_profit_today < 0 ? "rh-neg" : "")}
 					${d.hide_profit ? "" : pulse("💰", this.t("Всего денег", "Маблағи умумӣ"), `${this.fmt(d.money.total)} <small>${cur}</small>`, `${this.t("Нал", "Нақд")}: ${this.fmt(d.money.cash)} · ${this.t("Безнал", "Ғайринақд")}: ${this.fmt(d.money.non_cash)}`)}
 				</div>
 
@@ -115,8 +135,8 @@ class RetailHomeApp {
 				<div class="rh-title">${this.t("Требует внимания", "Диққат талаб")}</div>
 				<div class="rh-alerts">${alerts}</div>
 
-				${d.hide_profit ? "" : `				<div class="rh-title">${this.t("Прибыль", "Фоида")}
-					<select id="rh-period" class="rh-select">
+				${d.hide_profit ? "" : `				<div class="rh-title">${this.t("Результат по проводкам", "Натиҷаи сабтҳо")}
+					<select aria-label="${this.t("Период", "Давра")}" id="rh-period" class="rh-select">
 						<option value="today">${this.t("Сегодня", "Имрӯз")}</option>
 						<option value="yesterday">${this.t("Вчера", "Дирӯз")}</option>
 						<option value="week">${this.t("Эта неделя", "Ин ҳафта")}</option>
@@ -124,8 +144,8 @@ class RetailHomeApp {
 						<option value="custom">${this.t("Произвольные даты", "Санаҳои дилхоҳ")}</option>
 					</select>
 					<span id="rh-custom" style="display:${this.period === "custom" ? "inline" : "none"}">
-						<input type="date" id="rh-from" value="${this.from_date || ""}" class="rh-select">
-						<input type="date" id="rh-to" value="${this.to_date || ""}" class="rh-select">
+						<input aria-label="${this.t("Начало периода", "Аввали давра")}" type="date" id="rh-from" value="${this.from_date || ""}" class="rh-select">
+						<input aria-label="${this.t("Конец периода", "Охири давра")}" type="date" id="rh-to" value="${this.to_date || ""}" class="rh-select">
 					</span>
 					<span class="rh-sub">${this.pnl.from} – ${this.pnl.to}</span>
 				</div>
@@ -160,15 +180,19 @@ class RetailHomeApp {
 
 	pnl_html(cur) {
 		const p = this.pnl;
+		const sales = p.invoice_sales;
 		return `
 			<div class="rh-pnl">
-				${this.row(this.t("Выручка", "Фурӯш"), p.revenue, cur, "rh-pnl-head")}
-				${this.row(this.t("Себестоимость товара", "Арзиши мол"), p.cogs, cur, "", "− ")}
-				${this.row(this.t("Расходы (касса)", "Хароҷоти касса"), p.expenses, cur, "", "− ")}
-				${this.row(this.t("Зарплаты и комиссии", "Маош ва комиссия"), p.salaries, cur, "", "− ")}
-				${this.row(this.t("Налог", "Андоз"), p.taxes, cur, "", "− ")}
-				${this.row(this.t("Чистая прибыль", "Фоидаи софӣ"), p.net, cur, "rh-pnl-total " + (p.net < 0 ? "rh-down" : "rh-up"))}
-				<div class="rh-pnl-note">${this.t("Чеков", "Чекҳо")}: ${p.checks} · ${this.t("Валовая прибыль", "Фоидаи умумӣ")}: ${this.fmt(p.gross)} ${cur}</div>
+				${this.row(this.t("Признанный доход", "Даромади сабтшуда"), p.revenue, cur, "rh-pnl-head")}
+				${this.row(this.t("Себестоимость по проводкам", "Арзиши мол аз рӯи сабтҳо"), p.cogs, cur)}
+				${this.row(this.t("Прочие признанные расходы", "Дигар хароҷоти сабтшуда"), p.expenses, cur)}
+				${this.row(this.t("Результат по проводкам", "Натиҷаи сабтҳо"), p.net, cur, "rh-pnl-total " + (p.net < 0 ? "rh-down" : "rh-up"))}
+				<div class="rh-pnl-note">${this.t("Предварительно, в пределах доступных проводок. Это не окончательная чистая прибыль. Зарплата и налоги учитываются только при наличии проводок; полнота ещё не проверена.", "Пешакӣ, дар доираи сабтҳои дастрас. Ин фоидаи софи ниҳоӣ нест. Маош ва андоз танҳо бо сабти муҳосибӣ ҳисоб мешаванд; пуррагӣ ҳанӯз санҷида нашудааст.")}</div>
+				${this.row(this.t("Продажи по счетам без налогов", "Фурӯш аз рӯи ҳисобҳо бе андоз"), sales.net_sales, cur)}
+				${this.row(this.t("Возвраты включены в продажи", "Бозгаштҳо ба фурӯш дохиланд"), sales.returns, cur)}
+				${this.row(this.t("POS без объединения (отдельно)", "POS бе муттаҳидсозӣ (алоҳида)"), sales.unmerged_pos_net_sales, cur)}
+				<div class="rh-pnl-note">${this.t("Продажи, себестоимость и проводки могут относиться к разным датам. Непереданные офлайн-продажи неизвестны. Распределение по магазинам не настроено.", "Санаҳои фурӯш, арзиши мол ва сабтҳо метавонанд фарқ кунанд. Фурӯши офлайни фиристоданашуда номаълум аст. Тақсимот аз рӯи мағозаҳо танзим нашудааст.")}</div>
+				<a class="rh-pnl-source" href="/app/query-report/Profit%20and%20Loss%20Statement?company=${encodeURIComponent(p.company)}&filter_based_on=Date%20Range&period_start_date=${encodeURIComponent(p.from_date)}&period_end_date=${encodeURIComponent(p.to_date)}&periodicity=Monthly&include_default_book_entries=1">${this.t("Открыть полный отчёт ERPNext", "Кушодани ҳисоботи пурраи ERPNext")}</a>
 			</div>`;
 	}
 

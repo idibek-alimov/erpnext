@@ -16,12 +16,18 @@ from erpnext.buying.page.supplier_detail.detail_data import (
 def get_supplier_detail(supplier, company=None, period="month", warehouse=None,
 	tab="invoices", search=None, status="unpaid", date_from=None, date_to=None, page=1, page_size=20,
 	summary_revision=None, known_revision=None):
+	from erpnext.setup.retail_security import require_financial_access
+
+	require_financial_access(company)
 	return build_detail(supplier, company, period, warehouse, tab, search, status, date_from, date_to, page, page_size,
 		summary_revision, known_revision)
 
 
 @frappe.whitelist()
 def get_invoice_items(supplier, invoice, company):
+	from erpnext.setup.retail_security import require_financial_access
+
+	require_financial_access(company)
 	return invoice_items(supplier, invoice, company)
 
 

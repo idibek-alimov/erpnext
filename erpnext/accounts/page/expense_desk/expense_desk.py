@@ -1,637 +1,147 @@
 # Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-import json
 import frappe
 from frappe import _
-from frappe.utils import flt, cint, today, nowdate, getdate, formatdate
+from frappe.utils import cint
 
+from erpnext.accounts.expense_services import commands, history, policy
 from erpnext.stock.page.product_catalog.product_catalog import get_default_company
 
 
-DEFAULT_RETAIL_CATEGORIES = [
-	{"category_name": "Упаковка и пакеты", "icon": "📦", "default_account": None},
-	{"category_name": "Курьер и доставка", "icon": "🚚", "default_account": None},
-	{"category_name": "Питание и чай", "icon": "☕", "default_account": None},
-	{"category_name": "Такси и транспорт", "icon": "🚕", "default_account": None},
-	{"category_name": "Уборка и хозтовары", "icon": "🧹", "default_account": None},
-	{"category_name": "Коммуналка и интернет", "icon": "💡", "default_account": None},
-	{"category_name": "Ремонт и обслуживание", "icon": "🔧", "default_account": None},
-	{"category_name": "Аренда помещения", "icon": "🏢", "default_account": None},
-	{"category_name": "Прочие расходы", "icon": "🏷️", "default_account": None},
-]
+def _context(company=None, pos_profile=None, pos_opening_shift=None, from_pos=0, entry_context=None, reason=None):
+	company = company or get_default_company()
+	if cint(from_pos) and not pos_opening_shift:
+		frappe.throw(_("Open a shift before recording POS expenses."))
+	return policy.get_context(company, pos_profile, pos_opening_shift, entry_context, reason, action="read")
 
 
-def ensure_default_payment_accounts(company):
-	"""Ensure standard retail Cash In Safe and Bank accounts exist in Chart of Accounts."""
-	try:
-		# 1. Safe Account under Cash In Hand
-		cash_parent = frappe.db.get_value(
-			"Account", {"company": company, "account_name": "Cash In Hand", "is_group": 1}, "name"
-		)
-		if cash_parent:
-			safe_exists = frappe.db.get_value(
-				"Account",
-				{
-					"company": company,
-					"account_name": ["in", ["Safe", "Сейф", "Сейф (Safe)", "Сейф магазина", "Касса Сейф"]],
-					"is_group": 0,
-				},
-				"name",
-			)
-			if not safe_exists:
-				safe_doc = frappe.get_doc({
-					"doctype": "Account",
-					"company": company,
-					"account_name": "Сейф (Safe)",
-					"account_type": "Cash",
-					"parent_account": cash_parent,
-					"is_group": 0,
-				})
-				safe_doc.flags.ignore_permissions = True
-				safe_doc.insert()
-				frappe.db.commit()
-
-		# 2. Bank Account under Bank Accounts
-		bank_parent = frappe.db.get_value(
-			"Account", {"company": company, "account_name": "Bank Accounts", "is_group": 1}, "name"
-		)
-		if bank_parent:
-			bank_exists = frappe.db.get_value(
-				"Account", {"company": company, "account_type": "Bank", "is_group": 0}, "name"
-			)
-			if not bank_exists:
-				bank_doc = frappe.get_doc({
-					"doctype": "Account",
-					"company": company,
-					"account_name": "Банковский счет (Карта)",
-					"account_type": "Bank",
-					"parent_account": bank_parent,
-					"is_group": 0,
-				})
-				bank_doc.flags.ignore_permissions = True
-				bank_doc.insert()
-				frappe.db.commit()
-	except Exception as e:
-		frappe.log_error(f"Error ensuring payment accounts: {e}")
-
-
-def ensure_default_categories(company):
-	"""Ensure standard retail categories in Russian exist in Quick Expense Category."""
-	# Always ensure Staff Advance / Аванс сотруднику is removed from Quick Expense Category
-	frappe.db.sql(
-		"DELETE FROM `tabQuick Expense Category` WHERE category_name IN ('Staff Advance', 'Аванс сотруднику')"
-	)
-	frappe.db.commit()
-
-	existing = frappe.db.get_all("Quick Expense Category", pluck="category_name")
-	
-	# If old English categories are present, clear them so Russian takes over
-	old_english = {"Packaging & Bags", "Courier & Delivery", "Food & Tea", "Cleaning & Supplies", "Utilities & Internet", "Repairs & Maintenance", "Rent"}
-	if any(e in old_english for e in existing):
-		frappe.db.sql(
-			"DELETE FROM `tabQuick Expense Category` WHERE category_name IN ('Packaging & Bags', 'Courier & Delivery', 'Food & Tea', 'Cleaning & Supplies', 'Utilities & Internet', 'Repairs & Maintenance', 'Rent')"
-		)
-		frappe.db.commit()
-		existing = frappe.db.get_all("Quick Expense Category", pluck="category_name")
-
-	if existing:
-		return
-
-	from erpnext.accounts.doctype.quick_expense.quick_expense import CATEGORY_ACCOUNT_MAP
-
-	for cat in DEFAULT_RETAIL_CATEGORIES:
-		name = cat["category_name"]
-		default_acc = None
-		candidates = CATEGORY_ACCOUNT_MAP.get(name, [])
-		for candidate in candidates:
-			acc = frappe.db.get_value(
-				"Account",
-				{"company": company, "account_name": candidate, "is_group": 0, "root_type": "Expense"},
-				"name",
-			)
-			if acc:
-				default_acc = acc
-				break
-
-		doc = frappe.get_doc({
-			"doctype": "Quick Expense Category",
-			"category_name": name,
-			"icon": cat["icon"],
-			"default_account": default_acc,
-			"is_pinned": 1,
-		})
-		doc.flags.ignore_permissions = True
-		doc.insert()
-	frappe.db.commit()
+def get_categories(company):
+	categories = []
+	for row in frappe.get_all("Quick Expense Category", fields=["name", "category_name", "icon", "is_pinned"], order_by="is_pinned desc, creation asc"):
+		try:
+			with policy.quiet_setup_checks():
+				mapping = policy.category_mapping(row.name, company)
+		except (frappe.PermissionError, frappe.ValidationError):
+			continue
+		categories.append(dict(row, default_account=mapping.expense_account, cost_center=mapping.cost_center))
+	return categories
 
 
 @frappe.whitelist()
-def get_expense_desk_init_data(company=None, pos_profile=None, pos_opening_shift=None, from_pos=0):
-	company = company or get_default_company()
-	currency = frappe.db.get_value("Company", company, "default_currency") or "TJS"
-
-	ensure_default_payment_accounts(company)
-	ensure_default_categories(company)
-
-	# 1. Discover Payment Sources (POS Tills, Safe, Bank)
-	payment_sources = get_payment_sources(company, pos_profile=pos_profile)
-
-	# 2. Fetch Pinned / Active Categories in Russian
-	categories = frappe.db.get_all(
-		"Quick Expense Category",
-		fields=["name", "category_name", "icon", "default_account", "is_pinned"],
-		order_by="is_pinned desc, creation asc",
-	)
-
-	# 3. Fetch Expense Accounts for Custom Picker
-	expense_accounts = frappe.db.get_all(
-		"Account",
-		filters={"company": company, "root_type": "Expense", "is_group": 0},
-		fields=["name", "account_name"],
-		order_by="account_name asc",
-	)
-
-	# 4. Fetch Employees for Staff Advance
-	employees = frappe.db.get_all(
-		"Employee",
-		filters={"status": "Active", "company": company},
-		fields=["name", "employee_name"],
-		order_by="employee_name asc",
-	)
-
-	# 5. Fetch Today's & Recent Expenses (default to today for POS, all for desk)
-	initial_period = "today" if (pos_profile or cint(from_pos)) else "all"
-	recent_expenses, summary = get_expenses_and_summary(
-		company,
-		period=initial_period,
-		pos_profile=pos_profile,
-		pos_opening_shift=pos_opening_shift,
-		from_pos=from_pos,
-	)
-
-	return {
-		"company": company,
-		"currency": currency,
-		"pos_profile": pos_profile,
-		"pos_opening_shift": pos_opening_shift,
-		"payment_sources": payment_sources,
-		"categories": categories,
-		"expense_accounts": expense_accounts,
-		"employees": employees,
-		"recent_expenses": recent_expenses,
-		"summary": summary,
-	}
+def get_expense_desk_init_data(company=None, pos_profile=None, pos_opening_shift=None, from_pos=0, entry_context=None,
+		period=None, from_date=None, to_date=None, source_id="all", category="all", employee="all", search=None, status="submitted"):
+	context = _context(company, pos_profile, pos_opening_shift, from_pos, entry_context)
+	result = history.list_expenses(context, period or ("shift" if context.pos_opening_shift else "all"),
+		from_date, to_date, source_id, category, employee, search, status)
+	# Recipient names are descriptive, not party accounting. Cashiers do not receive the staff directory.
+	employees = []
+	if policy.is_manager() and frappe.has_permission("Employee", "read"):
+		employees = frappe.get_list("Employee", filters={"company": context.company, "status": "Active"},
+			fields=["name", "employee_name"], order_by="employee_name asc", limit_page_length=0)
+	return dict(company=context.company,
+		currency=frappe.get_cached_value("Company", context.company, "default_currency"),
+		pos_profile=context.pos_profile, pos_opening_shift=context.pos_opening_shift,
+		payment_sources=policy.get_sources(context), categories=get_categories(context.company),
+		expense_accounts=[], employees=employees, recent_expenses=result["recent_expenses"], summary=result["summary"],
+		can_cancel=policy.is_manager() and frappe.has_permission("Quick Expense", "cancel"),
+		can_record=all(frappe.has_permission("Quick Expense", action) for action in ("create", "submit")),
+		can_correct=policy.is_manager() and bool(frappe.get_hooks("expense_pos_context_validator"))
+			and all(frappe.has_permission(doctype, "read") for doctype in ("POS Profile", "POS Opening Shift")),
+		history_filters=history.filter_options(context), entry_context=context.entry_context,
+		has_more=result["has_more"], next_start=result["next_start"],
+		period_from=result.get("period_from"), period_to=result.get("period_to"))
 
 
-def get_payment_sources(company, pos_profile=None):
-	from erpnext.accounts.utils import get_balance_on
-
-	sources = []
-	seen_accounts = set()
-
-	# A. Active POS Profiles (Tills)
-	filters = {"company": company, "disabled": 0}
-	if pos_profile:
-		filters["name"] = pos_profile
-
-	pos_profiles = frappe.db.get_all(
-		"POS Profile",
-		filters=filters,
-		fields=["name", "warehouse", "posa_cash_mode_of_payment"],
-	)
-
-	for prof in pos_profiles:
-		cash_mop = prof.posa_cash_mode_of_payment or "Cash"
-		account = frappe.db.get_value(
-			"Mode of Payment Account",
-			{"parent": cash_mop, "company": company},
-			"default_account",
-		)
-		if not account:
-			account = frappe.db.get_value(
-				"Account",
-				{"company": company, "account_type": "Cash", "is_group": 0},
-				"name",
-			)
-
-		balance = 0.0
-		if account:
-			balance = flt(get_balance_on(account))
-			seen_accounts.add(account)
-
-		sources.append({
-			"id": f"pos:{prof.name}",
-			"type": "pos",
-			"pos_profile": prof.name,
-			"account": account,
-			"label": f"💵 Касса: {prof.name}",
-			"balance": balance,
-		})
-
-	# If opened within POS Awesome (pos_profile provided), HIDE Safe and only show this POS cash and Bank accounts
-	if not pos_profile:
-		# B. Safe / General Cash in Hand accounts
-		cash_accounts = frappe.db.get_all(
-			"Account",
-			filters={"company": company, "account_type": "Cash", "is_group": 0},
-			fields=["name", "account_name"],
-		)
-
-		for acc in cash_accounts:
-			if acc.name in seen_accounts:
-				continue
-			balance = flt(get_balance_on(acc.name))
-			sources.append({
-				"id": f"safe:{acc.name}",
-				"type": "safe",
-				"pos_profile": None,
-				"account": acc.name,
-				"label": f"🔐 {acc.account_name}",
-				"balance": balance,
-			})
-			seen_accounts.add(acc.name)
-
-		# If all cash accounts were assigned to POS, ensure an explicit Safe source option
-		if not any(s["type"] == "safe" for s in sources):
-			default_cash = frappe.get_cached_value("Company", company, "default_cash_account") or "Cash - R"
-			balance = flt(get_balance_on(default_cash)) if default_cash else 0.0
-			sources.append({
-				"id": f"safe:{default_cash}",
-				"type": "safe",
-				"pos_profile": None,
-				"account": default_cash,
-				"label": "🔐 Сейф магазина (Safe)",
-				"balance": balance,
-			})
-
-	# C. Bank Accounts (available for both Desk and POS)
-	bank_accounts = frappe.db.get_all(
-		"Account",
-		filters={"company": company, "account_type": "Bank", "is_group": 0},
-		fields=["name", "account_name"],
-	)
-
-	for acc in bank_accounts:
-		balance = flt(get_balance_on(acc.name))
-		sources.append({
-			"id": f"bank:{acc.name}",
-			"type": "bank",
-			"pos_profile": None,
-			"account": acc.name,
-			"label": f"💳 {acc.account_name}",
-			"balance": balance,
-		})
-
-	return sources
+def get_payment_sources(company, pos_profile=None, pos_opening_shift=None, entry_context=None):
+	return policy.get_sources(_context(company, pos_profile, pos_opening_shift, entry_context=entry_context))
 
 
 @frappe.whitelist()
-def get_filtered_expenses(
-	period="today",
-	from_date=None,
-	to_date=None,
-	source_id="all",
-	category="all",
-	employee="all",
-	search=None,
-	company=None,
-	pos_profile=None,
-	pos_opening_shift=None,
-	from_pos=0,
-):
+def get_filtered_expenses(period="today", from_date=None, to_date=None, source_id="all", category="all",
+		employee="all", search=None, company=None, pos_profile=None, pos_opening_shift=None, from_pos=0,
+		entry_context=None, status="submitted", limit_start=0, limit_page_length=50):
+	context = _context(company, pos_profile, pos_opening_shift, from_pos, entry_context)
+	return history.list_expenses(context, period, from_date, to_date, source_id, category, employee, search,
+		status, limit_start, limit_page_length)
+
+
+def get_expenses_and_summary(company, period="today", from_date=None, to_date=None, source_id="all",
+		category="all", employee="all", search=None, pos_profile=None, pos_opening_shift=None, from_pos=0,
+		entry_context=None):
+	context = _context(company, pos_profile, pos_opening_shift, from_pos, entry_context)
+	result = history.list_expenses(context, period, from_date, to_date, source_id, category, employee, search)
+	return result["recent_expenses"], result["summary"]
+
+
+@frappe.whitelist(methods=["POST"])
+def record_quick_expense(category, amount, paid_from=None, pos_profile=None, pos_opening_shift=None,
+		created_from_pos=0, description=None, beneficiary_name=None, expense_account=None, posting_date=None,
+		party_type=None, party=None, receipt_attachment=None, pin_category=False, icon=None, company=None,
+		client_request_id=None, entry_context=None, correction_reason=None):
+	if cint(created_from_pos) and not pos_opening_shift:
+		frappe.throw(_("Open a shift before recording POS expenses."))
 	company = company or get_default_company()
-	recent_expenses, summary = get_expenses_and_summary(
-		company,
-		period=period,
-		from_date=from_date,
-		to_date=to_date,
-		source_id=source_id,
-		category=category,
-		employee=employee,
-		search=search,
-		pos_profile=pos_profile,
-		pos_opening_shift=pos_opening_shift,
-		from_pos=from_pos,
-	)
-	return {"recent_expenses": recent_expenses, "summary": summary}
-
-
-def get_expenses_and_summary(
-	company,
-	period="today",
-	from_date=None,
-	to_date=None,
-	source_id="all",
-	category="all",
-	employee="all",
-	search=None,
-	pos_profile=None,
-	pos_opening_shift=None,
-	from_pos=0,
-):
-	from frappe.utils import add_days, get_first_day, get_last_day
-
-	today_d = getdate(today())
-	start_date = today_d
-	end_date = today_d
-
-	if period == "shift" and pos_opening_shift:
-		start_date = None
-		end_date = None
-	elif period == "custom" and from_date and to_date:
-		start_date = getdate(from_date)
-		end_date = getdate(to_date)
-	elif period == "yesterday":
-		start_date = add_days(today_d, -1)
-		end_date = start_date
-	elif period == "week":
-		start_date = add_days(today_d, -7)
-		end_date = today_d
-	elif period == "month":
-		start_date = get_first_day(today_d)
-		end_date = get_last_day(today_d)
-	elif period == "all":
-		start_date = None
-		end_date = None
-
-	conds = ["company = %(company)s", "docstatus <= 2"]
-	vals = {"company": company}
-
-	if cint(from_pos) or pos_profile:
-		conds.append("created_from_pos = 1")
-		if pos_profile:
-			conds.append("pos_profile = %(desk_pos_profile)s")
-			vals["desk_pos_profile"] = pos_profile
-
-	if period == "shift" and pos_opening_shift:
-		conds.append("pos_opening_shift = %(pos_opening_shift)s")
-		vals["pos_opening_shift"] = pos_opening_shift
-
-	if start_date and end_date:
-		conds.append("posting_date BETWEEN %(start_date)s AND %(end_date)s")
-		vals["start_date"] = start_date
-		vals["end_date"] = end_date
-
-	if category and category != "all":
-		conds.append("expense_category = %(category)s")
-		vals["category"] = category
-
-	if employee and employee != "all":
-		emp_id = None
-		emp_name = None
-		if frappe.db.exists("Employee", employee):
-			emp_id = employee
-			emp_name = frappe.db.get_value("Employee", employee, "employee_name")
-		else:
-			emp_id = frappe.db.get_value("Employee", {"employee_name": employee}, "name")
-			emp_name = employee if emp_id else None
-
-		conds.append(
-			"""(
-				party = %(employee)s
-				OR party = %(emp_id)s
-				OR beneficiary_name = %(employee)s
-				OR beneficiary_name = %(emp_name)s
-				OR (party_type = 'Employee' AND (party = %(employee)s OR party = %(emp_id)s))
-			)"""
-		)
-		vals["employee"] = employee
-		vals["emp_id"] = emp_id or employee
-		vals["emp_name"] = emp_name or employee
-
-	bank_accounts = frappe.db.get_all(
-		"Account",
-		filters={"company": company, "account_type": "Bank", "is_group": 0},
-		pluck="name",
-	)
-
-	if source_id and source_id != "all":
-		if source_id == "cash":
-			if bank_accounts:
-				conds.append("paid_from NOT IN %(bank_accounts)s")
-				vals["bank_accounts"] = tuple(bank_accounts)
-		elif source_id == "bank":
-			if bank_accounts:
-				conds.append("paid_from IN %(bank_accounts)s")
-				vals["bank_accounts"] = tuple(bank_accounts)
-			else:
-				conds.append("1 = 0")
-		elif source_id.startswith("pos:"):
-			pos_name = source_id.split(":", 1)[1]
-			conds.append("pos_profile = %(pos_profile)s")
-			vals["pos_profile"] = pos_name
-		elif source_id.startswith("safe:") or source_id.startswith("bank:"):
-			acc_name = source_id.split(":", 1)[1]
-			conds.append("paid_from = %(paid_from)s")
-			vals["paid_from"] = acc_name
-
-	if search and search.strip():
-		vals["search_term"] = f"%{search.strip()}%"
-		conds.append(
-			"(name LIKE %(search_term)s OR description LIKE %(search_term)s OR beneficiary_name LIKE %(search_term)s OR party LIKE %(search_term)s)"
-		)
-
-	where_str = " AND ".join(conds)
-
-	expenses = frappe.db.sql(
-		f"""
-		SELECT 
-			name, posting_date, creation, expense_category, amount,
-			paid_from, pos_profile, pos_opening_shift, party_type, party, beneficiary_name,
-			description, receipt_attachment, journal_entry, payment_entry,
-			purchase_invoice, docstatus, owner
-		FROM `tabQuick Expense`
-		WHERE {where_str}
-		ORDER BY creation DESC
-		LIMIT 150
-		""",
-		vals,
-		as_dict=True,
-	)
-
-	icon_map = dict(
-		frappe.db.sql("SELECT category_name, icon FROM `tabQuick Expense Category`")
-	)
-
-	employee_map = dict(
-		frappe.db.sql("SELECT name, employee_name FROM `tabEmployee`")
-	)
-
-	for exp in expenses:
-		exp["icon"] = icon_map.get(exp["expense_category"], "🏷️")
-		exp["formatted_time"] = exp["creation"].strftime("%H:%M") if exp.get("creation") else ""
-		exp["formatted_date"] = formatdate(exp["posting_date"], "dd.mm.yyyy")
-		exp["amount"] = flt(exp["amount"])
-		
-		# Resolve human-readable employee name
-		resolved_emp_name = None
-		if exp.get("party") and exp.get("party") in employee_map:
-			resolved_emp_name = employee_map[exp["party"]]
-		elif exp.get("beneficiary_name") and exp.get("beneficiary_name") in employee_map:
-			resolved_emp_name = employee_map[exp["beneficiary_name"]]
-		elif exp.get("beneficiary_name"):
-			resolved_emp_name = exp["beneficiary_name"]
-		elif exp.get("party_type") == "Employee" and exp.get("party"):
-			resolved_emp_name = exp["party"]
-
-		if resolved_emp_name:
-			exp["employee_name"] = resolved_emp_name
-
-	# Calculate summary for this filtered period (active submitted only)
-	active_expenses = [e for e in expenses if e.get("docstatus") == 1]
-	total_amount = sum(e["amount"] for e in active_expenses)
-	total_count = len(active_expenses)
-
-	cat_totals = {}
-	for e in active_expenses:
-		cat = e["expense_category"] or "Прочие"
-		cat_totals[cat] = cat_totals.get(cat, 0.0) + e["amount"]
-
-	category_breakdown = [
-		{
-			"category": cat,
-			"icon": icon_map.get(cat, "🏷️"),
-			"total": round(amt, 2),
-			"percent": round((amt / total_amount * 100), 1) if total_amount > 0 else 0,
-		}
-		for cat, amt in sorted(cat_totals.items(), key=lambda x: x[1], reverse=True)
-	]
-
-	# Today's overall total (unfiltered)
-	if cint(from_pos) or pos_profile:
-		today_conds = ["company = %s", "posting_date = %s", "docstatus = 1", "created_from_pos = 1"]
-		today_vals = [company, today()]
-		if pos_profile:
-			today_conds.append("pos_profile = %s")
-			today_vals.append(pos_profile)
-		today_total_all = frappe.db.sql(
-			f"SELECT COALESCE(SUM(amount), 0) FROM `tabQuick Expense` WHERE {' AND '.join(today_conds)}",
-			tuple(today_vals),
-		)[0][0]
-	else:
-		today_total_all = frappe.db.sql(
-			"""
-			SELECT COALESCE(SUM(amount), 0)
-			FROM `tabQuick Expense`
-			WHERE company = %s AND posting_date = %s AND docstatus = 1
-			""",
-			(company, today()),
-		)[0][0]
-
-	bank_set = set(bank_accounts or [])
-	cash_total = sum(e["amount"] for e in active_expenses if e.get("paid_from") not in bank_set)
-	bank_total = sum(e["amount"] for e in active_expenses if e.get("paid_from") in bank_set)
-
-	summary = {
-		"period_total": round(total_amount, 2),
-		"period_count": total_count,
-		"today_total": round(flt(today_total_all), 2),
-		"cash_total": round(cash_total, 2),
-		"bank_total": round(bank_total, 2),
-		"category_breakdown": category_breakdown,
-	}
-
-	return expenses, summary
+	posted = commands.record(dict(company=company, expense_category=category, amount=amount, paid_from=paid_from,
+		pos_profile=pos_profile, pos_opening_shift=pos_opening_shift, description=description,
+		beneficiary_name=beneficiary_name, expense_account=expense_account, posting_date=posting_date,
+		party_type=party_type, party=party, receipt_attachment=receipt_attachment,
+		entry_context=entry_context or ("POS" if pos_profile or pos_opening_shift else "Desk"), correction_reason=correction_reason,
+		client_request_id=client_request_id))
+	# The authoritative result is sufficient even if a later list refresh fails. Reads never
+	# run in the posting transaction, which keeps a lost-response retry unambiguous.
+	return dict(expense=posted, **posted)
 
 
 @frappe.whitelist()
-def record_quick_expense(
-	category,
-	amount,
-	paid_from=None,
-	pos_profile=None,
-	pos_opening_shift=None,
-	created_from_pos=0,
-	description=None,
-	beneficiary_name=None,
-	expense_account=None,
-	posting_date=None,
-	party_type=None,
-	party=None,
-	receipt_attachment=None,
-	pin_category=False,
-	icon="🏷️",
-	company=None,
-):
-	"""Instantly create and submit a Quick Expense from the Expense Desk."""
-	roles = frappe.get_roles()
-	allowed_roles = {"Accounts Manager", "Stock Manager", "System Manager", "Administrator"}
-	if pos_profile:
-		allowed_roles.update({
-			"Retail Cashier", "Retail Manager", "Retail Owner", "POS Manager",
-			"POS Awesome Supervisor", "POS User"
-		})
-	if not allowed_roles.intersection(roles):
-		frappe.throw(_("You are not authorized to log expenses."))
-
-	company = company or get_default_company()
-	amount = flt(amount)
-	if amount <= 0:
-		frappe.throw(_("Amount must be greater than 0"))
-
-	if party and not party_type:
-		party_type = "Employee"
-	if party_type == "Employee" and party and not beneficiary_name:
-		beneficiary_name = frappe.db.get_value("Employee", party, "employee_name")
-
-	doc = frappe.new_doc("Quick Expense")
-	doc.company = company
-	doc.posting_date = posting_date or today()
-	doc.expense_category = category
-	doc.amount = amount
-	doc.pos_profile = pos_profile
-	doc.pos_opening_shift = pos_opening_shift
-	doc.created_from_pos = 1 if (cint(created_from_pos) or (pos_opening_shift and pos_profile)) else 0
-	doc.paid_from = paid_from
-	doc.description = description
-	doc.beneficiary_name = beneficiary_name
-	doc.expense_account = expense_account
-	doc.party_type = party_type
-	doc.party = party
-	doc.receipt_attachment = receipt_attachment
-
-	doc.flags.ignore_permissions = True
-	doc.insert()
-	doc.submit()
-
-	if pin_category and category:
-		if not frappe.db.exists("Quick Expense Category", category):
-			cat_doc = frappe.get_doc({
-				"doctype": "Quick Expense Category",
-				"category_name": category,
-				"icon": icon or "🏷️",
-				"default_account": expense_account,
-				"is_pinned": 1,
-			})
-			cat_doc.flags.ignore_permissions = True
-			cat_doc.insert()
-			frappe.db.commit()
-
-	if cint(created_from_pos):
-		return get_expense_desk_init_data(company, pos_profile=pos_profile, pos_opening_shift=pos_opening_shift)
-	return get_expense_desk_init_data(company, pos_profile=None)
+def get_expense_request_outcome(client_request_id):
+	return commands.outcome(client_request_id)
 
 
 @frappe.whitelist()
-def cancel_quick_expense(expense_name, company=None, pos_profile=None, pos_opening_shift=None):
-	"""Void/Cancel an expense and its underlying Journal or Payment Entry."""
-	roles = frappe.get_roles()
-	allowed_roles = {"Accounts Manager", "Stock Manager", "System Manager", "Administrator"}
-	if pos_profile:
-		allowed_roles.update({
-			"Retail Cashier", "Retail Manager", "Retail Owner", "POS Manager",
-			"POS Awesome Supervisor", "POS User"
-		})
-	if not allowed_roles.intersection(roles):
-		frappe.throw(_("You are not authorized to cancel expenses."))
-
-	company = company or get_default_company()
+def get_expense_detail(expense_name, source_doctype="Quick Expense"):
+	if source_doctype != "Quick Expense":
+		for hook in frappe.get_hooks("expense_history_detail"):
+			result = frappe.get_attr(hook)(source_doctype, expense_name)
+			if result is not None:
+				result["shift_links"] = _shift_links(frappe._dict(result, doctype=source_doctype))
+				return result
+		frappe.throw(_("Unsupported expense source."))
+	policy.require_schema()
 	doc = frappe.get_doc("Quick Expense", expense_name)
-	if doc.docstatus == 1:
-		doc.flags.ignore_permissions = True
-		doc.cancel()
+	policy.assert_read(doc)
+	doc.check_permission("read")
+	return dict(commands.result(doc), can_cancel=doc.docstatus == 1 and policy.is_manager() and frappe.has_permission("Quick Expense", "cancel", doc=doc), source_doctype="Quick Expense", source_id=f"Quick Expense:{doc.name}", amended_from=doc.amended_from, expense_category=doc.expense_category, description=doc.description,
+		beneficiary_name=doc.beneficiary_name, receipt_attachment=doc.receipt_attachment,
+		correction_reason=doc.correction_reason, cancellation_reason=doc.cancellation_reason,
+		shift_links=_shift_links(doc))
 
-	if pos_profile:
-		return get_expense_desk_init_data(company, pos_profile=pos_profile, pos_opening_shift=pos_opening_shift)
-	return get_expense_desk_init_data(company, pos_profile=None)
+
+def _shift_links(doc):
+	"""Optional POS integration; permission-scoped by its owning app, without an import."""
+	for hook in frappe.get_hooks("expense_history_links"):
+		return frappe.get_attr(hook)(doc)
+	return {}
+
+
+@frappe.whitelist(methods=["POST"])
+def cancel_quick_expense(expense_name, company=None, pos_profile=None, pos_opening_shift=None,
+		reason=None, expected_modified=None, client_request_id=None):
+	posted = commands.cancel(expense_name, reason, expected_modified, client_request_id, company, pos_profile, pos_opening_shift)
+	return dict(expense=posted, **posted)
+
+
+@frappe.whitelist()
+def get_expense_options(company, pos_profile=None, pos_opening_shift=None, entry_context=None):
+	context = _context(company, pos_profile, pos_opening_shift, entry_context=entry_context)
+	return dict(pos_profile=context.pos_profile, pos_opening_shift=context.pos_opening_shift,
+		payment_sources=policy.get_sources(context), categories=get_categories(company), can_cancel=policy.is_manager(),
+		note_required=bool(context.get("note_required")))
+
+
+@frappe.whitelist()
+def get_shift_review_navigation():
+	"""Optional POS-owned page: no hard ERPNext dependency on POS Awesome."""
+	if "posawesome" not in frappe.get_installed_apps():
+		return dict(available=False)
+	return frappe.get_attr("posawesome.posawesome.shift_review.desk.navigation")()

@@ -61,6 +61,9 @@ def get_stores_warehouse(company):
 @frappe.whitelist()
 def get_catalog(search=None, item_group=None, status_filter=None, sort_by=None, page=1,
 	page_size=20, company=None, period="month", warehouse=None):
+	from erpnext.setup.retail_security import require_financial_access
+
+	require_financial_access(company)
 	from erpnext.stock.page.product_catalog.catalog_data import build_catalog
 
 	return build_catalog(search=search, item_group=item_group, status_filter=status_filter,

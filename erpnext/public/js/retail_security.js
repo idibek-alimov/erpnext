@@ -10,7 +10,11 @@
 
 	function guard() {
 		if (!is_cashier_only()) return;
-		const first = (frappe.get_route()[0] || "").toLowerCase();
+		// The startup event can precede the router's first resolved route.
+		// The change listener below enforces access as soon as it resolves.
+		const route = frappe.get_route();
+		if (!route?.length) return;
+		const first = (route[0] || "").toLowerCase();
 		if (!CASHIER_ALLOWED.includes(first)) {
 			frappe.set_route("posapp");
 		}

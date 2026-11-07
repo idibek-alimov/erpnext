@@ -1,0 +1,17 @@
+{
+ "doctype": "DocType", "name": "Owner Money Movement", "module": "Accounts", "engine": "InnoDB", "track_changes": 1,
+ "field_order": ["company", "actor", "operation", "fingerprint", "intent", "journal_entry", "wallet_account", "owner_account"],
+ "fields": [
+  {"fieldname": "company", "fieldtype": "Link", "options": "Company", "label": "Company", "reqd": 1, "read_only": 1},
+  {"fieldname": "actor", "fieldtype": "Link", "options": "User", "label": "Recorded By", "reqd": 1, "read_only": 1},
+  {"fieldname": "operation", "fieldtype": "Select", "options": "contribution\nwithdrawal\nloan_received\nloan_repayment", "label": "Operation", "reqd": 1, "read_only": 1},
+  {"fieldname": "fingerprint", "fieldtype": "Data", "label": "Request Fingerprint", "reqd": 1, "read_only": 1, "hidden": 1},
+  {"fieldname": "intent", "fieldtype": "Long Text", "label": "Submitted Intent", "reqd": 1, "read_only": 1, "hidden": 1},
+  {"fieldname": "journal_entry", "fieldtype": "Link", "options": "Journal Entry", "label": "Journal Entry", "read_only": 1},
+  {"fieldname": "wallet_account", "fieldtype": "Link", "options": "Account", "label": "Money Account", "reqd": 1, "read_only": 1},
+  {"fieldname": "owner_account", "fieldtype": "Link", "options": "Account", "label": "Owner Account", "reqd": 1, "read_only": 1}
+ ],
+ "permissions": [{"role": "System Manager", "read": 1}, {"role": "Accounts Manager", "read": 1}, {"role": "Retail Manager", "read": 1}],
+ "sort_field": "creation", "sort_order": "DESC", "actions": [], "links": [], "states": [],
+ "creation": "2026-11-07 15:00:00.000000", "modified": "2026-11-07 15:00:00.000000", "owner": "Administrator", "modified_by": "Administrator"
+}

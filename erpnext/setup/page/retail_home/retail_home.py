@@ -2,16 +2,13 @@
 # For license information, please see license.txt
 
 import frappe
-from frappe.utils import add_days, flt, get_first_day, get_last_day, getdate, now_datetime, today
+from frappe.utils import add_days, flt, get_first_day, getdate, now_datetime, today
 
 from erpnext.stock.page.product_catalog.product_catalog import get_default_company
 
-# Quick Expense categories that are staff advances (covered via Staff Settlement instead)
-EXCLUDED_EXPENSE_CATEGORIES = ("Аванс сотруднику", "Staff Advance")
-
 
 def can_see_profit():
-	"""Profit figures are hidden from retail staff who are not Retail Owner / System Manager."""
+	"""Shared admin/manager visibility; underlying native permissions still apply."""
 	from erpnext.setup.retail_security import can_see_financials
 
 	return can_see_financials()
@@ -28,75 +25,44 @@ def _range(period, from_date=None, to_date=None):
 		return get_first_day(t), t
 	if period == "custom" and from_date and to_date:
 		return getdate(from_date), getdate(to_date)
-	return t, t
+	if period == "today":
+		return t, t
+	frappe.throw(frappe._("Choose a valid period and both custom dates."))
 
 
 def _sales(company, start, end, until_time=None):
-	cond = "AND posting_time <= %(until)s" if until_time else ""
-	row = frappe.db.sql(
-		f"""SELECT COALESCE(SUM(base_net_total), 0), COALESCE(SUM(base_grand_total), 0),
-			SUM(CASE WHEN is_return = 0 THEN 1 ELSE 0 END)
-		FROM `tabSales Invoice`
-		WHERE docstatus = 1 AND company = %(company)s AND posting_date BETWEEN %(start)s AND %(end)s {cond}""",
-		{"company": company, "start": start, "end": end, "until": until_time},
-	)[0]
-	return flt(row[0]), flt(row[1]), int(row[2] or 0)
+	from erpnext.setup.retail_security import require_financial_access
 
-
-def _cogs(company, start, end):
-	return flt(frappe.db.sql(
-		"""SELECT COALESCE(SUM(sii.qty * sii.incoming_rate), 0)
-		FROM `tabSales Invoice Item` sii JOIN `tabSales Invoice` si ON si.name = sii.parent
-		WHERE si.docstatus = 1 AND si.company = %s AND si.posting_date BETWEEN %s AND %s""",
-		(company, start, end),
-	)[0][0])
-
-
-def _expenses(company, start, end):
-	return flt(frappe.db.sql(
-		"""SELECT COALESCE(SUM(amount), 0) FROM `tabQuick Expense`
-		WHERE docstatus = 1 AND company = %s AND posting_date BETWEEN %s AND %s
-		AND expense_category NOT IN %s""",
-		(company, start, end, EXCLUDED_EXPENSE_CATEGORIES),
-	)[0][0])
-
-
-def _salaries(company, start, end):
-	return flt(frappe.db.sql(
-		"""SELECT COALESCE(SUM(base_salary + commission_amount + bonuses_total - penalties_total), 0)
-		FROM `tabStaff Settlement`
-		WHERE docstatus = 1 AND company = %s AND posting_date BETWEEN %s AND %s""",
-		(company, start, end),
-	)[0][0])
-
-
-def _taxes(company, start, end):
-	from erpnext.accounts.page.money_hub.money_hub import tax_for_range
-
-	try:
-		return flt(tax_for_range(company, start, end))
-	except Exception:
-		return 0.0
+	require_financial_access(company)
+	if not frappe.has_permission("Sales Invoice", "read"):
+		return None, None, None
+	filters = dict(company=company, docstatus=1, is_opening="No", posting_date=["between", [start, end]])
+	if until_time:
+		filters["posting_time"] = ["<=", until_time]
+	rows = frappe.get_list("Sales Invoice", filters=filters,
+		fields=["base_net_total", "base_grand_total", "is_return"], limit_page_length=0)
+	if any(row.get(field) is None for row in rows for field in ("base_net_total", "base_grand_total", "is_return")):
+		frappe.throw(frappe._("Required sales fields are not readable."), frappe.PermissionError)
+	return (sum(flt(row.base_net_total) for row in rows), sum(flt(row.base_grand_total) for row in rows),
+		sum(not row.is_return for row in rows))
 
 
 def _pnl(company, start, end):
-	revenue, _gt, checks = _sales(company, start, end)
-	cogs = _cogs(company, start, end)
-	expenses = _expenses(company, start, end)
-	salaries = _salaries(company, start, end)
-	taxes = _taxes(company, start, end)
-	gross = revenue - cogs
-	net = gross - expenses - salaries - taxes
-	return {
-		"revenue": revenue, "cogs": cogs, "gross": gross, "expenses": expenses,
-		"salaries": salaries, "taxes": taxes, "net": net, "checks": checks,
-	}
+	from erpnext.accounts.page.money_hub.business_results import read_results
+
+	out = read_results(company, start, end)
+	ledger = out["ledger"]
+	# Legacy transport keys retained; these are now posted book figures, not final profit.
+	return dict(revenue=ledger["income"], cogs=ledger["cogs"], expenses=ledger["other_expenses"],
+		net=ledger["result"], salaries=None, taxes=None, gross=None,
+		checks=out["invoice_sales"]["checks"], **out)
 
 
 @frappe.whitelist()
 def get_pnl(period="month", from_date=None, to_date=None, company=None):
-	if not can_see_profit():
-		frappe.throw(frappe._("Only the Retail Owner can view profit."), frappe.PermissionError)
+	from erpnext.setup.retail_security import require_financial_access
+
+	require_financial_access(company)
 	company = company or get_default_company()
 	start, end = _range(period, from_date, to_date)
 	out = _pnl(company, start, end)
@@ -105,66 +71,69 @@ def get_pnl(period="month", from_date=None, to_date=None, company=None):
 	return out
 
 
+def _children(doctype, parenttype, parents, fields):
+	rows = []
+	parents = sorted(set(parents))
+	for offset in range(0, len(parents), 200):
+		rows.extend(frappe.get_list(doctype, parent_doctype=parenttype,
+			filters={"parent": ["in", parents[offset:offset + 200]], "parenttype": parenttype},
+			fields=fields, limit_page_length=0))
+	return rows
+
+
 def _alerts(company):
+	"""Retain the existing alerts, resolving native parent/item/warehouse scope first."""
+	from collections import defaultdict
+
 	alerts = []
-	t = getdate(today())
+	if frappe.has_permission("POS Closing Entry", "read"):
+		closings = frappe.get_list("POS Closing Entry", filters={"company": company, "docstatus": 1,
+			"posting_date": [">=", add_days(today(), -7)]}, fields=["name", "posting_date"],
+			order_by="posting_date desc, name desc", limit_page_length=0)
+		diffs = defaultdict(float)
+		for row in _children("POS Closing Entry Detail", "POS Closing Entry", [doc.name for doc in closings], ["parent", "difference"]):
+			if row.get("difference") is not None:
+				diffs[row.parent] += flt(row.difference)
+		for doc in [doc for doc in closings if abs(diffs[doc.name]) > 0.001][:5]:
+			alerts.append(dict(level="red", icon="", text=f"{doc.name}: {diffs[doc.name]:,.2f}",
+				route=["Form", "POS Closing Entry", doc.name]))
 
-	# 1. Shift cash differences (POS Closing Entry, last 7 days)
-	diffs = frappe.db.sql(
-		"""SELECT pce.name, pce.user, pce.posting_date, SUM(d.difference) AS diff
-		FROM `tabPOS Closing Entry` pce JOIN `tabPOS Closing Entry Detail` d ON d.parent = pce.name
-		WHERE pce.docstatus = 1 AND pce.company = %s AND pce.posting_date >= %s
-		GROUP BY pce.name HAVING ABS(SUM(d.difference)) > 0.001
-		ORDER BY pce.posting_date DESC LIMIT 5""",
-		(company, add_days(t, -7)),
-		as_dict=True,
-	)
-	for d in diffs:
-		kind = "недостача" if d.diff < 0 else "излишек"
-		alerts.append({
-			"level": "red", "icon": "🔴",
-			"text": f"При закрытии смены {frappe.utils.formatdate(d.posting_date, 'dd.mm')} — {kind} {abs(flt(d.diff)):,.2f}",
-			"route": ["Form", "POS Closing Entry", d.name],
-		})
+	if all(frappe.has_permission(kind, "read") for kind in ("Sales Invoice", "Item", "Warehouse", "Bin")):
+		invoices = frappe.get_list("Sales Invoice", filters={"company": company, "docstatus": 1,
+			"posting_date": ["between", [add_days(today(), -30), today()]]}, pluck="name", limit_page_length=0)
+		sold = defaultdict(float)
+		for row in _children("Sales Invoice Item", "Sales Invoice", invoices, ["item_code", "stock_qty"]):
+			if row.get("item_code") and row.get("stock_qty") is not None:
+				sold[row.item_code] += flt(row.stock_qty)
+		warehouses = frappe.get_list("Warehouse", filters={"company": company, "is_group": 0}, pluck="name", limit_page_length=0)
+		codes = sorted(code for code, qty in sold.items() if qty > 0)
+		low = []
+		for offset in range(0, len(codes), 200):
+			items = frappe.get_list("Item", filters={"name": ["in", codes[offset:offset + 200]], "is_stock_item": 1},
+				fields=["name", "item_name"], limit_page_length=0)
+			qty = defaultdict(float)
+			unknown = set()
+			if items and warehouses:
+				for row in frappe.get_list("Bin", filters={"item_code": ["in", [item.name for item in items]],
+					"warehouse": ["in", warehouses]}, fields=["item_code", "actual_qty"], limit_page_length=0):
+					if row.get("actual_qty") is not None:
+						qty[row.item_code] += flt(row.actual_qty)
+					else:
+						unknown.add(row.item_code)
+				low.extend(item.item_name for item in items if item.get("item_name") and item.name not in unknown and qty[item.name] < 3)
+		if low:
+			alerts.append(dict(level="yellow", icon="", text=frappe._("Low stock (less than 3): {0}").format(
+				", ".join(low[:3])), route=["product-catalog"]))
 
-	# 2. Fast-moving items running out (sold in last 30 days, stock < 3)
-	low = frappe.db.sql(
-		"""SELECT b.item_code, i.item_name, SUM(b.actual_qty) AS qty
-		FROM `tabBin` b JOIN `tabItem` i ON i.name = b.item_code
-		WHERE b.item_code IN (
-			SELECT sii.item_code FROM `tabSales Invoice Item` sii JOIN `tabSales Invoice` si ON si.name = sii.parent
-			WHERE si.docstatus = 1 AND si.posting_date >= %s GROUP BY sii.item_code HAVING SUM(sii.qty) > 0
-		)
-		GROUP BY b.item_code HAVING SUM(b.actual_qty) < 3
-		ORDER BY qty ASC LIMIT 20""",
-		(add_days(t, -30),),
-		as_dict=True,
-	)
-	if low:
-		names = ", ".join(r.item_name for r in low[:3])
-		more = f" и ещё {len(low) - 3}" if len(low) > 3 else ""
-		alerts.append({
-			"level": "yellow", "icon": "🟡",
-			"text": f"Заканчиваются ходовые товары (остаток < 3 шт): {names}{more}",
-			"route": ["product-catalog"],
-		})
-
-	# 3. Supplier invoices due within 48 hours (or overdue)
-	due = frappe.db.sql(
-		"""SELECT supplier, SUM(outstanding_amount) AS amt, MIN(due_date) AS due_date
-		FROM `tabPurchase Invoice`
-		WHERE docstatus = 1 AND company = %s AND outstanding_amount > 0 AND due_date <= %s
-		GROUP BY supplier ORDER BY due_date ASC LIMIT 5""",
-		(company, add_days(t, 2)),
-		as_dict=True,
-	)
-	for d in due:
-		overdue = getdate(d.due_date) < t
-		alerts.append({
-			"level": "red" if overdue else "yellow", "icon": "🔴" if overdue else "🟡",
-			"text": f"{'Просрочена оплата' if overdue else 'Срок оплаты подходит'} поставщику {d.supplier}: {flt(d.amt):,.2f} (до {frappe.utils.formatdate(d.due_date, 'dd.mm')})",
-			"route": ["supplier-hub"],
-		})
+	if frappe.has_permission("Purchase Invoice", "read"):
+		rows = frappe.get_list("Purchase Invoice", filters={"company": company, "docstatus": 1,
+			"outstanding_amount": [">", 0], "due_date": ["<=", add_days(today(), 2)]},
+			fields=["name", "due_date", "outstanding_amount", "currency"],
+			order_by="due_date, name", limit_page_length=5)
+		alerts.extend(dict(level="red" if getdate(row.due_date) < getdate(today()) else "yellow", icon="",
+			text=f"{row.name}: {flt(row.outstanding_amount):,.2f} {row.currency} — {frappe.utils.formatdate(row.due_date, 'dd.mm.yyyy')}",
+			route=["Form", "Purchase Invoice", row.name]) for row in rows
+			if row.get("due_date") and row.get("outstanding_amount") is not None and row.get("currency"))
 	return alerts
 
 
@@ -172,8 +141,12 @@ def _alerts(company):
 def get_business_pulse(company=None):
 	from erpnext.accounts.page.money_hub.money_hub import get_money_hub_data
 
+	from erpnext.setup.retail_security import require_financial_access
+
+	require_financial_access(company)
 	company = company or get_default_company()
-	currency = frappe.db.get_value("Company", company, "default_currency") or "TJS"
+	require_financial_access(company)
+	currency = frappe.get_doc("Company", company).default_currency
 	t = getdate(today())
 	now_time = now_datetime().strftime("%H:%M:%S")
 
@@ -185,7 +158,7 @@ def get_business_pulse(company=None):
 	money = get_money_hub_data(company)["totals"]
 
 	delta = None
-	if rev_yday:
+	if rev_yday and rev_today is not None:
 		delta = round((rev_today - rev_yday) / rev_yday * 100, 1)
 
 	show_profit = can_see_profit()
@@ -198,10 +171,12 @@ def get_business_pulse(company=None):
 		"revenue_yesterday_same_time": rev_yday,
 		"revenue_delta_percent": delta,
 		"checks": checks,
-		"avg_check": round(rev_today / checks, 2) if checks else 0,
+		"avg_check": round(rev_today / checks, 2) if checks else None,
 		"net_profit_today": pnl_today["net"] if show_profit else None,
 		"net_profit_month": pnl_month["net"] if show_profit else None,
 		"money": {"cash": money["cash"], "non_cash": money["non_cash"], "total": money["total"]} if show_profit else None,
 		"alerts": _alerts(company),
-		"pnl": get_pnl("month", company=company) if show_profit else None,
+		"alerts_scope": "permitted_native_sources",
+		"pnl": dict(pnl_month, **{"from": frappe.utils.formatdate(get_first_day(t), "dd.mm.yyyy"),
+			"to": frappe.utils.formatdate(t, "dd.mm.yyyy")}) if show_profit else None,
 	}

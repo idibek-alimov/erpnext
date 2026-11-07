@@ -5,25 +5,26 @@ frappe.pages["money-hub"].on_page_load = function (wrapper) {
 	const is_tg = frappe.boot.user.language === "tg";
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: is_tg ? __("Пул (Money Hub)") : __("Деньги (Money Hub)"),
+		title: is_tg ? __("Пул") : __("Деньги"),
 		single_column: true,
 	});
 
-	page.set_primary_action(is_tg ? __("🔄 Интиқол") : __("🔄 Перевод / Инкассация"), () => {
-		wrapper.money_hub_app && wrapper.money_hub_app.open_transfer();
-	});
-	page.add_inner_button(is_tg ? __("➕ Ҳамёни нав") : __("➕ Создать кошелёк"), () => {
-		wrapper.money_hub_app && wrapper.money_hub_app.open_creator();
-	});
+	page.set_primary_action(is_tg ? __("Хароҷотҳо") : __("Расходы"), () => frappe.set_route("expense-desk"));
+	page.add_inner_button(is_tg ? __("Интиқол") : __("Перевод"), () => wrapper.money_hub_app?.open_transfer());
+	page.add_menu_item(is_tg ? __("Маблағи соҳиб") : __("Средства владельца"), () => wrapper.money_hub_app?.open_owner_money());
+	page.add_inner_button(is_tg ? __("Навсозӣ") : __("Обновить"), () => wrapper.money_hub_app?.load());
+	if (frappe.model.can_create("Money Wallet")) page.add_menu_item(is_tg ? __("Ҳамёни нав") : __("Создать кошелёк"), () => wrapper.money_hub_app?.open_creator());
+	page.add_menu_item(is_tg ? __("Танзими ҳамёнҳо") : __("Настройка кошельков"), () => frappe.set_route("List", "Money Wallet"));
+	for (const [ru, tg, route] of [
+		["Налоги", "Андозҳо", "tax-desk"], ["Поставщики", "Таъминкунандагон", "supplier-hub"],
+		["Сотрудники", "Кормандон", "staff-hub"], ["Каталог товаров", "Каталоги молҳо", "product-catalog"],
+	]) page.add_menu_item(is_tg ? __(tg) : __(ru), () => frappe.set_route(route));
 
-	page.add_inner_button(is_tg ? __("Хароҷотҳо") : __("Расходы"), () => frappe.set_route("expense-desk"));
-	page.add_inner_button(is_tg ? __("Андозҳо") : __("Налоги"), () => frappe.set_route("tax-desk"));
-	page.add_inner_button(is_tg ? __("Таъминкунандагон") : __("Поставщики"), () => frappe.set_route("supplier-hub"));
-	page.add_inner_button(is_tg ? __("Кормандон") : __("Сотрудники"), () => frappe.set_route("staff-hub"));
-	page.add_inner_button(is_tg ? __("Каталоги молҳо") : __("Каталог товаров"), () => frappe.set_route("product-catalog"));
-	page.add_inner_button(is_tg ? __("Навсозӣ") : __("Обновить"), () => {
-		wrapper.money_hub_app && wrapper.money_hub_app.load();
-	});
+	frappe.call({
+		method: "erpnext.accounts.page.expense_desk.expense_desk.get_shift_review_navigation",
+	}).then(response => {
+		if (response.message?.available) page.add_menu_item(__("Shift Review"), () => frappe.set_route("shift-review"));
+	}).catch(() => { /* Optional POS page does not block Money Hub. */ });
 
 	// Ensure fresh styles even if cached in localStorage
 	frappe.call({
@@ -55,6 +56,9 @@ class MoneyHubApp {
 		this.is_tg = frappe.boot.user.language === "tg";
 		this.data = null;
 		this.feed = [];
+		this.feed_result = null;
+		this.feed_start = 0;
+		this.include_hidden = false;
 
 		// Read active tab from URL route: #money-hub/ledger or #money-hub/accounts
 		const route = frappe.get_route();
@@ -77,125 +81,136 @@ class MoneyHubApp {
 		return this.is_tg ? tg : ru;
 	}
 
-	fmt(amount) {
+	fmt(amount, currency = this.data?.currency) {
 		const n = Number(amount || 0);
-		return n.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		const precision = this.data?.currency_precisions?.[currency] ?? 2;
+		return n.toLocaleString(this.is_tg ? "tg" : "ru-RU", { minimumFractionDigits: precision, maximumFractionDigits: precision });
 	}
 
-	load() {
-		frappe.call({
-			method: "erpnext.accounts.page.money_hub.money_hub.get_money_hub_data",
-			callback: (r) => {
-				if (!r.message) return;
-				this.data = r.message;
-				this.render();
-				this.load_feed();
-			},
-		});
-	}
-
-	load_feed() {
-		frappe.call({
-			method: "erpnext.accounts.page.money_hub.money_hub.get_money_feed",
-			args: {
-				wallet: this.feed_wallet,
-				period: this.feed_period,
-				from_date: this.from_date || null,
-				to_date: this.to_date || null,
-				op_type: this.feed_op_type,
-				direction: this.feed_direction,
-				search: this.search_query,
-				limit: 500,
-			},
-			callback: (r) => {
-				this.feed = r.message || [];
-				this.render();
-				if (frappe.route_options && frappe.route_options.open_transfer) {
-					frappe.route_options = null;
-					this.open_transfer();
-				}
-			},
-		});
-	}
-
-	apply(r) {
-		if (r && r.message) {
-			this.data = r.message;
+	async load() {
+		const sequence = this.load_sequence = (this.load_sequence || 0) + 1;
+		this.feed_sequence = (this.feed_sequence || 0) + 1;
+		this.wrapper.text(__("Loading…"));
+		try {
+			const response = await frappe.call({method: "erpnext.accounts.page.money_hub.money_hub.get_money_hub_data", args: {include_hidden: this.include_hidden ? 1 : 0}, silent: true});
+			if (sequence !== this.load_sequence) return;
+			if (!response.message) throw new Error(__("Could not load account balances."));
+			this.data = response.message;
+			if (this.feed_wallet && !this.data.wallets.some((wallet) => wallet.name === this.feed_wallet)) this.feed_wallet = null;
+			this.feed_result = null;
+			this.feed = [];
 			this.render();
 			this.load_feed();
-		} else {
-			this.load();
+		} catch (error) {
+			if (sequence !== this.load_sequence) return;
+			this.data = null;
+			this.feed = [];
+			this.read_error(error);
 		}
+	}
+
+	read_error(error) {
+		this.wrapper.html(`<p role="alert">${frappe.utils.escape_html(error.message || __("Could not load account balances."))}</p><button class="btn btn-default mh-retry">${__("Retry")}</button>`);
+		this.wrapper.find(".mh-retry").on("click", () => this.load());
+	}
+
+	async load_feed(start = 0) {
+		clearTimeout(this.search_timer);
+		if (!this.data) return;
+		const sequence = this.feed_sequence = (this.feed_sequence || 0) + 1;
+		this.feed_start = start;
+		this.feed_loading = true;
+		this.feed_error = false;
+		this.render_feed_state();
+		try {
+			const response = await frappe.call({
+				method: "erpnext.accounts.page.money_hub.money_hub.get_money_movements",
+				args: {
+					company: this.data.company, include_hidden: this.include_hidden ? 1 : 0,
+					wallet: this.feed_wallet, period: this.feed_period,
+					from_date: this.from_date || null, to_date: this.to_date || null,
+					op_type: this.feed_op_type, direction: this.feed_direction,
+					search: this.search_query, start, page_length: 50,
+				},
+				silent: true,
+			});
+			if (sequence !== this.feed_sequence) return;
+			if (!response.message || !Array.isArray(response.message.rows) || response.message.company !== this.data.company) throw new Error(__("Could not load account movements."));
+			this.feed_result = response.message;
+			this.feed_start = response.message.start;
+			this.feed = response.message.rows;
+			this.feed_loading = false;
+			this.render_feed_state();
+			if (frappe.route_options && frappe.route_options.open_transfer) {
+				frappe.route_options = null;
+				this.open_transfer();
+			}
+		} catch (error) {
+			if (sequence !== this.feed_sequence) return;
+			this.feed = [];
+			this.feed_result = null;
+			this.feed_loading = false;
+			this.feed_error = true;
+			this.render_feed_state();
+		}
+	}
+
+	apply() {
+		// Write responses may use the default active scope; reload the chosen scope.
+		this.load();
 	}
 
 	switch_tab(tab_name) {
 		this.active_tab = tab_name;
 		frappe.set_route("money-hub", tab_name);
-		this.wrapper.find(".mh-tab-item").removeClass("active");
-		this.wrapper.find(`.mh-tab-item[data-tab="${tab_name}"]`).addClass("active");
-		this.wrapper.find(".mh-tab-pane").hide();
-		this.wrapper.find(`#mh-pane-${tab_name}`).fadeIn(150);
+		this.render();
+	}
+
+	render_feed_state() {
+		if (this.active_tab === "accounts") {
+			// Background history loads must not replace the focused account table.
+			this.wrapper.find(".mh-ledger-count").text(this.feed_loading ? "…" : this.feed_result?.total_count ?? "—");
+		} else {
+			this.render();
+		}
 	}
 
 	render() {
 		if (!this.data) return;
+		const focused = document.activeElement;
+		const focus_id = focused?.id;
+		const selection = focused?.selectionStart;
 		const d = this.data;
 		const cur = d.currency || "TJS";
 		const tt = d.totals || {};
-		const wallets_count = (d.wallets || []).length;
+		const accounts_count = (d.accounts || []).length;
 		this.wrapper.empty();
 
-		const net_today = Number(tt.net_today || 0);
-		const net_cls = net_today > 0 ? "text-success" : net_today < 0 ? "text-danger" : "";
-
-		// Top KPI Cockpit
-		const kpi = (label, value, cls = "", sub = "") => `
-			<div class="mh-kpi ${cls}">
-				<div class="mh-kpi-label">${label}</div>
-				<div class="mh-kpi-value">${this.fmt(value)} <small>${cur}</small></div>
-				${sub ? `<div class="mh-kpi-sub">${sub}</div>` : ""}
-			</div>`;
-
-		const total_in_feed = this.feed.reduce((acc, f) => {
-			const d = Number(f.debit != null ? f.debit : (f.amount > 0 ? f.amount : 0));
-			return acc + d;
-		}, 0);
-		const total_out_feed = this.feed.reduce((acc, f) => {
-			const c = Number(f.credit != null ? f.credit : (f.amount < 0 ? Math.abs(f.amount) : 0));
-			return acc + c;
-		}, 0);
-		const net_feed = total_in_feed - total_out_feed;
+		const summary = this.feed_result?.summary || {};
+		const total_in_feed = summary.debit || 0;
+		const total_out_feed = summary.credit || 0;
+		const net_feed = summary.net || 0;
 
 		const layout = $(`
 			<div class="mh-layout">
 				<!-- Tab Navigation Bar with URL Routing -->
 				<div class="mh-tabs-bar">
-					<div class="mh-tab-item ${this.active_tab === "accounts" ? "active" : ""}" data-tab="accounts">
-						💼 <span>${this.t("Счета и кассы", "Ҳамёнҳо ва суратҳисобҳо")}</span>
-						<span class="mh-tab-badge">${wallets_count}</span>
-					</div>
-					<div class="mh-tab-item ${this.active_tab === "ledger" ? "active" : ""}" data-tab="ledger">
-						📊 <span>${this.t("Лента денег (Движение средств)", "Ленти пул (Ҳаракати маблағҳо)")}</span>
-						<span class="mh-tab-badge mh-ledger-count">${this.feed.length}</span>
-					</div>
+					<button type="button" class="mh-tab-item ${this.active_tab === "accounts" ? "active" : ""}" data-tab="accounts">
+						<span>${this.t("Счета и кассы", "Ҳамёнҳо ва суратҳисобҳо")}</span>
+						<span class="mh-tab-badge">${accounts_count}</span>
+					</button>
+					<button type="button" class="mh-tab-item ${this.active_tab === "ledger" ? "active" : ""}" data-tab="ledger">
+						<span>${this.t("Движение денег", "Ҳаракати пул")}</span>
+						<span class="mh-tab-badge mh-ledger-count">${this.feed_loading ? "…" : this.feed_result?.total_count ?? "—"}</span>
+					</button>
 				</div>
 
-				<!-- TAB 1: ACCOUNTS & COCKPIT PANE -->
+				<div class="mh-account-scope">
+					<span class="text-muted">${frappe.utils.escape_html(d.company)} · ${frappe.utils.escape_html(d.as_of || "")} · ${frappe.utils.escape_html(cur)}</span>
+					<label><input type="checkbox" class="mh-include-hidden" ${this.include_hidden ? "checked" : ""}> ${this.t("Включить неактивные кошельки", "Ҳамёнҳои ғайрифаъолро дохил кардан")}</label>
+				</div>
 				<div id="mh-pane-accounts" class="mh-tab-pane" style="${this.active_tab === "accounts" ? "display:block;" : "display:none;"}">
-					<!-- Top KPI Cockpit -->
-					<div class="mh-kpi-strip">
-						${kpi(this.t("Всего денег", "Маблағи умумӣ"), tt.total, "mh-kpi-main", this.t("Общий баланс всех счетов", "Бақияи умумии ҳамаи суратҳисобҳо"))}
-						${kpi(this.t("Наличные (Касса + Сейф)", "Нақд (Касса + Сейф)"), tt.cash, "", this.t("Физические деньги", "Пули нақд"))}
-						${kpi(this.t("Безналичные (Банк + QR)", "Ғайринақд (Бонк + QR)"), tt.non_cash, "", this.t("Банки и кошельки", "Бонкҳо ва ҳамёнҳо"))}
-						${kpi(this.t("Сегодня приход", "Имрӯз даромад"), tt.today_in, "mh-kpi-in", "▲ +")}
-						${kpi(this.t("Сегодня расход", "Имрӯз хароҷот"), tt.today_out, "mh-kpi-out", "▼ −")}
-						${kpi(this.t("Чистый поток сегодня", "Сальдои имрӯз"), net_today, net_cls, net_today >= 0 ? "🟢 " + this.t("В плюсе", "Дар фоида") : "🔴 " + this.t("Расход превысил приход", "Хароҷот зиёд шуд"))}
-					</div>
-
-					<!-- Accounts Sections (Grouped) -->
-					<div class="mh-accounts-container">
-						${this.render_wallet_groups(cur)}
-					</div>
+					${this.render_accounts(cur, tt)}
 				</div>
 
 				<!-- TAB 2: LEDGER (TRANSACTIONS) PANE -->
@@ -206,11 +221,11 @@ class MoneyHubApp {
 							<!-- Filter Row 1: Search & Date Presets -->
 							<div class="mh-filter-row-top">
 								<div class="mh-search-wrapper">
-									<span class="mh-search-icon">🔍</span>
-									<input type="text" id="mh-search-input" class="form-control form-control-sm mh-search-input"
+									<span class="mh-search-icon"></span>
+									<input type="text" id="mh-search-input" aria-label="${this.t("Поиск движений", "Ҷустуҷӯи ҳаракатҳо")}" class="form-control form-control-sm mh-search-input"
 										placeholder="${this.t("Поиск по номеру чека, накладной, контрагенту, статье, кассиру...", "Ҷустуҷӯ бо рақами чек, шахс, мақола...")}"
 										value="${frappe.utils.escape_html(this.search_query)}">
-									${this.search_query ? `<span id="mh-clear-search" class="mh-clear-search-btn">✕</span>` : ""}
+									${this.search_query ? `<button id="mh-clear-search" class="btn btn-link mh-clear-search-btn" aria-label="${this.t("Очистить поиск", "Тоза кардани ҷустуҷӯ")}">×</button>` : ""}
 								</div>
 
 								<!-- Quick Date Preset Pills -->
@@ -222,7 +237,7 @@ class MoneyHubApp {
 									<button class="mh-preset-btn ${!this.from_date && this.feed_period === "quarter" ? "active" : ""}" data-period="quarter">${this.t("Квартал", "Семоҳа")}</button>
 									<button class="mh-preset-btn ${!this.from_date && this.feed_period === "all" ? "active" : ""}" data-period="all">${this.t("Всё время", "Ҳама")}</button>
 									<button class="btn btn-xs btn-default mh-btn-reset-filters" title="${this.t("Сбросить все фильтры", "Тоза кардани филтрҳо")}">
-										🔄 ${this.t("Сброс", "Сброс")}
+										${this.t("Сброс", "Сброс")}
 									</button>
 								</div>
 							</div>
@@ -231,46 +246,47 @@ class MoneyHubApp {
 							<div class="mh-filter-row-fields">
 								<!-- Account / Wallet -->
 								<div class="mh-filter-field">
-									<label class="mh-field-label">💳 ${this.t("Счёт / Кошелёк", "Ҳамён / Суратҳисоб")}</label>
+									<label class="mh-field-label" for="mh-filter-wallet">${this.t("Счёт / Кошелёк", "Ҳамён / Суратҳисоб")}</label>
 									<select id="mh-filter-wallet" class="form-control form-control-sm mh-frappe-control">
 										<option value="">${this.t("Все счета и кассы", "Ҳамаи суратҳисобҳо")}</option>
-										${(d.wallets || []).map((w) => `<option value="${w.name}" ${this.feed_wallet === w.name ? "selected" : ""}>${w.icon || "💰"} ${w.wallet_name}</option>`).join("")}
+										${(d.wallets || []).map((w) => `<option value="${frappe.utils.escape_html(w.name)}" ${this.feed_wallet === w.name ? "selected" : ""}>${frappe.utils.escape_html(w.wallet_name)}</option>`).join("")}
 									</select>
 								</div>
 
 								<!-- Operation Type -->
 								<div class="mh-filter-field">
-									<label class="mh-field-label">🏷️ ${this.t("Тип операции", "Намуди амалиёт")}</label>
+									<label class="mh-field-label" for="mh-filter-op-type">${this.t("Тип операции", "Намуди амалиёт")}</label>
 									<select id="mh-filter-op-type" class="form-control form-control-sm mh-frappe-control">
 										<option value="all" ${this.feed_op_type === "all" ? "selected" : ""}>${this.t("Все типы операций", "Ҳамаи намудҳо")}</option>
-										<option value="sales" ${this.feed_op_type === "sales" ? "selected" : ""}>🛒 ${this.t("Продажи и возвраты", "Фурӯш ва бозгашт")}</option>
-										<option value="supplier" ${this.feed_op_type === "supplier" ? "selected" : ""}>📦 ${this.t("Оплата поставщикам", "Пардохт ба таъминкунанда")}</option>
-										<option value="expense" ${this.feed_op_type === "expense" ? "selected" : ""}>💸 ${this.t("Расходы (Операционные)", "Хароҷотҳо")}</option>
-										<option value="transfer" ${this.feed_op_type === "transfer" ? "selected" : ""}>🔄 ${this.t("Переводы и инкассация", "Интиқол ва инкассатсия")}</option>
-										<option value="tax" ${this.feed_op_type === "tax" ? "selected" : ""}>🏛️ ${this.t("Оплата налогов", "Пардохти андозҳо")}</option>
-										<option value="other" ${this.feed_op_type === "other" ? "selected" : ""}>🏁 ${this.t("Прочее / Корректировки", "Дигарҳо")}</option>
+										<option value="sales" ${this.feed_op_type === "sales" ? "selected" : ""}>${this.t("Продажи и возвраты", "Фурӯш ва бозгашт")}</option>
+										<option value="supplier" ${this.feed_op_type === "supplier" ? "selected" : ""}>${this.t("Оплата поставщикам", "Пардохт ба таъминкунанда")}</option>
+										<option value="expense" ${this.feed_op_type === "expense" ? "selected" : ""}>${this.t("Расходы (Операционные)", "Хароҷотҳо")}</option>
+										<option value="transfer" ${this.feed_op_type === "transfer" ? "selected" : ""}>${this.t("Переводы и инкассация", "Интиқол ва инкассатсия")}</option>
+										<option value="employee" ${this.feed_op_type === "employee" ? "selected" : ""}>${this.t("Платежи сотрудникам", "Пардохтҳои кормандон")}</option>
+										<option value="owner" ${this.feed_op_type === "owner" ? "selected" : ""}>${this.t("Средства и займы владельца", "Маблағ ва қарзҳои соҳиб")}</option>
+										<option value="other" ${this.feed_op_type === "other" ? "selected" : ""}>${this.t("Прочее / Корректировки", "Дигарҳо")}</option>
 									</select>
 								</div>
 
 								<!-- Direction -->
 								<div class="mh-filter-field">
-									<label class="mh-field-label">↕️ ${this.t("Направление", "Самти пул")}</label>
+									<label class="mh-field-label" for="mh-filter-direction">${this.t("Направление", "Самти пул")}</label>
 									<select id="mh-filter-direction" class="form-control form-control-sm mh-frappe-control">
 										<option value="all" ${this.feed_direction === "all" ? "selected" : ""}>${this.t("Приход и расход", "Ҳамаи самтҳо")}</option>
-										<option value="in" ${this.feed_direction === "in" ? "selected" : ""}>🟢 ${this.t("Только приход (+)", "Танҳо даромад (+)")}</option>
-										<option value="out" ${this.feed_direction === "out" ? "selected" : ""}>🔴 ${this.t("Только расход (−)", "Танҳо хароҷот (−)")}</option>
+										<option value="in" ${this.feed_direction === "in" ? "selected" : ""}>${this.t("Только приход (+)", "Танҳо даромад (+)")}</option>
+										<option value="out" ${this.feed_direction === "out" ? "selected" : ""}>${this.t("Только расход (−)", "Танҳо хароҷот (−)")}</option>
 									</select>
 								</div>
 
 								<!-- From Date -->
 								<div class="mh-filter-field">
-									<label class="mh-field-label">📅 ${this.t("С даты", "Аз санаи")}</label>
+									<label class="mh-field-label" for="mh-filter-from-date">${this.t("С даты", "Аз санаи")}</label>
 									<input type="date" id="mh-filter-from-date" class="form-control form-control-sm mh-frappe-control" value="${this.from_date}">
 								</div>
 
 								<!-- To Date -->
 								<div class="mh-filter-field">
-									<label class="mh-field-label">📅 ${this.t("По дату", "То санаи")}</label>
+									<label class="mh-field-label" for="mh-filter-to-date">${this.t("По дату", "То санаи")}</label>
 									<input type="date" id="mh-filter-to-date" class="form-control form-control-sm mh-frappe-control" value="${this.to_date}">
 								</div>
 							</div>
@@ -287,230 +303,111 @@ class MoneyHubApp {
 
 		this.wrapper.append(layout);
 		this.bind_ui_events(layout);
+		if (focus_id) {
+			const control = this.wrapper.find("[id]").toArray().find((node) => node.id === focus_id);
+			if (control) {
+				control.focus({preventScroll: true});
+				if (selection != null && control.setSelectionRange) control.setSelectionRange(selection, selection);
+			}
+		}
 	}
 
-	render_wallet_groups(cur) {
-		const d = this.data || {};
-		const wallets = d.wallets || [];
-
-		// Robust Partitioning with fallback to wallet_type
-		const tills = (d.pos_tills && d.pos_tills.length)
-			? d.pos_tills
-			: wallets.filter((w) => (w.wallet_type || "").trim() === "Till");
-
-		const safes = (d.safes && d.safes.length)
-			? d.safes
-			: wallets.filter((w) => (w.wallet_type || "").trim() === "Safe");
-
-		const banks = (d.bank_wallets && d.bank_wallets.length)
-			? d.bank_wallets
-			: wallets.filter((w) => {
-				const wt = (w.wallet_type || "").trim();
-				return wt !== "Till" && wt !== "Safe";
-			});
-
-		const render_group = (title, icon, list, wtype_default) => {
-			const subtotal = list.reduce((a, b) => a + (b.balance || 0), 0);
-			const cards_html = list.map((w) => this.wallet_card(w, cur)).join("");
-
-			return `
-				<div class="mh-group-box">
-					<div class="mh-group-header">
-						<div class="mh-group-title">
-							<span class="mh-group-icon">${icon}</span>
-							<span class="mh-group-name">${title}</span>
-							<span class="mh-group-count">(${list.length})</span>
-						</div>
-						<div class="mh-group-subtotal">
-							<span class="text-muted" style="font-size: 11px;">${this.t("Итого:", "Ҳамагӣ:")}</span>
-							<strong>${this.fmt(subtotal)}</strong> <small>${cur}</small>
-						</div>
-					</div>
-					<div class="mh-grid">
-						${cards_html}
-						<div class="mh-card mh-card-add" data-wtype="${wtype_default}">
-							<div class="mh-add-plus">➕</div>
-							<div class="mh-add-text">${this.t("Добавить", "Илова кардан")}</div>
-						</div>
-					</div>
-				</div>
-			`;
-		};
-
-		return `
-			<div class="mh-groups-wrap">
-				${render_group(this.t("Торговые кассы (POS)", "Кассаҳои савдо (POS)"), "💵", tills, "Till")}
-				${render_group(this.t("Банковские счета и QR-кошельки", "Суратҳисобҳои бонкӣ ва QR-ҳамёнҳо"), "📱", banks, "Mobile Wallet")}
-				${render_group(this.t("Сейфы и резервы компании", "Сейфҳо ва фондҳои эҳтиётӣ"), "🔐", safes, "Safe")}
+	render_accounts(cur, totals) {
+		const esc = (value) => frappe.utils.escape_html(String(value ?? ""));
+		const t = (ru, tg) => this.t(ru, tg);
+		const money = (value, code = cur) => value == null ? "—" : esc(this.fmt(value, code));
+		const accounts = this.data.accounts || [];
+		const metric = (label, value) => `<div><span>${label}</span><strong>${money(value)}</strong></div>`;
+		const rows = accounts.map((account) => `<tr>
+			<td><a href="${esc(frappe.utils.get_form_link("Account", account.account))}">${esc(account.account)}</a>
+				<div class="text-muted mh-account-aliases">${esc(account.wallet_names.join(" / "))}${account.enabled ? "" : " · " + t("Неактивен", "Ғайрифаъол")}</div></td>
+			<td class="text-right ${account.balance < 0 ? "text-danger" : ""}">${money(account.balance)}
+				${account.account_currency && account.account_currency !== cur ? `<div class="text-muted">${money(account.account_balance, account.account_currency)} ${esc(account.account_currency)}</div>` : ""}
+				${account.balance == null ? `<div class="text-muted">${t("Ограничено правами", "Дастрасӣ маҳдуд аст")}</div>` : ""}</td>
+			<td class="text-right">${money(account.opening_balance)}</td>
+			<td class="text-right">${money(account.today_in)}</td>
+			<td class="text-right">${money(account.today_out)}</td>
+			<td><button type="button" class="btn btn-default btn-xs mh-btn-statement" data-wallet="${esc(account.primary_wallet)}">${t("Движения", "Ҳаракатҳо")}</button></td>
+		</tr>`).join("");
+		return `<section class="mh-account-overview">
+			<div class="mh-account-summary">
+				${metric(t("Деньги на счетах", "Маблағ дар суратҳисобҳо"), totals.total)}
+				${metric(t("Наличные", "Нақд"), totals.cash)}
+				${metric(t("Банк и кошельки", "Бонк ва ҳамёнҳо"), totals.non_cash)}
+				${metric(t("Изменение за сегодня", "Тағйироти имрӯз"), totals.net_today)}
 			</div>
-		`;
-	}
-
-	wallet_card(w, cur) {
-		const is_active = this.feed_wallet === w.name;
-		const pos_badge = w.accept_in_pos
-			? `<span class="mh-badge mh-badge-pos">${this.t("POS касса", "Кассаи POS")}</span>`
-			: "";
-		const fee = w.commission_percent
-			? `<span class="mh-badge mh-badge-fee">${w.commission_percent}%</span>`
-			: "";
-
-		return `
-			<div class="mh-card ${is_active ? "mh-card-active" : ""}" data-wallet="${frappe.utils.escape_html(w.name)}" style="--mh-accent: ${w.color || "#4a5568"}">
-				<div class="mh-card-top">
-					<div class="mh-card-icon-wrap" style="background: ${w.color || "#4a5568"}15; color: ${w.color || "#4a5568"};">
-						${w.icon || "💰"}
-					</div>
-					<div class="mh-card-top-right">
-						${pos_badge}
-						${fee}
-						<button class="mh-menu-btn" data-name="${frappe.utils.escape_html(w.name)}" title="${this.t("Настройки кошелька", "Танзимот")}">⋯</button>
-					</div>
-				</div>
-
-				<div class="mh-card-name" title="${frappe.utils.escape_html(w.wallet_name)}">${frappe.utils.escape_html(w.wallet_name)}</div>
-				<div class="mh-card-balance">${this.fmt(w.balance)} <small>${cur}</small></div>
-
-				<div class="mh-card-flow">
-					<span class="mh-in" title="${this.t("Приход сегодня", "Даромади имрӯз")}">▲ +${this.fmt(w.today_in)}</span>
-					<span class="mh-out" title="${this.t("Расход сегодня", "Хароҷоти имрӯз")}">▼ −${this.fmt(w.today_out)}</span>
-				</div>
-
-				<div class="mh-card-actions">
-					<button class="btn btn-xs btn-default mh-btn-transfer" data-wallet="${frappe.utils.escape_html(w.name)}">
-						🔄 ${this.t("Перевод", "Интиқол")}
-					</button>
-					<button class="btn btn-xs btn-default mh-btn-statement" data-wallet="${frappe.utils.escape_html(w.name)}">
-						📋 ${this.t("Выписка", "Ҳисобот")}
-					</button>
-				</div>
-			</div>`;
+			<p class="text-muted mh-account-note">${t("Остатки по доступным проводкам на указанную дату. Все суммы в", "Бақия аз рӯи сабтҳои дастрас то санаи нишондодашуда. Ҳамаи маблағҳо бо")} ${esc(cur)}.
+				${t("Приход и расход включают переводы. Изменение денег не является прибылью.", "Воридот ва пардохт интиқолҳоро дар бар мегиранд. Тағйири пул фоида нест.")}</p>
+			${rows ? `<div class="mh-account-table" tabindex="0" role="region" aria-label="${t("Остатки по счетам", "Бақияҳои суратҳисобҳо")}"><table class="table table-hover"><thead><tr>
+				${[t("Счёт / кошельки", "Суратҳисоб / ҳамёнҳо"), t("Остаток", "Бақия"), t("На начало дня", "Аввали рӯз"), t("Приход сегодня", "Воридоти имрӯз"), t("Расход сегодня", "Пардохти имрӯз"), ""].map((label, i) => `<th scope="col" class="${i > 0 && i < 5 ? "text-right" : ""}">${label}</th>`).join("")}
+				</tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="mh-history-state">${t("Нет доступных счетов. Проверьте доступ или включите неактивные кошельки.", "Суратҳисобҳои дастрас нестанд. Дастрасиро санҷед ё ҳамёнҳои ғайрифаъолро дохил кунед.")}</p>`}
+			<details class="text-muted mh-account-explanation"><summary>${t("Как читать остатки", "Бақияҳоро чӣ гуна хондан лозим")}</summary>
+				<p>${t("Начало дня + приход − расход = остаток. Учитываются проведённые записи до конца указанной даты, без будущих дат и отменённых проводок. Кошельки одного счёта показаны в одной строке и считаются один раз.", "Аввали рӯз + воридот − пардохт = бақия. Сабтҳо то охири санаи нишондодашуда, бе санаҳои оянда ва сабтҳои бекоршуда ҳисоб мешаванд. Ҳамёнҳои як суратҳисоб дар як сатр нишон дода шуда, як бор ҳисоб мешаванд.")}</p>
+				<p>${t("Отключённые кошельки входят в обе вкладки только при включённом флажке выше. Если у счёта есть активный кошелёк, учитывается весь доступный счёт. Это не физический пересчёт кассы и не итог смены. Несинхронизированные продажи POS пока не входят в учёт.", "Ҳамёнҳои ғайрифаъол ба ҳар ду ҷадвал танҳо бо аломати боло дохил мешаванд. Агар суратҳисоб ҳамёни фаъол дошта бошад, тамоми суратҳисоби дастрас ҳисоб мешавад. Ин ҳисобкунии нақд ё натиҷаи баст нест. Фурӯшҳои ҳамоҳангнашудаи POS ҳоло ба ҳисоб дохил намешаванд.")}</p>
+				<p>${t("Остатки используют все доступные проводки. Вкладка движений дополнительно ограничена доступом к документам и поддерживаемыми типами источников, поэтому её итоги могут отличаться.", "Бақияҳо ҳамаи сабтҳои дастрасро истифода мебаранд. Ҷадвали ҳаракатҳо инчунин аз рӯи дастрасӣ ба ҳуҷҷатҳо ва намудҳои манбаъҳои дастгиришаванда маҳдуд аст, бинобар ин ҷамъбаст фарқ карда метавонад.")}</p>
+			</details>
+		</section>`;
 	}
 
 	render_feed_table(cur, total_in, total_out, net_feed) {
-		if (!this.feed || this.feed.length === 0) {
-			return `
-				<div class="empty-state text-center py-5">
-					<div class="empty-state-icon" style="font-size: 38px; margin-bottom: 8px;">💳</div>
-					<h5 style="color: var(--text-color); font-weight: 600;">${this.t("Движений средств не найдено", "Ҳаракати маблағҳо ёфт нашуд")}</h5>
-					<p class="text-muted" style="font-size: 13px;">${this.t("Измените фильтры периода, счетов или параметров поиска.", "Филтрҳоро тағйир диҳед.")}</p>
-				</div>
-			`;
-		}
-
-		let rows_html = "";
-		this.feed.forEach((r, idx) => {
-			const debit = Number(r.debit != null ? r.debit : (r.amount > 0 ? r.amount : 0));
-			const credit = Number(r.credit != null ? r.credit : (r.amount < 0 ? Math.abs(r.amount) : 0));
-			const is_inflow = debit > 0;
-			const is_outflow = credit > 0;
-
-			const in_html = is_inflow
-				? `<span class="mh-amount-in font-weight-bold">+${this.fmt(debit)} <small>${cur}</small></span>`
-				: `<span class="text-muted">—</span>`;
-
-			const out_html = is_outflow
-				? `<span class="mh-amount-out font-weight-bold">−${this.fmt(credit)} <small>${cur}</small></span>`
-				: `<span class="text-muted">—</span>`;
-
-			const wallet_icon = r.wallet_icon ? r.wallet_icon + " " : "💰 ";
-			const wallet_color = r.wallet_color || "#3182ce";
-
-			rows_html += `
-				<tr class="retail-table-row mh-feed-row" data-idx="${idx}">
-					<!-- Date & Time -->
-					<td class="col-datetime" style="width: 130px;">
-						<div class="font-weight-bold text-dark">${r.date}</div>
-						<div class="text-muted" style="font-size: 11px;">⏰ ${r.time || "—"}</div>
-					</td>
-
-					<!-- Operation Type & Voucher -->
-					<td class="col-type" style="width: 220px;">
-						<div class="d-flex align-items-center">
-							<span class="mh-op-icon mr-2">${r.icon || "💳"}</span>
-							<div>
-								<div class="font-weight-bold" style="font-size: 13px; color: var(--text-color);">${frappe.utils.escape_html(r.label || r.voucher_type || "Операция")}</div>
-								<div class="text-muted font-monospace" style="font-size: 11px;">${r.voucher_no}</div>
-							</div>
-						</div>
-					</td>
-
-					<!-- Wallet Account -->
-					<td class="col-wallet" style="width: 170px;">
-						<span class="mh-wallet-pill" style="border-left: 3px solid ${wallet_color};">
-							${wallet_icon}${frappe.utils.escape_html(r.wallet || "")}
-						</span>
-					</td>
-
-					<!-- Party / Destination / Description -->
-					<td class="col-party">
-						${r.party ? `<div class="font-weight-bold text-dark">${frappe.utils.escape_html(r.party)}</div>` : ""}
-						<div class="text-muted" style="font-size: 11.5px; line-height: 1.25;">
-							${frappe.utils.escape_html(r.notes || "—")}
-						</div>
-					</td>
-
-					<!-- User / Cashier -->
-					<td class="col-user text-muted" style="width: 130px; font-size: 12px;">
-						👤 ${frappe.utils.escape_html(r.user || "Система")}
-					</td>
-
-					<!-- Inflow (+) -->
-					<td class="col-in text-right" style="width: 130px;">
-						${in_html}
-					</td>
-
-					<!-- Outflow (-) -->
-					<td class="col-out text-right" style="width: 130px;">
-						${out_html}
-					</td>
-				</tr>
-			`;
-		});
-
-		const net_cls = net_feed > 0 ? "text-success" : net_feed < 0 ? "text-danger" : "";
-
-		return `
-			<div class="table-responsive retail-table-wrapper">
-				<table class="table table-bordered table-hover retail-catalog-table mh-feed-table">
-					<thead>
-						<tr>
-							<th class="col-datetime">${this.t("Дата / Время", "Сана / Вақт")}</th>
-							<th class="col-type">${this.t("Тип / Документ", "Намуд / Ҳуҷҷат")}</th>
-							<th class="col-wallet">${this.t("Кошелёк / Счёт", "Ҳамён / Суратҳисоб")}</th>
-							<th class="col-party">${this.t("Контрагент / Назначение", "Шахс / Мақсад")}</th>
-							<th class="col-user">${this.t("Автор / Кассир", "Муаллиф / Кассир")}</th>
-							<th class="col-in text-right">🟢 ${this.t("Приход (+)", "Даромад (+)")}</th>
-							<th class="col-out text-right">🔴 ${this.t("Расход (−)", "Хароҷот (−)")}</th>
-						</tr>
-					</thead>
-					<tbody>
-						${rows_html}
-					</tbody>
-					<tfoot>
-						<tr class="retail-totals-row mh-totals-row">
-							<td colspan="2" class="col-totals-label text-left">
-								<strong>${this.t("Итого:", "Ҳамагӣ:")} ${this.feed.length} ${this.t("операций", "амалиёт")}</strong>
-							</td>
-							<td class="text-center text-muted">—</td>
-							<td colspan="2" class="text-right">
-								<span class="text-muted mr-2">${this.t("Чистое сальдо потока:", "Сальдои соф:")}</span>
-								<strong class="${net_cls}" style="font-size: 13.5px;">${net_feed >= 0 ? "+" : ""}${this.fmt(net_feed)} ${cur}</strong>
-							</td>
-							<td class="col-in text-right">
-								<strong class="text-success" style="font-size: 13.5px;">+${this.fmt(total_in)} ${cur}</strong>
-							</td>
-							<td class="col-out text-right">
-								<strong class="text-danger" style="font-size: 13.5px;">−${this.fmt(total_out)} ${cur}</strong>
-							</td>
-						</tr>
-					</tfoot>
-				</table>
+		const esc = (value) => frappe.utils.escape_html(String(value ?? ""));
+		const t = (ru, tg) => this.t(ru, tg);
+		if (this.feed_loading) return `<p role="status" aria-live="polite" class="mh-history-state">${t("Загрузка движений…", "Боркунии ҳаракатҳо…")}</p>`;
+		if (this.feed_error) return `<div role="alert" class="mh-history-state"><p>${t("Не удалось загрузить движения. Проверьте период и доступ.", "Боркунии ҳаракатҳо нашуд. Давра ва дастрасиро санҷед.")}</p><button class="btn btn-default mh-feed-retry">${__("Retry")}</button></div>`;
+		if (!this.feed_result) return "";
+		const result = this.feed_result;
+		const date_scope = (result.from_date || "…") + " — " + (result.to_date || "…");
+		const money = (n) => esc(this.fmt(n));
+		const rows = this.feed.map((row, idx) => {
+			const original = (row.movements || [row]).filter((leg) => leg.account_currency && leg.account_currency !== cur && leg.account_amount != null)
+				.map((leg) => `<div class="text-muted">${esc(this.fmt(leg.account_amount, leg.account_currency))} ${esc(leg.account_currency)}</div>`).join("");
+			const wallet_label = row.transfer_from && row.transfer_to
+				? (row.transfer_from.join(" / ") || t("Вне выбранных счетов", "Берун аз суратҳисобҳои интихобшуда")) + " → " +
+					(row.transfer_to.join(" / ") || t("Вне выбранных счетов", "Берун аз суратҳисобҳои интихобшуда")) : row.wallet;
+			const transfer = row.transfer_amount ? `<div class="text-muted">${t("Переведено", "Интиқол шуд")}: ${money(row.transfer_amount)} ${esc(cur)}</div>` : "";
+			return `<tr class="mh-feed-row" data-idx="${idx}">
+				<td>${esc(row.date)}</td>
+				<td><button class="btn btn-link mh-detail-button" data-idx="${idx}">${esc(this.is_tg ? row.label_tg || row.label : row.label)}</button>
+					<div><a href="${esc(frappe.utils.get_form_link(row.voucher_type, row.voucher_no))}">${esc(row.voucher_no)}</a></div></td>
+				<td>${esc(wallet_label)}${original}${transfer}</td>
+				<td>${esc(row.party || "—")}<div class="text-muted mh-history-note">${esc(row.notes)}</div></td>
+				<td class="text-right">${row.debit ? money(row.debit) : "—"}</td>
+				<td class="text-right">${row.credit ? money(row.credit) : "—"}</td>
+			</tr>`;
+		}).join("");
+		return `<div class="mh-history">
+			<p class="text-muted mh-history-scope">${esc(result.company)} · ${esc(date_scope)} · ${esc(cur)}<br>
+				${t("Только доступные проведённые документы и счета. Движение денег не является прибылью.", "Танҳо ҳуҷҷатҳои сабтшуда ва суратҳисобҳои дастрас. Ҳаракати пул фоида нест.")}
+				${this.feed_wallet ? t("Выбранный счёт: включая переводы.", "Суратҳисоби интихобшуда: бо интиқолҳо.") : t("Парные переводы между доступными счетами исключены из прихода и расхода; разница остаётся в движении.", "Интиқолҳои ҷуфт байни суратҳисобҳои дастрас аз воридот ва пардохт хориҷ шудаанд; фарқият дар ҳаракат мемонад.")}</p>
+			<details class="mh-history-coverage text-muted"><summary>${t("Какие документы включены", "Кадом ҳуҷҷатҳо дохил шудаанд")}</summary>
+				${t("Платёжные поручения, бухгалтерские проводки, счета продаж/POS и закупок. Другие типы документов пока не включены. Итоги могут отличаться от полного остатка счёта из-за доступа к документам.", "Пардохтҳо, сабтҳои муҳосибӣ, ҳисобҳои фурӯш/POS ва харид. Дигар намудҳои ҳуҷҷатҳо ҳоло дохил нашудаанд. Ҷамъбаст аз бақияи пурраи суратҳисоб аз сабаби дастрасӣ ба ҳуҷҷатҳо фарқ карда метавонад.")}
+			</details>
+			<div class="mh-history-summary" aria-label="${t("Итоги всех результатов", "Ҷамъбасти ҳамаи натиҷаҳо")}">
+				<div><span>${t("Приход", "Воридот")}</span><strong>${money(total_in)}</strong></div>
+				<div><span>${t("Расход", "Пардохт")}</span><strong>${money(total_out)}</strong></div>
+				<div><span>${t("Изменение остатка", "Тағйири бақия")}</span><strong>${money(net_feed)}</strong></div>
+				<div><span>${t("Переводы внутри выбранных счетов", "Интиқол байни суратҳисобҳои интихобшуда")}</span><strong>${money(result.summary.transfer_amount)}</strong></div>
 			</div>
-		`;
+			<p class="text-muted">${t("Итоги по всем результатам", "Ҷамъбасти ҳамаи натиҷаҳо")}: ${result.total_count}</p>
+			${rows ? `<div class="mh-history-table" tabindex="0" role="region" aria-label="${t("История движения денег", "Таърихи ҳаракати пул")}"><table class="table table-hover mh-feed-table"><thead><tr>
+				${[t("Дата", "Сана"), t("Операция / документ", "Амалиёт / ҳуҷҷат"), t("Счёт", "Суратҳисоб"), t("Контрагент / назначение", "Тараф / мақсад"), t("Приход", "Воридот"), t("Расход", "Пардохт")].map((label, i) => `<th scope="col" class="${i >= 4 ? "text-right" : ""}">${label}</th>`).join("")}
+				</tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="mh-history-state">${t("Движений не найдено. Измените фильтры.", "Ҳаракатҳо ёфт нашуданд. Филтрҳоро тағйир диҳед.")}</p>`}
+			<div class="mh-history-pagination">
+				<button class="btn btn-default btn-sm mh-feed-prev" ${result.start === 0 ? "disabled" : ""}>${t("Назад", "Қафо")}</button>
+				<span role="status">${result.total_count ? result.start + 1 : 0}–${result.start + this.feed.length} / ${result.total_count}</span>
+				<button class="btn btn-default btn-sm mh-feed-next" ${result.has_more ? "" : "disabled"}>${t("Далее", "Баъд")}</button>
+			</div>
+		</div>`;
 	}
 
 	bind_ui_events(layout) {
+		layout.find(".mh-include-hidden").on("change", (event) => {
+			this.include_hidden = event.target.checked;
+			this.load();
+		});
+		layout.find(".mh-feed-retry").on("click", () => this.load_feed(this.feed_start));
+		layout.find(".mh-feed-prev").on("click", () => this.load_feed(Math.max(0, this.feed_start - 50)));
+		layout.find(".mh-feed-next").on("click", () => this.load_feed(this.feed_start + 50));
 		// Tabs switching
 		layout.find(".mh-tab-item").on("click", (e) => {
 			const target = $(e.currentTarget).data("tab");
@@ -520,8 +417,9 @@ class MoneyHubApp {
 		// Search Input
 		layout.find("#mh-search-input").on("input", (e) => {
 			clearTimeout(this.search_timer);
+			this.feed_sequence = (this.feed_sequence || 0) + 1;
+			this.search_query = e.target.value.trim();
 			this.search_timer = setTimeout(() => {
-				this.search_query = e.target.value.trim();
 				this.load_feed();
 			}, 300);
 		});
@@ -621,6 +519,7 @@ class MoneyHubApp {
 
 		// Row click -> Option A Modal (Centered Transaction Slip)
 		layout.find(".mh-feed-row").on("click", (e) => {
+			if ($(e.target).closest("a").length) return;
 			e.stopPropagation();
 			const idx = $(e.currentTarget).closest(".mh-feed-row").data("idx");
 			const item = this.feed[idx];
@@ -631,225 +530,366 @@ class MoneyHubApp {
 	}
 
 	show_transaction_modal(row) {
-		const cur = (this.data && this.data.currency) || "TJS";
-		const debit = Number(row.debit != null ? row.debit : (row.amount > 0 ? row.amount : 0));
-		const credit = Number(row.credit != null ? row.credit : (row.amount < 0 ? Math.abs(row.amount) : 0));
-		const is_inflow = debit > 0;
-		const amount = is_inflow ? debit : credit;
-		const sign = is_inflow ? "+" : "−";
-		const sign_color = is_inflow ? "#22c55e" : "#ef4444";
-
+		const esc = (value) => frappe.utils.escape_html(String(value ?? ""));
+		const t = (ru, tg) => this.t(ru, tg);
+		const money = (value, currency) => value == null || !currency ? "—" : esc(this.fmt(value, currency)) + " " + esc(currency);
+		const link = (doctype, name, label = name) => '<a href="' + esc(frappe.utils.get_form_link(doctype, name)) + '">' + esc(label) + '</a>';
+		const table = (headers, rows) => '<div class="mh-transaction-table" tabindex="0" role="region" aria-label="' + esc(headers.join(", ")) + '"><table class="table table-sm"><thead><tr>' +
+			headers.map((label) => '<th scope="col">' + esc(label) + '</th>').join("") + '</tr></thead><tbody>' +
+			rows.map((cells) => '<tr>' + cells.map((cell) => '<td>' + cell + '</td>').join("") + '</tr>').join("") + '</tbody></table></div>';
+		const section = (label, content) => '<h6>' + esc(label) + '</h6>' + content;
+		let active = true;
+		let request = 0;
 		const dlg = new frappe.ui.Dialog({
-			title: `${row.icon || "💳"} ${frappe.utils.escape_html(row.label || row.voucher_type || "Операция")}`,
-			fields: [
-				{
-					fieldtype: "HTML",
-					fieldname: "detail_area",
-					options: `<div class="text-center py-4"><span class="spinner-border text-primary"></span></div>`,
-				},
-			],
+			title: t("Детали операции", "Тафсилоти амалиёт"),
+			size: "large",
+			fields: [{ fieldtype: "HTML", fieldname: "detail_area" }],
+			onhide: () => { active = false; },
 		});
-
+		const area = dlg.fields_dict.detail_area.$wrapper;
+		const load = async () => {
+			const sequence = ++request;
+			area.html('<div class="mh-transaction-details" role="status" aria-live="polite">' + esc(t("Загрузка операции…", "Боркунии амалиёт…")) + '</div>');
+			try {
+				const response = await frappe.call({
+					method: "erpnext.accounts.page.money_hub.money_hub.get_transaction_details",
+					args: { voucher_type: row.voucher_type, voucher_no: row.voucher_no, company: this.data.company },
+					silent: true,
+				});
+				if (!active || sequence !== request) return;
+				const det = response.message;
+				if (!det || det.company !== this.data.company || det.docstatus !== 1 || !Array.isArray(det.movements) || !det.movements.length) {
+					throw new Error(t("Операция недоступна. Обновите историю.", "Амалиёт дастнорас аст. Таърихро нав кунед."));
+				}
+				const movement = det.movements.find((item) => item.gl_name === row.gl_name);
+				if (!movement) throw new Error(t("Движение больше недоступно. Обновите историю.", "Амалиёт дигар дастнорас аст. Таърихро нав кунед."));
+				const amount = movement.debit == null || movement.credit == null ? null : movement.debit - movement.credit;
+				const attributes = [
+					[t("Документ", "Ҳуҷҷат"), link(det.voucher_type, det.voucher_no)],
+					[t("Статус", "Ҳолат"), esc(__(det.status))],
+					[t("Дата", "Сана"), esc(det.posting_date + (det.posting_time ? " " + det.posting_time : ""))],
+					[t("Компания", "Ширкат"), esc(det.company)],
+					[t("Контрагент", "Тарафи муомила"), esc(det.party_name || "—")],
+					[t("Автор", "Муаллиф"), esc(det.owner)],
+				];
+				let html = '<div class="mh-transaction-details"><div class="mh-transaction-summary"><span>' +
+					esc(movement.wallet) + '</span><strong>' + money(amount, movement.currency) + '</strong></div>' +
+					'<dl class="mh-transaction-meta">' + attributes.map(([label, value]) => '<div><dt>' + esc(label) + '</dt><dd>' + value + '</dd></div>').join("") + '</dl>';
+				if (det.remarks) html += '<p class="mh-transaction-note">' + esc(det.remarks) + '</p>';
+				html += section(t("Движения по доступным счетам", "Амалиётҳои суратҳисобҳои дастрас"), table(
+					[t("Счёт", "Суратҳисоб"), t("Поступило", "Воридот"), t("Выбыло", "Барориш"), t("В валюте счёта", "Бо асъори суратҳисоб")],
+					det.movements.map((item) => [esc(item.wallet), money(item.debit, item.currency), money(item.credit, item.currency),
+						item.account_currency !== item.currency ? money(item.account_debit == null || item.account_credit == null ? null : item.account_debit - item.account_credit, item.account_currency) : "—"])
+				));
+				if (det.paid_from || det.paid_to) html += section(t("Платёж", "Пардохт"), table(
+					[t("Откуда / куда", "Аз куҷо / ба куҷо"), t("Счёт", "Суратҳисоб"), t("Сумма", "Маблағ")],
+					[[esc(t("Откуда", "Аз куҷо")), esc(det.paid_from || "—"), money(det.paid_amount, det.paid_from_account_currency)],
+						[esc(t("Куда", "Ба куҷо")), esc(det.paid_to || "—"), money(det.received_amount, det.paid_to_account_currency)]]
+				));
+				if (det.items?.length) html += section(t("Товары", "Молҳо"), table(
+					[t("Товар", "Мол"), t("Количество", "Миқдор"), t("Цена", "Нарх"), t("Сумма", "Маблағ")],
+					det.items.map((item) => [esc(item.item_name || item.item_code || "—"), esc(item.qty ?? "—") + " " + esc(item.uom), money(item.rate, item.currency), money(item.amount, item.currency)])
+				));
+				if (det.grand_total != null) html += '<p>' + esc(t("Итого по документу", "Ҷамъи ҳуҷҷат")) + ': ' + money(det.grand_total, det.currency) + '</p>';
+				if (det.payments?.length) html += section(t("Способы оплаты", "Тарзҳои пардохт"), table(
+					[t("Способ оплаты", "Тарзи пардохт"), t("Сумма", "Маблағ")], det.payments.map((item) => [esc(item.mode_of_payment), money(item.amount, item.currency)])
+				));
+				if (det.references?.length) html += section(t("Связанные документы", "Ҳуҷҷатҳои алоқаманд"), table(
+					[t("Документ", "Ҳуҷҷат"), t("Распределено", "Тақсимшуда")],
+					det.references.map((item) => [link(item.reference_doctype, item.reference_name), money(item.allocated_amount, item.currency)])
+				));
+				if (det.accounts?.length) html += section(t("Счета документа", "Суратҳисобҳои ҳуҷҷат"), table(
+					[t("Счёт", "Суратҳисоб"), t("Дебет", "Дебет"), t("Кредит", "Кредит")],
+					det.accounts.map((item) => [esc(item.account), money(item.debit, item.currency), money(item.credit, item.currency)])
+				));
+				if (det.references_restricted || det.accounts_restricted) html += '<p class="text-muted">' +
+					esc(t("Некоторые связанные документы или счета ограничены правами доступа.", "Баъзе ҳуҷҷатҳо ё суратҳисобҳои алоқаманд бо ҳуқуқи дастрасӣ маҳдуданд.")) + '</p>';
+				html += '</div>';
+				area.html(html);
+			} catch (error) {
+				if (!active || sequence !== request) return;
+				area.html('<div class="mh-transaction-details" role="alert"><p>' +
+					esc(t("Не удалось загрузить операцию. Возможно, документ изменён или доступ ограничен.", "Амалиёт бор нашуд. Шояд ҳуҷҷат тағйир ёфтааст ё дастрасӣ маҳдуд аст.")) +
+					'</p><button type="button" class="btn btn-default btn-sm" data-action="retry-transaction">' + esc(t("Повторить", "Такрор")) + '</button></div>');
+				area.find('[data-action="retry-transaction"]').on("click", load);
+			}
+		};
 		dlg.show();
-
-		// Fetch rich transaction details from backend
-		frappe.call({
-			method: "erpnext.accounts.page.money_hub.money_hub.get_transaction_details",
-			args: {
-				voucher_type: row.voucher_type,
-				voucher_no: row.voucher_no,
-			},
-			callback: (r) => {
-				const det = r.message || {};
-				let items_table_html = "";
-
-				if (det.items && det.items.length > 0) {
-					const item_rows = det.items
-						.map(
-							(it, i) => `
-						<tr>
-							<td class="text-muted" style="width: 30px;">#${i + 1}</td>
-							<td>
-								<div class="font-weight-bold text-dark">${frappe.utils.escape_html(it.item_name)}</div>
-								<div class="text-muted font-monospace" style="font-size: 11px;">${it.item_code}</div>
-							</td>
-							<td class="text-center">${it.qty} ${it.uom}</td>
-							<td class="text-right">${this.fmt(it.rate)}</td>
-							<td class="text-right font-weight-bold">${this.fmt(it.amount)}</td>
-						</tr>`
-						)
-						.join("");
-
-					items_table_html = `
-						<div class="mh-modal-section-title">📦 ${this.t("Товары в документе", "Молҳо дар ҳуҷҷат")}</div>
-						<div class="table-responsive" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px;">
-							<table class="table table-sm table-striped mb-0" style="font-size: 12.5px;">
-								<thead style="background: #f8fafc; font-size: 11px; text-transform: uppercase;">
-									<tr>
-										<th>#</th>
-										<th>${this.t("Товар", "Мол")}</th>
-										<th class="text-center">${this.t("Кол-во", "Миқдор")}</th>
-										<th class="text-right">${this.t("Цена", "Нарх")}</th>
-										<th class="text-right">${this.t("Сумма", "Маблағ")}</th>
-									</tr>
-								</thead>
-								<tbody>
-									${item_rows}
-								</tbody>
-							</table>
-						</div>
-					`;
-				}
-
-				let payments_html = "";
-				if (det.payments && det.payments.length > 0) {
-					payments_html = `
-						<div class="mh-modal-section-title">💳 ${this.t("Способ оплаты", "Тарзи пардохт")}</div>
-						<div class="d-flex gap-2 flex-wrap mb-3">
-							${det.payments.map((p) => `<span class="badge badge-light p-2" style="font-size: 12px; border: 1px solid #e2e8f0;">${p.mode_of_payment}: <b>${this.fmt(p.amount)} ${cur}</b></span>`).join("")}
-						</div>
-					`;
-				}
-
-				let ref_html = "";
-				if (det.references && det.references.length > 0) {
-					ref_html = `
-						<div class="mh-modal-section-title">🔗 ${this.t("Связанные накладные", "Ҳуҷҷатҳои алоқаманд")}</div>
-						<div class="d-flex gap-2 flex-wrap mb-3">
-							${det.references.map((rf) => `<span class="badge badge-light p-2" style="font-size: 12px; border: 1px solid #e2e8f0;">${rf.reference_doctype} <b>${rf.reference_name}</b> (Оплачено: ${this.fmt(rf.allocated_amount)} ${cur})</span>`).join("")}
-						</div>
-					`;
-				}
-
-				const slip_html = `
-					<div class="mh-receipt-slip">
-						<!-- Hero Amount Header -->
-						<div class="mh-receipt-hero" style="border-bottom: 2px dashed var(--border-color, #e2e8f0); padding-bottom: 16px; margin-bottom: 16px; text-align: center;">
-							<div class="text-muted" style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
-								${is_inflow ? "⬇️ " + this.t("Поступление средств", "Даромади маблағ") : "⬆️ " + this.t("Списание средств", "Барориши маблағ")}
-							</div>
-							<div style="font-size: 32px; font-weight: 800; color: ${sign_color}; margin: 4px 0;">
-								${sign}${this.fmt(amount)} <span style="font-size: 18px; font-weight: 600;">${cur}</span>
-							</div>
-							<div class="badge badge-pill badge-success" style="font-size: 11px; padding: 4px 10px;">
-								✓ ${this.t("Проведено", "Гузаронида шуд")} (${row.voucher_no})
-							</div>
-						</div>
-
-						<!-- Attributes Grid -->
-						<div class="mh-receipt-grid">
-							<div class="mh-receipt-cell">
-								<span class="mh-receipt-lbl">${this.t("Кошелёк / Счёт", "Ҳамён / Суратҳисоб")}:</span>
-								<span class="mh-receipt-val font-weight-bold">${row.wallet_icon} ${frappe.utils.escape_html(row.wallet)}</span>
-							</div>
-							<div class="mh-receipt-cell">
-								<span class="mh-receipt-lbl">${this.t("Дата и время", "Сана ва вақт")}:</span>
-								<span class="mh-receipt-val">${row.date} ${row.time ? "· ⏰ " + row.time : ""}</span>
-							</div>
-							<div class="mh-receipt-cell">
-								<span class="mh-receipt-lbl">${this.t("Контрагент / Получатель", "Шахс / Қабулкунанда")}:</span>
-								<span class="mh-receipt-val font-weight-bold text-dark">${frappe.utils.escape_html(det.party_name || row.party || "—")}</span>
-							</div>
-							<div class="mh-receipt-cell">
-								<span class="mh-receipt-lbl">${this.t("Автор / Кассир", "Муаллиф / Кассир")}:</span>
-								<span class="mh-receipt-val">👤 ${frappe.utils.escape_html(det.owner || row.user)}</span>
-							</div>
-							<div class="mh-receipt-cell" style="grid-column: 1 / -1;">
-								<span class="mh-receipt-lbl">${this.t("Примечание / Назначение", "Эзоҳ / Мақсад")}:</span>
-								<span class="mh-receipt-val text-muted">${frappe.utils.escape_html(det.remarks || row.notes || "—")}</span>
-							</div>
-						</div>
-
-						${payments_html}
-						${ref_html}
-						${items_table_html}
-
-						<!-- Bottom Action Buttons -->
-						<div class="mh-receipt-actions" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; border-top: 1px solid var(--border-color, #e2e8f0); padding-top: 14px;">
-							<button class="btn btn-sm btn-default" id="mh-modal-print">
-								🖨️ ${this.t("Печать квитанции", "Чоп")}
-							</button>
-							<button class="btn btn-sm btn-primary" id="mh-modal-open-doc">
-								📄 ${this.t("Открыть документ", "Кушодани ҳуҷҷат")}
-							</button>
-						</div>
-					</div>
-				`;
-
-				dlg.fields_dict.detail_area.$wrapper.html(slip_html);
-
-				// Open Frappe document
-				dlg.$wrapper.find("#mh-modal-open-doc").on("click", () => {
-					dlg.hide();
-					frappe.set_route("Form", row.voucher_type, row.voucher_no);
-				});
-
-				// Print Receipt
-				dlg.$wrapper.find("#mh-modal-print").on("click", () => {
-					window.print();
-				});
-			},
-		});
+		return load();
 	}
 
 	wallet_options() {
 		return ((this.data && this.data.wallets) || []).filter((w) => w.enabled).map((w) => w.name);
 	}
 
-	open_transfer(from_wallet = null) {
-		const opts = this.wallet_options();
-		const comp = (this.data && this.data.company) || null;
+	transfer_key(kind = "transfer") {
+		return `money-hub-${kind}:${frappe.session.user}:${this.data.company}`;
+	}
 
+	pending_transfer(kind = "transfer") {
+		const saved = localStorage.getItem(this.transfer_key(kind));
+		return saved ? JSON.parse(saved) : null;
+	}
+
+	async run_transfer(values, expected_id = null, kind = "transfer", display = null) {
+		if (values.company !== this.data?.company) throw new Error(this.t("Компания изменилась. Откройте перевод снова.", "Ширкат тағйир ёфт. Интиқолро аз нав кушоед."));
+		const key = this.transfer_key(kind);
+		let pending = this.pending_transfer(kind);
+		if (expected_id && pending && pending.id !== expected_id) {
+			throw new Error(this.t("Запрос изменился в другом окне. Откройте форму снова.", "Дархост дар равзанаи дигар тағйир ёфт. Шаклро аз нав кушоед."));
+		}
+		if (pending && JSON.stringify(pending.args) !== JSON.stringify(values)) {
+			throw new Error(kind === "owner" ? this.t("Сначала проверьте предыдущую операцию владельца. Откройте форму снова.", "Аввал амалиёти пешинаи соҳибро санҷед. Шаклро аз нав кушоед.") : this.t("Сначала проверьте предыдущий перевод. Откройте форму снова.", "Аввал интиқоли пешинаро санҷед. Шаклро аз нав кушоед."));
+		}
+		if (!pending) {
+			// An already-open recovery dialog must retain its ID even if another
+			// tab has since confirmed/cleared the shared pending operation.
+			pending = {id: expected_id || crypto.randomUUID(), args: values, display};
+			// Persist before sending. A storage failure must prevent posting.
+			localStorage.setItem(key, JSON.stringify(pending));
+		}
+		const clear = () => {
+			if (JSON.parse(localStorage.getItem(key) || "null")?.id === pending.id) localStorage.removeItem(key);
+		};
+		try {
+			const response = await frappe.call({
+				method: `erpnext.accounts.page.money_hub.money_hub.${kind === "owner" ? "record_owner_money_movement" : "record_money_transfer"}`,
+				args: {...pending.args, client_request_id: pending.id},
+			});
+			const result = response.message;
+			if (!result?.name || ![1, 2].includes(result.docstatus) || result.company !== values.company) {
+				throw new Error(this.t("Результат не подтверждён. Повторите проверку.", "Натиҷа тасдиқ нашуд. Санҷишро такрор кунед."));
+			}
+			clear();
+			return result;
+		} catch (error) {
+			// Only an explicit server rejection plus a serialized missing receipt
+			// permits editing. A timeout/unknown response retains the exact intent.
+			if (error?.responseJSON?.exc_type || error?.exc_type) {
+				try {
+					const response = await frappe.call({
+						method: `erpnext.accounts.page.money_hub.money_hub.${kind === "owner" ? "get_owner_money_request_outcome" : "get_transfer_request_outcome"}`,
+						args: {client_request_id: pending.id, company: values.company},
+					});
+					if (response.message?.status === "not_found") clear();
+				} catch { /* Unknown outcome keeps its original request. */ }
+			}
+			throw error;
+		}
+	}
+
+	async open_owner_money() {
+		const company = this.data?.company;
+		if (!company) return;
+		let pending;
+		try { pending = this.pending_transfer("owner"); }
+		catch (error) { frappe.msgprint(String(error.message)); return; }
+		const t = (ru, tg) => this.t(ru, tg), esc = value => frappe.utils.escape_html(String(value ?? ""));
+		const fields = [
+			{fieldname: "explanation", fieldtype: "HTML", options: `<p>${esc(t("Личные средства владельца: внесение или изъятие. Заём учитывается отдельно. Эти операции не являются продажами или расходами бизнеса. Возмещение уже учтённых расходов оформляйте через исходный документ.", "Маблағи шахсии соҳиб: ворид кардан ё гирифтан. Қарз алоҳида ҳисоб мешавад. Ин амалиётҳо фурӯш ё хароҷоти тиҷорат нестанд. Ҷуброни хароҷоти қаблан сабтшударо тавассути ҳуҷҷати аслӣ иҷро кунед."))}</p>`},
+			{fieldname: "status", fieldtype: "HTML"},
+			{fieldname: "show_loans", fieldtype: "Check", label: t("Показать займы и возврат займов", "Намоиши қарзҳо ва баргардонидани онҳо"), default: pending?.args.operation.startsWith("loan_") ? 1 : 0, read_only: !!pending},
+			{fieldname: "operation", fieldtype: "Select", reqd: 1, label: t("Операция", "Амалиёт"), default: pending?.args.operation || "contribution", options: [
+				{value: "contribution", label: t("Внести средства владельца", "Ворид кардани маблағи соҳиб")},
+				{value: "withdrawal", label: t("Изъять средства владельца", "Гирифтани маблағи соҳиб")},
+				{value: "loan_received", label: t("Получить заём от владельца", "Гирифтани қарз аз соҳиб")},
+				{value: "loan_repayment", label: t("Вернуть заём владельцу", "Баргардонидани қарз ба соҳиб")},
+			]},
+			{fieldname: "wallet", fieldtype: "Select", label: t("Счёт / кошелёк", "Суратҳисоб / ҳамён"), reqd: 1, options: pending ? [pending.args.wallet] : []},
+			{fieldname: "amount", fieldtype: "Currency", label: t("Сумма", "Маблағ"), reqd: 1},
+			{fieldname: "exchange_rate", fieldtype: "Float", precision: 9, label: t("Курс", "Қурб"), hidden: 1},
+			{fieldname: "note", fieldtype: "Data", label: t("Комментарий", "Эзоҳ")},
+			{fieldname: "error", fieldtype: "HTML"},
+		];
+		for (const field of fields) if (pending && Object.hasOwn(pending.args, field.fieldname)) {
+			field.default = pending.args[field.fieldname]; field.read_only = 1;
+		}
+		let context = null, sequence = 0, closed = false;
 		const dlg = new frappe.ui.Dialog({
-			title: this.t("Перевод / Инкассация", "Интиқол / Инкассатсия"),
-			fields: [
-				{
-					fieldname: "kind",
-					fieldtype: "Select",
-					label: this.t("Тип операции", "Навъи амалиёт"),
-					options: ["Инкассация", "Пополнение", "Снятие", "Обычный перевод"],
-					default: "Инкассация",
-					reqd: 1,
-				},
-				{
-					fieldname: "from_wallet",
-					fieldtype: "Select",
-					label: this.t("Откуда (Счёт списания)", "Аз куҷо"),
-					options: opts,
-					default: from_wallet || (opts.length ? opts[0] : null),
-					reqd: 1,
-				},
-				{
-					fieldname: "to_wallet",
-					fieldtype: "Select",
-					label: this.t("Куда (Счёт зачисления)", "Ба куҷо"),
-					options: opts,
-					default: opts.length > 1 ? (from_wallet === opts[0] ? opts[1] : opts[0]) : null,
-					reqd: 1,
-				},
-				{ fieldname: "amount", fieldtype: "Currency", label: this.t("Сумма", "Маблағ"), reqd: 1 },
-				{ fieldname: "note", fieldtype: "Data", label: this.t("Комментарий", "Эзоҳ") },
-			],
-			primary_action_label: this.t("Перевести", "Интиқол кардан"),
-			primary_action: (v) => {
-				dlg.get_primary_btn().prop("disabled", true);
-				frappe.call({
-					method: "erpnext.accounts.page.money_hub.money_hub.transfer_money",
-					args: { ...v, company: comp },
-					freeze: true,
-					callback: (r) => {
-						dlg.hide();
-						this.apply(r);
-						frappe.show_alert({
-							message: this.t("Перевод успешно выполнен", "Интиқол бомуваффақият анҷом шуд"),
-							indicator: "green",
-						});
-					},
-					error: () => dlg.get_primary_btn().prop("disabled", false),
-				});
+			title: t("Средства владельца", "Маблағи соҳиб"), fields,
+			primary_action_label: pending ? t("Проверить / повторить", "Санҷидан / такрор") : t("Записать", "Сабт кардан"),
+			primary_action: async values => {
+				if (dlg.owner_busy || (!pending && !context?.can_record)) return;
+				dlg.owner_busy = true; dlg.get_primary_btn().prop("disabled", true);
+				try {
+					const args = pending?.args || {company, operation: values.operation, wallet: values.wallet,
+						amount: values.amount, exchange_rate: values.exchange_rate || null, note: values.note || ""};
+					for (const field of fields.filter(field => field.fieldtype !== "HTML")) dlg.set_df_property(field.fieldname, "read_only", 1);
+					const display = pending?.display || {currency: context?.wallets.find(wallet => wallet.name === args.wallet)?.currency || this.data?.currency};
+					const result = await this.run_transfer(args, pending?.id, "owner", display);
+					if (!closed) dlg.hide();
+					const label = result.docstatus === 2 ? t("Операция отменена", "Амалиёт бекор шудааст") : t("Операция записана", "Амалиёт сабт шуд");
+					frappe.msgprint(`${esc(label)}: <a href="${esc(frappe.utils.get_form_link("Journal Entry", result.name))}">${esc(result.name)}</a>`);
+					this.load();
+				} catch (error) {
+					if (!closed) {
+						dlg.fields_dict.error.$wrapper.text(t("Результат не подтверждён. Повторите тот же запрос или откройте форму снова.", "Натиҷа тасдиқ нашуд. Ҳамон дархостро такрор кунед ё шаклро аз нав кушоед.") + " " + (error.message || ""));
+						pending = this.pending_transfer("owner");
+						for (const field of fields.filter(field => field.fieldtype !== "HTML")) dlg.set_df_property(field.fieldname, "read_only", !!pending);
+					}
+				} finally {
+					dlg.owner_busy = false;
+					if (!closed) dlg.get_primary_btn().prop("disabled", !(pending || context?.can_record));
+				}
 			},
 		});
+		dlg.onhide = () => { closed = true; sequence++; };
+		const currency = () => {
+			const code = pending?.display?.currency || context?.wallets.find(wallet => wallet.name === dlg.get_value("wallet"))?.currency || this.data?.currency;
+			dlg.set_df_property("amount", "label", `${t("Сумма", "Маблағ")} (${code})`);
+			dlg.set_df_property("amount", "options", code);
+			const foreign = !!code && code !== this.data?.currency;
+			dlg.set_df_property("exchange_rate", "hidden", !foreign);
+			dlg.set_df_property("exchange_rate", "reqd", foreign);
+			dlg.set_df_property("exchange_rate", "description", `1 ${code} = … ${this.data?.currency}`);
+			if (!foreign && !pending) dlg.set_value("exchange_rate", null);
+		};
+		const operations = fields.find(field => field.fieldname === "operation").options;
+		const update_operations = () => {
+			const options = dlg.get_value("show_loans") ? operations : operations.slice(0, 2);
+			dlg.set_df_property("operation", "options", options);
+			if (!pending && !options.some(option => option.value === dlg.get_value("operation"))) dlg.set_value("operation", "contribution");
+		};
+		dlg.fields_dict.show_loans.df.onchange = update_operations;
+		dlg.fields_dict.wallet.df.onchange = currency;
+		const load = async () => {
+			const current = ++sequence;
+			dlg.get_primary_btn().prop("disabled", !pending);
+			dlg.fields_dict.status.$wrapper.text(t("Загрузка…", "Боркунӣ…"));
+			try {
+				const response = await frappe.call({method: "erpnext.accounts.page.money_hub.money_hub.get_owner_money_context", args: {company}, silent: true});
+				if (closed || current !== sequence || this.data?.company !== company) return;
+				context = response.message;
+				if (!context || context.company !== company) throw new Error(t("Не удалось проверить настройки.", "Танзимот санҷида нашуд."));
+				const area = dlg.fields_dict.status.$wrapper;
+				if (context.upgrade_required) {
+					area.text(t("Администратору нужно завершить обновление системы для операций владельца.", "Маъмур бояд навсозии низомро барои амалиёти соҳиб анҷом диҳад."));
+					return;
+				}
+				if (!context.configured) {
+					area.html(`<p>${esc(t("Сначала настройте отдельные счета владельца. Продажи, расходы, зарплата и поставщики сохраняют свои документы.", "Аввал суратҳисобҳои алоҳидаи соҳибро танзим кунед. Фурӯш, хароҷот, маош ва таъминкунандагон ҳуҷҷатҳои худро доранд."))}</p>` + (context.can_configure ? `<button type="button" class="btn btn-default btn-sm" data-owner-setup>${esc(t("Создать отдельные счета владельца", "Сохтани суратҳисобҳои алоҳидаи соҳиб"))}</button> <a href="/app/owner-money-settings/new">${esc(t("Выбрать существующие счета", "Интихоби суратҳисобҳои мавҷуда"))}</a>` : `<p>${esc(t("Настройку выполняет владелец или бухгалтер.", "Танзимро соҳиб ё муҳосиб анҷом медиҳад."))}</p>`));
+					area.find("[data-owner-setup]").on("click", async event => {
+						if (closed || this.data?.company !== company) return;
+						event.currentTarget.disabled = true;
+						try { await frappe.call({method: "erpnext.accounts.page.money_hub.money_hub.setup_owner_money", args: {company}}); if (!closed) await load(); }
+						catch (error) { if (!closed) { dlg.fields_dict.error.$wrapper.text(error.message || t("Не удалось сохранить настройки.", "Танзимот захира нашуд.")); event.currentTarget.disabled = false; } }
+					});
+					return;
+				}
+				const owed = context.loan_balance;
+				const status = (!context.loans_enabled ? t("Займы необязательны. Для них настройте отдельный счёт.", "Қарзҳо ихтиёрӣ мебошанд. Барои онҳо суратҳисоби алоҳида танзим кунед.") : owed === null ? t("Баланс займа недоступен.", "Бақияи қарз дастрас нест.") : `${t("Займы владельца, баланс по доступным проводкам", "Қарзҳои соҳиб, бақия аз сабтҳои дастрас")}: ${this.fmt(owed, context.currency)} ${context.currency}. `) + (!context.can_record ? t("Запись доступна владельцу или уполномоченному бухгалтеру.", "Сабт ба соҳиб ё муҳосиби ваколатдор дастрас аст.") : "");
+				area.html(`<p>${esc(status)}</p>` + (context.can_configure && context.settings ? `<a href="${esc(frappe.utils.get_form_link("Owner Money Settings", context.settings))}">${esc(t("Настроить счета владельца", "Танзими суратҳисобҳои соҳиб"))}</a>` : ""));
+				const options = context.wallets.map(wallet => wallet.name);
+				if (pending && !options.includes(pending.args.wallet)) options.push(pending.args.wallet);
+				dlg.set_df_property("wallet", "options", options);
+				if (!pending) await dlg.set_value("wallet", options[0]);
+				currency();
+				dlg.get_primary_btn().prop("disabled", !(pending || context.can_record));
+			} catch (error) {
+				if (closed || current !== sequence) return;
+				dlg.fields_dict.status.$wrapper.html(`<p role="alert">${esc(t("Не удалось загрузить настройки. Проверьте доступ и повторите.", "Танзимот бор нашуд. Дастрасиро санҷида такрор кунед."))}</p><button type="button" class="btn btn-default btn-sm" data-owner-retry>${esc(t("Повторить", "Такрор"))}</button>`);
+				dlg.fields_dict.status.$wrapper.find("[data-owner-retry]").on("click", load);
+				dlg.get_primary_btn().prop("disabled", !pending);
+			}
+		};
 		dlg.show();
+		update_operations();
+		await load();
+	}
+
+	open_transfer(from_wallet = null) {
+		const comp = this.data?.company;
+		if (!comp) return;
+		const wallets = (this.data.wallets || []).filter(wallet => wallet.enabled);
+		let pending;
+		try { pending = this.pending_transfer(); }
+		catch (error) { frappe.msgprint(String(error.message)); return; }
+		const opts = wallets.map(wallet => wallet.name);
+		for (const value of [pending?.args.from_wallet, pending?.args.to_wallet]) {
+			if (value && !opts.includes(value)) opts.push(value);
+		}
+		const source = from_wallet || opts[0];
+		const source_account = wallets.find(wallet => wallet.name === source)?.account;
+		const destination = wallets.find(wallet => wallet.account !== source_account)?.name;
+		const fields = [
+			{fieldname: "explanation", fieldtype: "HTML", options: `<p>${frappe.utils.escape_html(this.t(
+				"Перевод между счетами не является расходом или прибылью. Комиссии и курсовые разницы оформляются в платёжном документе.",
+				"Интиқол байни суратҳисобҳо хароҷот ё фоида нест. Комиссияҳо ва фарқи қурб дар ҳуҷҷати пардохт сабт мешаванд."))}</p>`},
+			{fieldname: "kind", fieldtype: "Select", label: this.t("Тип операции", "Навъи амалиёт"), options: [
+				{value: "Инкассация", label: this.t("Инкассация", "Инкассатсия")},
+				{value: "Пополнение", label: this.t("Пополнение", "Пур кардан")},
+				{value: "Снятие", label: this.t("Снятие", "Гирифтани пул")},
+				{value: "Обычный перевод", label: this.t("Обычный перевод", "Интиқоли одӣ")},
+			], default: "Инкассация", reqd: 1},
+			{fieldname: "from_wallet", fieldtype: "Select", label: this.t("Откуда", "Аз куҷо"), options: opts, default: source, reqd: 1},
+			{fieldname: "to_wallet", fieldtype: "Select", label: this.t("Куда", "Ба куҷо"), options: opts, default: destination, reqd: 1},
+			{fieldname: "amount", fieldtype: "Currency", label: this.t("Сумма списания", "Маблағи аз ҳисоб баровардан"), reqd: 1},
+			{fieldname: "received_amount", fieldtype: "Currency", label: this.t("Сумма зачисления", "Маблағи воридшавӣ")},
+			{fieldname: "source_exchange_rate", fieldtype: "Float", precision: 9, label: this.t("Курс списания", "Қурби баровардан")},
+			{fieldname: "target_exchange_rate", fieldtype: "Float", precision: 9, label: this.t("Курс зачисления", "Қурби воридшавӣ")},
+			{fieldname: "note", fieldtype: "Data", label: this.t("Комментарий", "Эзоҳ")},
+			{fieldname: "result", fieldtype: "HTML"},
+		];
+		if (pending) for (const field of fields) {
+			if (Object.hasOwn(pending.args, field.fieldname)) {
+				field.default = pending.args[field.fieldname];
+				field.read_only = 1;
+			}
+		}
+		const dlg = new frappe.ui.Dialog({
+			title: this.t("Перевод между счетами", "Интиқол байни суратҳисобҳо"), fields,
+			primary_action_label: pending ? this.t("Проверить / повторить", "Санҷидан / такрор") : this.t("Перевести", "Интиқол кардан"),
+			primary_action: async (values) => {
+				if (dlg.transfer_busy) return;
+				dlg.transfer_busy = true;
+				dlg.get_primary_btn().prop("disabled", true);
+				try {
+					const args = pending?.args || {company: comp, kind: values.kind, from_wallet: values.from_wallet,
+						to_wallet: values.to_wallet, amount: values.amount, note: values.note || "",
+						received_amount: values.received_amount || null, source_exchange_rate: values.source_exchange_rate || null,
+						target_exchange_rate: values.target_exchange_rate || null};
+					for (const field of fields.filter(field => field.fieldtype !== "HTML")) dlg.set_df_property(field.fieldname, "read_only", 1);
+					const result = await this.run_transfer(args, pending?.id);
+					const link = frappe.utils.get_form_link("Payment Entry", result.name);
+					const label = result.docstatus === 2 ? this.t("Перевод отменён", "Интиқол бекор шудааст") : this.t("Перевод проведён", "Интиқол сабт шуд");
+					frappe.msgprint(`${frappe.utils.escape_html(label)}: <a href="${frappe.utils.escape_html(link)}">${frappe.utils.escape_html(result.name)}</a>`);
+					dlg.hide();
+					this.load();
+				} catch (error) {
+					const message = this.t("Перевод не подтверждён. Закройте и откройте форму, чтобы проверить или повторить тот же запрос.", "Интиқол тасдиқ нашуд. Шаклро пӯшида аз нав кушоед, то ҳамон дархостро санҷед ё такрор кунед.");
+					dlg.fields_dict.result.$wrapper.text(`${message} ${error.message || ""}`);
+					// Keep original values on an ambiguous outcome, even if the dialog remains open.
+					pending = this.pending_transfer();
+					for (const field of fields.filter(field => !["HTML"].includes(field.fieldtype))) dlg.set_df_property(field.fieldname, "read_only", !!pending);
+				} finally {
+					dlg.transfer_busy = false;
+					dlg.get_primary_btn().prop("disabled", false);
+				}
+			},
+		});
+		const currencies = () => {
+			const src = wallets.find(wallet => wallet.name === dlg.get_value("from_wallet"));
+			const dst = wallets.find(wallet => wallet.name === dlg.get_value("to_wallet"));
+			const source_currency = src?.account_currency || this.data.currency;
+			const target_currency = dst?.account_currency || this.data.currency;
+			for (const [field, currency] of [["amount", source_currency], ["received_amount", target_currency]]) {
+				dlg.set_df_property(field, "label", `${field === "amount" ? this.t("Списать", "Баровардан") : this.t("Зачислить", "Ворид кардан")} (${currency})`);
+				dlg.set_df_property(field, "options", currency);
+			}
+			for (const [field, foreign, currency] of [["source_exchange_rate", source_currency !== this.data.currency, source_currency], ["target_exchange_rate", target_currency !== this.data.currency && target_currency !== source_currency, target_currency]]) {
+				dlg.set_df_property(field, "hidden", !foreign);
+				dlg.set_df_property(field, "reqd", foreign);
+				dlg.set_df_property(field, "description", `1 ${currency} = … ${this.data.currency}`);
+				if (!foreign && !pending) dlg.set_value(field, null);
+			}
+			dlg.set_df_property("received_amount", "hidden", source_currency === target_currency);
+			dlg.set_df_property("received_amount", "reqd", source_currency !== target_currency);
+			if (source_currency === target_currency && !pending) dlg.set_value("received_amount", null);
+		};
+		for (const field of ["from_wallet", "to_wallet"]) dlg.fields_dict[field].df.onchange = currencies;
+		dlg.show();
+		currencies();
+		if (pending) dlg.fields_dict.result.$wrapper.text(this.t("Есть неподтверждённый запрос. Повторная проверка не создаст второй перевод.", "Дархости тасдиқнашуда ҳаст. Санҷиши такрорӣ интиқоли дуюм намесозад."));
 	}
 
 	open_creator(default_type = "Mobile Wallet") {

@@ -1,0 +1,26 @@
+{
+ "actions": [],
+ "creation": "2026-11-07 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["actor", "company", "fingerprint", "intent", "payment_entry"],
+ "fields": [
+  {"fieldname": "actor", "fieldtype": "Link", "options": "User", "label": "Requested By", "read_only": 1, "reqd": 1},
+  {"fieldname": "company", "fieldtype": "Link", "options": "Company", "label": "Company", "read_only": 1, "reqd": 1},
+  {"fieldname": "fingerprint", "fieldtype": "Data", "label": "Request Fingerprint", "read_only": 1, "reqd": 1, "hidden": 1},
+  {"fieldname": "intent", "fieldtype": "Long Text", "label": "Submitted Intent", "read_only": 1, "reqd": 1, "hidden": 1},
+  {"fieldname": "payment_entry", "fieldtype": "Link", "options": "Payment Entry", "label": "Payment Entry", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-07 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Accounts",
+ "name": "Money Hub Transfer",
+ "owner": "Administrator",
+ "permissions": [{"role": "System Manager", "read": 1}, {"role": "Accounts Manager", "read": 1}],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

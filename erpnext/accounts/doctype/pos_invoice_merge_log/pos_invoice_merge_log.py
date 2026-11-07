@@ -497,18 +497,19 @@ def split_invoices_by_accounting_dimension(pos_invoices):
 	return pos_invoice_accounting_dimensions_map
 
 
-def consolidate_pos_invoices(pos_invoices=None, closing_entry=None):
+def consolidate_pos_invoices(pos_invoices=None, closing_entry=None, commit=True):
+	"""Use commit=False when a caller owns one atomic closing/review transaction."""
 	invoices = pos_invoices or (closing_entry and closing_entry.get("pos_transactions"))
 	if frappe.flags.in_test and not invoices:
 		invoices = get_all_unconsolidated_invoices()
 
 	invoice_by_customer = get_invoice_customer_map(invoices)
 
-	if len(invoices) >= 10 and closing_entry:
+	if len(invoices) >= 10 and closing_entry and commit:
 		closing_entry.set_status(update=True, status="Queued")
 		enqueue_job(create_merge_logs, invoice_by_customer=invoice_by_customer, closing_entry=closing_entry)
 	else:
-		create_merge_logs(invoice_by_customer, closing_entry)
+		create_merge_logs(invoice_by_customer, closing_entry, commit=commit)
 
 
 def unconsolidate_pos_invoices(closing_entry):
@@ -578,7 +579,7 @@ def split_invoices(invoices):
 	return _invoices
 
 
-def create_merge_logs(invoice_by_customer, closing_entry=None):
+def create_merge_logs(invoice_by_customer, closing_entry=None, commit=True):
 	try:
 		for customer, invoices_acc_dim in invoice_by_customer.items():
 			for invoices in invoices_acc_dim.values():
@@ -602,7 +603,8 @@ def create_merge_logs(invoice_by_customer, closing_entry=None):
 			closing_entry.update_opening_entry()
 
 	except Exception as e:
-		frappe.db.rollback()
+		if commit:
+			frappe.db.rollback()
 		message_log = frappe.message_log.pop() if frappe.message_log else str(e)
 		error_message = get_error_message(message_log)
 
@@ -614,8 +616,9 @@ def create_merge_logs(invoice_by_customer, closing_entry=None):
 		raise
 
 	finally:
-		frappe.db.commit()
-		frappe.publish_realtime("closing_process_complete", user=frappe.session.user)
+		if commit:
+			frappe.db.commit()
+		frappe.publish_realtime("closing_process_complete", user=frappe.session.user, after_commit=not commit)
 
 
 def cancel_merge_logs(merge_logs, closing_entry=None):

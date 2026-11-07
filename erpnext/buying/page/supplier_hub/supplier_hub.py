@@ -14,6 +14,9 @@ def get_supplier_hub_data(
 	period="month", warehouse=None, stock_filter="all", stock_qty=0,
 	sort_by="debt_desc", page=1, page_size=20, known_revision=None,
 ):
+	from erpnext.setup.retail_security import require_financial_access
+
+	require_financial_access(company)
 	from erpnext.buying.page.supplier_hub.supplier_data import build_supplier_hub
 
 	return build_supplier_hub(
@@ -25,6 +28,9 @@ def get_supplier_hub_data(
 @frappe.whitelist()
 def get_supplier_details(supplier, company=None):
 	"""Returns product inventory, recent invoices, and recent payments for a single supplier."""
+	from erpnext.setup.retail_security import require_financial_access
+
+	require_financial_access(company)
 	if not supplier:
 		return {}
 

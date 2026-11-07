@@ -27,7 +27,7 @@
   {"default": "Month", "fieldname": "patent_period", "fieldtype": "Select", "label": "Patent Period", "options": "Month\nQuarter\nYear"},
   {"fieldname": "sec_threshold", "fieldtype": "Section Break", "label": "Threshold & Account"},
   {"default": "1000000", "fieldname": "vat_threshold", "fieldtype": "Currency", "label": "VAT Threshold (12 months turnover)"},
-  {"fieldname": "tax_account", "fieldtype": "Link", "label": "Tax Payments Account", "options": "Account", "read_only": 1}
+  {"fieldname": "tax_account", "fieldtype": "Link", "label": "Tax Payments Account", "options": "Account", "description": "Account debited when recording a tax payment. Select the account configured for this company."}
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,

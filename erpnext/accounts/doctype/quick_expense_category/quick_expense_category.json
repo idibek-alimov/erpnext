@@ -11,7 +11,8 @@
   "icon",
   "col_break1",
   "default_account",
-  "is_pinned"
+  "is_pinned",
+  "company_accounts"
  ],
  "fields": [
   {
@@ -47,6 +48,12 @@
    "fieldtype": "Check",
    "in_list_view": 1,
    "label": "Pinned to Quick Chips"
+  },
+  {
+   "fieldname": "company_accounts",
+   "fieldtype": "Table",
+   "label": "Company Accounts",
+   "options": "Quick Expense Company Account"
   }
  ],
  "index_web_pages_for_search": 1,

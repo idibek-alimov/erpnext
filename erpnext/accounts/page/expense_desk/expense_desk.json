@@ -12,6 +12,15 @@
  "page_name": "expense-desk",
  "roles": [
   {
+   "role": "Retail Owner"
+  },
+  {
+   "role": "Retail Manager"
+  },
+  {
+   "role": "Accounts User"
+  },
+  {
    "role": "Accounts Manager"
   },
   {

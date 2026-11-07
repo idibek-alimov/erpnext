@@ -134,7 +134,6 @@
    "read_only": 1
   },
   {
-   "default": "\u041d\u0430\u043b\u043e\u0433\u043e\u0432\u044b\u0439 \u043a\u043e\u043c\u0438\u0442\u0435\u0442",
    "fieldname": "tax_authority_supplier",
    "fieldtype": "Link",
    "label": "Tax Authority Supplier",

@@ -71,6 +71,23 @@ Paths below are relative to the ERPNext repository root:
 Inspect the current files before reuse; they can evolve. Temporary screenshots and
 particular local products are not durable design assets or test specifications.
 
+## Money Hub
+
+On 2026-11-06, the owner explicitly allowed Retail Managers to view full cash and
+bank balances in Money Hub. Use native Money Wallet, Account, Company and GL Entry
+read permissions and company/user restrictions. Balance visibility does not grant
+wallet create/write permission or genuine shortage/surplus approval.
+
+On 2026-11-07, the owner additionally allowed admins and managers to see profit and
+purchase costs. This supersedes the earlier owner-only target for those figures;
+M3a implements this policy locally with native permissions and allowed/denied tests;
+intended-site activation remains pending.
+It does not grant payroll-detail, payment, tax-setting or loss-approval capabilities.
+The canonical dated business decisions, roadmap and unresolved rules are in
+[the simplification decisions](../../../../docs/simplification/decisions.md) and
+[master roadmap](../../../../docs/simplification/README.md). Consult them for future
+money, staff, attendance, customer, POS, tax, home and Windows planning.
+
 ## Supplier Hub
 
 The owner approved a Supplier Hub with current outstanding in red, period gross profit

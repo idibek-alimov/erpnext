@@ -27,15 +27,17 @@ ROLE_BUNDLES = {
 _MANAGER_PAGES = [
 	"posapp", "retail-home", "product-catalog", "product-detail", "supplier-hub", "supplier-detail",
 	"expense-desk", "staff-hub", "staff-detail",
+	"money-hub",
 ]
 PAGE_ROLES = {
 	RETAIL_CASHIER: ["posapp"],
 	RETAIL_MANAGER: _MANAGER_PAGES,
-	RETAIL_OWNER: _MANAGER_PAGES + ["money-hub"],
+	RETAIL_OWNER: _MANAGER_PAGES,
 }
 
-# Roles that may see profit, purchase cost and bank balances.
-FINANCIAL_ROLES = {RETAIL_OWNER, "System Manager"}
+# Roles that may see profit and purchase cost. Money Hub balances use separate
+# native wallet/account/ledger read permissions, including Retail Manager.
+FINANCIAL_ROLES = {RETAIL_OWNER, RETAIL_MANAGER, "System Manager"}
 
 
 def setup_retail_security():
@@ -90,6 +92,8 @@ def apply_role_bundles(doc, method=None):
 
 def can_see_financials(user=None):
 	user = user or frappe.session.user
+	if user == "Guest":
+		return False
 	if user == "Administrator":
 		return True
 	roles = set(frappe.get_roles(user))
@@ -97,6 +101,14 @@ def can_see_financials(user=None):
 		return True
 	# Only mask users who are retail staff; everyone else keeps classic ERPNext behaviour.
 	return not (roles & {RETAIL_CASHIER, RETAIL_MANAGER})
+
+
+def require_financial_access(company=None):
+	"""Retail visibility policy supplements, and never replaces, native permissions."""
+	if not can_see_financials():
+		frappe.throw(_("Profit and purchase costs are restricted to managers and owners."), frappe.PermissionError)
+	if company:
+		frappe.get_doc("Company", company).check_permission("read")
 
 
 @frappe.whitelist()

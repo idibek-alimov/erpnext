@@ -1,0 +1,17 @@
+{
+ "doctype": "DocType", "name": "Owner Money Settings", "module": "Accounts", "engine": "InnoDB",
+ "autoname": "field:company", "naming_rule": "By fieldname", "track_changes": 1,
+ "field_order": ["company", "contribution_account", "withdrawal_account", "loan_account"],
+ "fields": [
+  {"fieldname": "company", "fieldtype": "Link", "options": "Company", "label": "Company", "reqd": 1, "unique": 1, "set_only_once": 1},
+  {"fieldname": "contribution_account", "fieldtype": "Link", "options": "Account", "label": "Owner Contributions Account", "reqd": 1},
+  {"fieldname": "withdrawal_account", "fieldtype": "Link", "options": "Account", "label": "Owner Withdrawals Account", "reqd": 1},
+  {"fieldname": "loan_account", "fieldtype": "Link", "options": "Account", "label": "Owner Loan Account", "description": "Optional. Use a dedicated liability account for money the business must repay to the owner."}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "create": 1, "write": 1},
+  {"role": "Accounts Manager", "read": 1, "create": 1, "write": 1}
+ ],
+ "sort_field": "modified", "sort_order": "DESC", "actions": [], "links": [], "states": [],
+ "creation": "2026-11-07 15:00:00.000000", "modified": "2026-11-07 15:00:00.000000", "owner": "Administrator", "modified_by": "Administrator"
+}

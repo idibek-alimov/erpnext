@@ -8830,3 +8830,181 @@ Wait for the product to finish loading,То анҷоми боркунии мол
 new for this product,нав барои ин мол
 Stock unit,Воҳид
 Enable only when changing prices without receiving goods.,Танҳо барои тағйири нархҳо бе қабули мол фаъол кунед.
+Reason for cancellation,Сабаби бекоркунӣ
+Cancellation Reason,Сабаби бекоркунӣ
+Причина отмены,Сабаби бекоркунӣ
+Expense recorded,Хароҷот сабт шуд
+Expense cancelled,Хароҷот бекор шуд
+Cancel expense,Бекор кардани хароҷот
+Open a shift before recording POS expenses.,Пеш аз сабти хароҷот дар POS бастро кушоед.
+Откройте смену перед записью расходов.,Пеш аз сабти хароҷот бастро кушоед.
+Only an authorized manager can correct or cancel expenses.,Танҳо менеҷери ваколатдор метавонад хароҷотро ислоҳ ё бекор кунад.
+Enter a reason before cancelling this expense.,Сабаби бекор кардани хароҷотро ворид кунед.
+A cancellation reason and current expense version are required.,Сабаби бекоркуниро ворид кунед ва маълумоти хароҷотро нав кунед.
+This source is not authorized for expense payments in this context.,Ин манбаъ барои пардохти хароҷот дар хазина ё идораи интихобшуда иҷозат надорад.
+Configure the expense category before recording an expense.,Пеш аз сабти хароҷот гурӯҳи онро танзим кунед.
+Configure this category's expense account for the selected company.,Ҳисоби хароҷоти ин гурӯҳро барои ширкати интихобшуда танзим кунед.
+Enter a finite positive amount using the company currency precision.,Маблағи мусбатро бо дақиқии асъори ширкат ворид кунед.
+Foreign-currency expenses require the native accounting workflow.,Барои хароҷот бо асъори хориҷӣ ҳуҷҷатҳои стандартии муҳосибиро истифода баред.
+"Use Purchase Invoice, Expense Claim or Employee Advance for party-based payments. A recipient name is descriptive.","Барои ҳисоббаробаркунӣ бо таъминкунанда, ҷуброни хароҷоти корманд ё пешпардохт ҳуҷҷатҳои стандартиро истифода баред. Номи гиранда дар хароҷот танҳо шарҳ аст."
+Select the POS Opening Shift for this expense.,"Бастеро интихоб кунед, ки хароҷот ба он тааллуқ дорад."
+Only the shift owner can record a normal POS expense.,Хароҷоти оддиро дар POS танҳо хазинадори ҳамин баст сабт карда метавонад.
+An active open shift and enabled register are required.,Басти кушода ва хазинаи фаъол лозим аст.
+Enter the reason for this POS correction.,Сабаби ислоҳи хароҷоти бастро ворид кунед.
+The previous expense request needs confirmation. Restore its values and retry before recording another expense.,"Натиҷаи хароҷоти пешина ҳанӯз тасдиқ нашудааст. Маълумоти онро барқарор карда, пеш аз сабти хароҷоти нав такроран ирсол кунед."
+The expense result was not confirmed. Retry to check its status.,Натиҷа тасдиқ нашуд. Барои санҷидани ҳолати хароҷот такроран ирсол кунед.
+The expense changed. Refresh it before cancelling.,Хароҷот тағйир ёфтааст. Пеш аз бекоркунӣ маълумотро нав кунед.
+Allow Office Expenses,Иҷозат додани хароҷоти идора
+Registers Allowed to Pay Expenses,"Хазинаҳое, ки пардохти хароҷот барояшон иҷозат аст"
+Expense Payments,Пардохти хароҷот
+Company Accounts,Ҳисобҳои ширкатҳо
+Entry Context,Тарзи сабт
+Correction Reason,Сабаби ислоҳ
+The expense upgrade requires a site migration. Ask the administrator to complete setup before recording expenses.,"Барои навсозии хароҷот муҳоҷирати пойгоҳи сайт лозим аст. Пеш аз сабти хароҷот аз маъмур хоҳиш кунед, ки танзимро анҷом диҳад."
+Expense setup is incomplete. Ask a manager to configure approved sources and category accounts.,"Хароҷот ҳанӯз танзим нашудааст. Аз менеҷер хоҳиш кунед, ки манбаъҳои иҷозатдодашудаи пардохт ва ҳисобҳои гурӯҳҳоро муайян кунад."
+The previous request was completed. Refresh and review the recorded expense before continuing.,"Дархости пешина иҷро шуд. Пеш аз идома маълумотро нав карда, хароҷоти сабтшударо санҷед."
+The original expense was cancelled. Refresh and ask a manager to review it before recording another expense.,"Хароҷоти аслӣ бекор шудааст. Маълумотро нав карда, пеш аз сабти хароҷоти нав аз менеҷер хоҳиш кунед, ки онро санҷад."
+Confirm pending expense requests before closing the shift.,Пеш аз бастани баст натиҷаи дархостҳои интизори хароҷотро тасдиқ кунед.
+Record expenses in Expenses,Сабти хароҷот дар бахши «Хароҷот»
+View previous movements or record a cash deposit.,Ҳаракатҳои пешинаро бинед ё супоридани пули нақдро сабт кунед.
+Cash movement saved for confirmation,Ҳаракати пул сабт шуд ва интизори тасдиқ аст
+The movement was saved. Refresh the history to see its status.,Ҳаракат сабт шуд. Барои санҷиши ҳолат таърихро нав кунед.
+Open source document,Кушодани санад
+Paid expenses,Хароҷоти пардохтшуда
+Unassigned shift,Баст муайян нашудааст
+All statuses,Ҳамаи ҳолатҳо
+Load more,Намоиши бештар
+Банк и кошельки,Бонк ва ҳамёнҳо
+По выбранным фильтрам,Аз рӯи филтрҳои интихобшуда
+Accounting links are set by the cash movement workflow.,Пайвандҳои муҳосибӣ ҳангоми гузаронидани ҳаракати пул муқаррар мешаванд.
+Unsupported expense source.,Ин манбаи таърихи хароҷот дастгирӣ намешавад.
+Select a valid expense period.,Давраи дурусти хароҷотро интихоб кунед.
+Select a valid expense status.,Ҳолати дурусти хароҷотро интихоб кунед.
+The movement type does not match the original request.,Навъи ҳаракат ба дархости аслӣ мувофиқат намекунад.
+Could not load expense history. Refresh to retry.,Таърихи хароҷот бор нашуд. Аз нав кӯшиш кунед.
+Pending cash movement requests,Дархостҳои интизори ҳаракати пул
+Unknown request,Дархости номаълум
+Submitting,Гузаронида мешавад
+Needs manager review,Санҷиши мудир лозим аст
+The original movement type is missing. Manager review is required.,Дар дархости аслӣ навъи ҳаракат нест. Санҷиши мудир лозим аст.
+Unsupported legacy cash movement method. The original request was retained.,Усули ирсоли ҳаракати пешина дастгирӣ намешавад. Дархости аслӣ нигоҳ дошта шуд.
+The original cash movement has no request ID. Manager review is required.,Дар ҳаракати аслии пул ID-и дархост нест. Санҷиши мудир лозим аст.
+The original cash movement {0} was cancelled. Manager review is required.,Ҳаракати аслии пул {0} бекор шудааст. Санҷиши мудир лозим аст.
+The cash movement result was not confirmed. Retry the original request.,Натиҷаи ҳаракати пул тасдиқ нашуд. Дархости аслиро такрор кунед.
+A manager is required for a POS expense correction.,Барои ислоҳи хароҷоти POS мудир лозим аст.
+Additional details,Маълумоти иловагӣ
+All categories,Ҳамаи гурӯҳҳо
+All history,Ҳамаи давра
+All recipients,Ҳамаи гирандагон
+All sources,Ҳамаи манбаъҳо
+Attach private receipt,Замимаи расиди хусусӣ
+Bank/wallets,Бонк / ҳамёнҳо
+By category,Аз рӯи гурӯҳ
+Cancellation reverses the accounting entry. It does not physically return money. Record a replacement only after cancellation is confirmed.,"Бекоркунӣ сабти муҳосибиро бармегардонад, вале пулро ҷисман барнамегардонад. Сабти ивазкунандаро танҳо пас аз тасдиқи бекоркунӣ созед."
+Cash movement,Ҳаракати маблағ
+Check result,Санҷиши натиҷа
+Could not check the expense result. The original request is retained.,Натиҷаи хароҷот санҷида нашуд. Дархости аслӣ нигоҳ дошта шуд.
+"Could not load expenses. Check access and setup, then retry.","Хароҷот бор нашуд. Дастрасӣ ва танзимотро санҷида, такрор кунед."
+Could not load expenses. Retry.,Хароҷот бор нашуд. Такрор кунед.
+Could not load sources. Check access and setup.,Манбаъҳо бор нашуданд. Дастрасӣ ва танзимотро санҷед.
+Could not open expense. It may be unavailable or outside your access.,Хароҷот кушода нашуд. Шояд сабт дастнорас аст ё шумо ҳуқуқ надоред.
+Custom dates,Интихоби санаҳо
+Expense details,Тафсилоти хароҷот
+Expense history,Таърихи хароҷот
+From date,Аз сана
+Historical cash movement. Corrections use its native document workflow.,Ҳаракати пешинаи маблағ. Барои ислоҳ ҳуҷҷати аслиро кушоед.
+Last 7 days,7 рӯзи охир
+Loading…,Бор шуда истодааст…
+Missing request ID,Рамзи дархост нест
+Missing source,Манбаъ нишон дода нашудааст
+More filters,Филтрҳои иловагӣ
+"No expenses found. Change the period or filters, or record an expense.",Хароҷот ёфт нашуд. Давра ё филтрҳоро тағйир диҳед ё хароҷотро сабт кунед.
+Offline. Reconnect to load expenses.,Пайваст нест. Барои бор кардани хароҷот ба шабака пайваст шавед.
+Open receipt,Кушодани расид
+Opening shift,Кушодани баст
+Optional. This does not create employee debt or a salary deduction.,Ихтиёрӣ. Қарзи корманд ё нигоҳдорӣ аз маош эҷод намекунад.
+Other sources,Манбаъҳои дигар
+"Paid expenses for all matching records. These are period totals, not account balances. Cancelled and draft records are excluded from paid totals.","Хароҷоти пардохтшуда барои ҳамаи сабтҳои ёфтшуда дар давра, на бақияи ҳисобҳо. Сиёҳнависҳо ва сабтҳои бекоршуда ба маблағи пардохтшуда дохил нестанд."
+Paid from,Пардохт аз
+Paid personally? Use an Expense Claim. Unpaid supplier bill? Use a Purchase Invoice.,Аз пули шахсӣ пардохт кардед? Ҳисоботи хароҷот (Expense Claim)-ро истифода баред. Ҳисоби пардохтнашудаи таъминкунанда? Ҳисоби харидро истифода баред.
+Reason for correction,Сабаби ислоҳ
+Record expense,Сабти хароҷот
+Record real spending from a register source. Select the exact shift and explain the correction. This does not resolve a closing discrepancy.,Хароҷоти воқеиро аз манбаи хазина сабт кунед. Басти дақиқ ва сабаби ислоҳро нишон диҳед. Ин фарқияти бастро ҳал намекунад.
+Reset filters,Тоза кардани филтрҳо
+Retry original request,Такрори дархости аслӣ
+Search expenses,Ҷустуҷӯи хароҷот
+Select a permitted category and funding source.,Гурӯҳ ва манбаи иҷозатдодашудаи пардохтро интихоб кунед.
+Select a valid date range.,Давраи дурусти санаҳоро интихоб кунед.
+Select the exact opening shift and enter a correction reason.,Кушодани басти дақиқ ва сабаби ислоҳро нишон диҳед.
+Shift not assigned,Баст муайян нашудааст
+Showing {0} of {1} matching records,{0} аз {1} сабти ёфтшуда нишон дода шудааст
+The expense result was not confirmed. Check result before recording again.,Натиҷаи хароҷот тасдиқ нашуд. Пеш аз сабти дубора натиҷаро санҷед.
+This month,Ин моҳ
+To date,То сана
+Today,Имрӯз
+Uncategorized,Бе гурӯҳ
+Unconfirmed expense request,Дархости тасдиқнашудаи хароҷот
+Use a private receipt uploaded to this site.,Расиди хусусии ба ин сомона боршударо истифода баред.
+Yesterday,Дирӯз
+You can view expenses. Recording requires create and submit permission.,Дидани хароҷот дастрас аст. Барои сабт ҳуқуқи эҷод ва тасдиқ лозим аст.
+No completed result is confirmed. The original request is retained. Check again or retry the original request.,Анҷом тасдиқ нашудааст. Дархости аслӣ нигоҳ дошта шуд. Боз санҷед ё дархости аслиро такрор кунед.
+Saved expense evidence cannot be read. Ask a manager to investigate; do not record it again.,Маълумоти захирашудаи хароҷот хонда нашуд. Ба мудир муроҷиат кунед; хароҷотро дубора сабт накунед.
+Select a shift if correcting POS spending. Categories and funding sources must be configured before recording.,Барои ислоҳи хароҷоти POS бастро интихоб кунед. Пеш аз сабт гурӯҳҳо ва манбаъҳои пардохт бояд танзим шаванд.
+Some historical POS expenses have no shift attribution. A manager should review their native records.,Басти баъзе хароҷоти пешинаи POS муайян нашудааст. Мудир бояд ҳуҷҷатҳои аслиро санҷад.
+The expense is still submitted. Cancellation is not confirmed. The original request is retained.,Хароҷот ҳанӯз тасдиқшуда аст. Бекоркунӣ тасдиқ нашудааст. Дархости аслӣ нигоҳ дошта шуд.
+Correct a POS expense,Ислоҳи хароҷоти POS
+Paid in cash,Бо нақд пардохтшуда
+Paid through bank/wallets,Тавассути бонк / ҳамёнҳо пардохтшуда
+Recorded by,Сабткунанда
+Quick Expense list,Ҳамаи ҳуҷҷатҳои хароҷот
+Product Catalog,Каталоги молҳо
+Money Hub,Маблағҳо
+Expense setup is incomplete. Ask a manager to configure categories and permitted funding sources.,"Танзими хароҷот нопурра аст. Аз мудир хоҳиш кунед, ки гурӯҳҳо ва манбаъҳои иҷозатдодашудаи пардохтро танзим кунад."
+Remove receipt,Хориҷ кардани расид
+Receipt upload was not confirmed. Upload again or remove the receipt before recording.,Боркунии расид тасдиқ нашуд. Пеш аз сабти хароҷот онро боз бор кунед ё расидро хориҷ кунед.
+Accounting dimensions must be a JSON object.,Ченакҳои муҳосибӣ бояд ҳамчун объекти JSON муайян шаванд.
+An adjustment date and approval reason are required.,Санаи ислоҳ ва сабаби тасдиқи онро нишон диҳед.
+"Bank and card differences require native settlement or reconciliation, not a cash-loss adjustment.",Фарқҳои бонкӣ ва кортӣ санҷиши ҳисоб ё ҳуҷҷатҳои ҳисоббаробаркуниро талаб мекунанд. Ислоҳи талафоти нақд барои онҳо истифода намешавад.
+Choose a distinct Safe account for counted cash.,Барои нақди ҳисобшуда ҳисоби ҷудогонаи сейфро интихоб кунед.
+Configure the company shortage or surplus account before posting this adjustment.,Пеш аз ин ислоҳ ҳисоби камомад ё зиёдатии ширкатро танзим кунед.
+Counted cash transferred after closing {0}. This does not resolve a shift difference.,Гузаронидани нақди ҳисобшуда пас аз бастани {0}. Ин гузарониш фарқи бастро ҳал намекунад.
+Native Journal Entry create and submit permissions are required.,Ҳуқуқҳои аслии эҷод ва тасдиқи сабти муҳосибӣ лозиманд.
+Native Payment Entry create and submit permissions are required for a safe transfer.,Барои гузарониш ба сейф ҳуқуқҳои аслии эҷод ва тасдиқи пардохт лозиманд.
+Only the owner or Accounts Manager can approve a loss or surplus.,Танҳо соҳиб ё роҳбари муҳосибӣ метавонад талафот ё зиёдатиро тасдиқ кунад.
+Select an enabled cost center in the review company.,Маркази фаъоли хароҷоти ширкати санҷишро интихоб кунед.
+Select enabled transfer wallets in the closing company.,Ҳамёнҳои фаъоли гузаронишро дар ширкати басташавӣ интихоб кунед.
+Select valid native accounting dimensions.,Ченакҳои дурусти аслии муҳосибиро интихоб кунед.
+Shift review {0}: {1},Санҷиши баст {0}: {1}
+The counted-cash source must be a Cash account.,Манбаи нақди ҳисобшуда бояд ҳисоби нақдӣ бошад.
+Configure an enabled company-currency shortage expense account and an approved surplus account.,Ҳисоби фаъоли хароҷоти камомад ва ҳисоби тасдиқшудаи зиёдатиро бо асъори ширкат танзим кунед.
+Shift Review,Санҷиши бастҳо
+The submitted expense will explain this shortage once. The original closing count is retained.,Хароҷоти сабтшуда ин камомадро як бор шарҳ медиҳад. Маблағи аслии бастан нигоҳ дошта мешавад.
+Your previous shifts,Бастҳои қаблии шумо
+Enter the money actually available for this opening. Previous differences stay with their original closing and are not added to the opening float.,Маблағи воқеан мавҷудбударо барои кушодан ворид кунед. Фарқиятҳои қаблӣ дар басти пӯшидаи аслӣ мемонанд ва ба бақияи аввалия илова намешаванд.
+Reconnect to check previous shift reviews.,Барои санҷидани бастҳои қаблӣ ба шабака пайваст шавед.
+Unresolved previous shifts,Бастҳои қаблӣ бо фарқиятҳои ҳалнашуда
+No unresolved differences in your permitted shift history.,Дар таърихи дастраси бастҳои шумо фарқиятҳои ҳалнашуда нестанд.
+Shift review status is unavailable. Ask a manager to check setup and access.,"Ҳолати санҷиши баст дастнорас аст. Аз менеҷер хоҳиш кунед, ки танзимот ва дастрасиро санҷад."
+Could not load previous shift reviews.,Санҷиши бастҳои қаблӣ бор нашуд.
+Check / retry counted cash transfer,Санҷиш / такрори интиқоли нақди ҳисобшуда
+Transfer the original counted cash to the configured Safe? The server checks the original request and will not repeat a completed transfer.,"Нақди ҳисобшудаи аслӣ ба сейфи танзимшуда интиқол дода шавад? Сервер дархости аслиро санҷида, интиқоли анҷомшударо такрор намекунад."
+The transfer result was not confirmed. Refresh its status before retrying.,Натиҷаи интиқол тасдиқ нашуд. Пеш аз такрор ҳолатро нав кунед.
+The fiscal report result was not confirmed. Check the printer journal or reprint the existing report using the printer's recovery workflow. The ERP shift is already closed.,Натиҷаи чопи ҳисоботи фискалӣ тасдиқ нашуд. Журнали принтерро санҷед ё ҳисоботи мавҷударо бо воситаҳои барқарорсозии принтер аз нав чоп кунед. Баст дар ERP аллакай пӯшида аст.
+"Opening amounts are company-currency shift funds, not full bank or shared wallet balances.","Маблағҳои аввалия воситаҳои баст бо асъори ширкатанд, на бақияи пурраи бонк ё ҳамёни умумӣ."
+Another shift has opened on this register. Check the current physical cash and use the native transfer workflow; do not transfer an old count.,"Дар ин касса басти дигар кушода шудааст. Нақди ҷориро санҷида, интиқоли стандартиро истифода баред; маблағи кӯҳнаи ҳисобшударо интиқол надиҳед."
+"If the cost is already recorded on a claim or supplier bill, pay that native document. Do not record the expense again here.","Агар хароҷот аллакай дар дархости ҷуброн ё ҳисоби таъминкунанда сабт шуда бошад, ҳамон ҳуҷҷатро пардохт кунед. Хароҷотро дар ин ҷо такроран сабт накунед."
+"Account balances cover the whole permitted account, including shared registers. Shift activity, physical counts and unresolved differences are separate. Totals use company currency; foreign account balances keep their original currency below.","Бақияҳо тамоми суратҳисоби дастрас, аз ҷумла кассаҳои муштаракро дар бар мегиранд. Амалиёти баст, ҳисобкунии воқеӣ ва фарқиятҳои ҳалнашуда ҷудоанд. Ҷамъҳо бо асъори ширкатанд; бақияи суратҳисоби асъорӣ дар поён бо асъори аслӣ низ нишон дода мешавад."
+Accounting ledger read permission is required.,Иҷозати хондани дафтари муҳосибӣ лозим аст.
+The selected wallet is outside your permitted company and accounts.,Ҳамёни интихобшуда берун аз ширкат ва суратҳисобҳои дастраси шумост.
+Could not load account balances.,Бақияҳои суратҳисобҳо бор нашуданд.
+Could not load account movements.,Ҳаракати маблағҳои суратҳисобҳо бор нашуд.
+Not recorded,Сабт нашудааст
+Closing details,Тафсилоти бастани баст
+Print result needs confirmation,Натиҷаи чопро санҷидан лозим аст
+Open shift,Кушодани баст
+Owner Money Settings,Танзими маблағи соҳиб
+Owner Money Movement,Амалиёти маблағи соҳиб
+Owner Contributions Account,Суратҳисоби маблағи воридкардаи соҳиб
+Owner Withdrawals Account,Суратҳисоби маблағи гирифтаи соҳиб
+Owner Loan Account,Суратҳисоби қарзи соҳиб
+Optional. Use a dedicated liability account for money the business must repay to the owner.,"Ихтиёрӣ. Суратҳисоби алоҳидаи уҳдадориҳо барои маблағе, ки тиҷорат бояд ба соҳиб баргардонад."

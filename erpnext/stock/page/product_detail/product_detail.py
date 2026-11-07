@@ -55,6 +55,9 @@ def summarize_product_sales(rows):
 
 @frappe.whitelist()
 def get_product_overview(item_code, period="month", warehouse=None, color=None, company=None):
+	from erpnext.setup.retail_security import require_financial_access
+
+	require_financial_access(company)
 	if not frappe.db.exists("Item", item_code):
 		frappe.throw(_("Item not found"), frappe.DoesNotExistError)
 	item_code = frappe.db.get_value("Item", item_code, "variant_of") or item_code
@@ -160,6 +163,9 @@ def fix_all_legacy_barcodes():
 
 @frappe.whitelist()
 def get_product_detail(item_code, company=None):
+	from erpnext.setup.retail_security import require_financial_access
+
+	require_financial_access(company)
 	if not item_code:
 		frappe.throw(_("Укажите код товара."))
 
