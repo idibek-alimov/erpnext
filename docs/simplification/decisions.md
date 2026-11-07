@@ -62,8 +62,8 @@ Do not ask all of these at once or treat them as blockers to writing plans.
 D06 supersedes the earlier owner-only target for profit/cost visibility in legacy
 retail specifications and the 2026-11-06 balance-only policy. [M3a](money-hub-m3a.md) implements the shared admin/manager visibility policy locally,
 with native company/account/GL restrictions and denied cashier/Guest tests. Native
-manager report/export eligibility was checked; the broader classic cost/report/source
-row audit remains M3b. No role grants, payroll-detail grants or intended-site activation
+manager report/export eligibility was checked; [M3b](money-hub-m3b.md) adds source/field/row and native report/export checks;
+advanced grouping/cache/performance remain M5. No role grants, payroll-detail grants or intended-site activation
 were made. Actual company/store role mapping and final financial basis remain Q01/Q03/Q04.
 
 Existing expense/shift policies still apply: manager expense correction and genuine

@@ -802,3 +802,36 @@
  .mh-layout .mh-account-summary > div:nth-child(-n+2) { border-bottom: 1px solid var(--border-color); }
  .mh-layout .mh-account-summary strong { font-size: 20px; }
 }
+
+/* Business results: posted accounting and invoice analysis retain separate scopes. */
+.mh-layout .mh-tabs-bar { flex-wrap: wrap; }
+.mh-results-page .mh-results-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 20px; }
+.mh-results-page .mh-results-filters > div { flex: 1 1 150px; min-width: 0; }
+.mh-results-page .mh-results-filters > .mh-results-company { flex: 2 1 220px; }
+.mh-results-page .mh-results-filters label { font-size: var(--text-sm); font-weight: 400; color: var(--text-muted); }
+.mh-results-page .mh-results-company .form-group { margin-bottom: 0; }
+.mh-results-page .mh-results-company .help-box { display: none; }
+.mh-results-page .form-control { background: var(--control-bg); color: var(--text-color); }
+.mh-results-page h3 { font-size: var(--text-base); font-weight: 600; margin: 0 0 12px; }
+.mh-results-page .mh-results-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding: 16px 0; border-block: 1px solid var(--border-color); }
+.mh-results-page .mh-results-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mh-results-page .mh-results-summary span { display: block; font-size: var(--text-sm); color: var(--text-muted); }
+.mh-results-page .mh-results-summary strong { display: block; margin-top: 8px; font-size: var(--text-xl); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mh-results-page .mh-results-body { font-size: var(--text-sm); line-height: 1.6; overflow-wrap: anywhere; }
+.mh-results-page .mh-results-state { padding: 24px 0; }
+.mh-results-page .mh-results-note, .mh-results-page .mh-results-missing { margin: 12px 0; max-width: 100ch; }
+.mh-results-page .mh-results-note { color: var(--text-muted); }
+.mh-results-page .mh-results-breakdown { margin: 16px 0; }
+.mh-results-page .mh-results-breakdown summary { cursor: pointer; margin-bottom: 8px; }
+.mh-results-page .mh-results-links { display: flex; gap: 16px; margin-bottom: 24px; }
+.mh-results-page .mh-results-invoices, .mh-results-page .mh-results-completeness { margin-top: 28px; }
+.mh-results-page .mh-results-completeness li { margin: 6px 0; }
+.mh-results-page .mh-results-table { overflow-x: auto; max-width: 100%; }
+.mh-results-page .mh-results-table table { min-width: 680px; margin-bottom: 0; }
+.mh-results-page .mh-results-table td { vertical-align: top; }
+.mh-results-page .mh-results-table td:nth-child(3), .mh-results-page .mh-results-table td:nth-child(4) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mh-results-page .mh-results-table:focus-visible, .mh-results-page summary:focus-visible { outline: 2px solid var(--text-color); outline-offset: 2px; }
+@media (max-width: 767px) {
+ .mh-results-page .mh-results-summary, .mh-results-page .mh-results-three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+ .mh-results-page .mh-results-filters > .mh-results-company { flex-basis: 100%; }
+}

@@ -123,28 +123,17 @@ class TestSupplierHub(unittest.TestCase):
 		query.assert_not_called()
 
 	@patch("frappe.has_permission", return_value=True)
-	@patch("erpnext.buying.page.supplier_hub.supplier_data.readable")
-	@patch("erpnext.accounts.report.gross_profit.gross_profit.GrossProfitGenerator.prepare_invoice_query")
+	@patch("erpnext.stock.retail_costs.invoice_rows")
 	@patch("erpnext.stock.page.product_detail.product_detail.ProductCostLookup")
-	def test_profit_uses_historical_cost_returns_and_revenue_only_debit_notes(self, lookup, prepare, invoices, permission):
-		invoices.return_value = [frappe._dict(name="PERMITTED")]
-		query = prepare.return_value
-		query.where.return_value = query
-		query.run.return_value = [frappe._dict(item_code="BLUE", base_net_amount=200, is_debit_note=0),
+	def test_profit_uses_historical_cost_returns_and_revenue_only_debit_notes(self, lookup, invoices, permission):
+		invoices.return_value = ([frappe._dict(item_code="BLUE", base_net_amount=200, is_debit_note=0),
 			frappe._dict(item_code="BLUE", base_net_amount=-50, is_debit_note=0),
-			frappe._dict(item_code="BLUE", base_net_amount=10, is_debit_note=1),
-			frappe._dict(item_code="UNLINKED", base_net_amount=999, is_debit_note=0)]
+			frappe._dict(item_code="BLUE", base_net_amount=10, is_debit_note=1)], [])
 		lookup.return_value.cost.side_effect = [120, -30]
 		profits = linked_product_profit({"A": {"BLUE"}}, "Company", ["Stores"], self.start, self.end)
 		self.assertEqual(profits, {"BLUE": 70})
 		self.assertEqual(lookup.return_value.cost.call_count, 2)
-		invoices.assert_called_once_with("Sales Invoice", dict(company="Company", docstatus=1,
-			posting_date=["between", [self.start, self.end]], is_opening="No"), ["name"])
-		conditions = [str(c.args[0]) for c in query.where.call_args_list]
-		self.assertTrue(any("PERMITTED" in c and "name" in c for c in conditions))
-		self.assertTrue(any("Stores" in c and "warehouse" in c for c in conditions))
-		self.assertNotIn("UNLINKED", profits)
-		self.assertTrue(all(row.item_code == "BLUE" for row in lookup.call_args.args[0]))
+		invoices.assert_called_once_with("Company", self.start, self.end, {"BLUE"}, {"Stores"})
 
 	def test_missing_permissions_are_unavailable_not_zero_or_settled(self):
 		rows = inventory_rows(self.rows(permissions=(False, False, False)), {}, {}, {}, False)

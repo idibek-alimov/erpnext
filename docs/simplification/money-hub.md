@@ -1,6 +1,6 @@
 # Money Hub and profit reporting
 
-Status: In progress — M0 complete; M1a/b/c and M2a/b implemented and verified locally; M3a implemented locally; M3b next. Priority: first.
+Status: In progress — M0 complete; M1a/b/c and M2a/b implemented and verified locally; M3a/b/c implemented locally; M4a coverage audit next. Priority: first.
 Parent: [roadmap](README.md). Requirements: [D02–D06 and open questions](decisions.md).
 
 Evidence: [M0 baseline and source map](money-hub-baseline.md),
@@ -9,7 +9,9 @@ Evidence: [M0 baseline and source map](money-hub-baseline.md),
 [M1c account overview/balance implementation/checks](money-hub-m1c.md),
 [M2a authorized writes/native transfer implementation/checks](money-hub-m2a.md),
 [M2b owner funds/loans implementation/checks](money-hub-m2b.md),
-[M3a posted-results/visibility implementation/checks](money-hub-m3a.md).
+[M3a posted-results/visibility implementation/checks](money-hub-m3a.md),
+[M3b historical-cost/source implementation/checks](money-hub-m3b.md),
+[M3c Business results tab/checks](money-hub-m3c.md).
 Owner acceptance is pending; no production release or final-profit verification.
 
 ## Purpose and existing foundation
@@ -30,8 +32,9 @@ owner-account setup/activation is pending; final profit remains open.
 Home now uses M3a's native permission-scoped posted-results service. The earlier
 Quick Expense/Staff Settlement/tax-estimate formula has been replaced by recognized
 Income/Expense GL, with invoice sales and unmerged POS separate. Its labels explicitly
-say provisional posted results. Analytical invoice-date costs, payroll/tax completeness
-and final profit remain pending; see the M3a report.
+say provisional posted results. M3b now adds shared invoice-date historical costs with native evidence and explicit
+missing-data status. Payroll/tax completeness and final profit remain pending; see
+the linked reports.
 
 ## Proposed experience
 
@@ -111,10 +114,21 @@ Current phase progress:
   90 backend fixtures, 16 results-native cases, 22 owner-native regressions, 54 Node cases,
   4 RU/TG browser fixtures and actual-site read-only P&L reconciliation passed. Report
   eligibility is verified; full analytical cost/source/report row scope remains M3b.
-- M3b: next — invoice-date historical costs and source permissions across Delivery Notes,
-  partial billing, UOM, returns, bundles, nonstock and foreign/base paths; no guessed costs.
-- M3c: follows the reconciled service — Money Hub Business results tab and drilldown.
-- M3–M5 remain incomplete. Phase-specific UI checks do not finish M5.
+- M3b: implemented locally — shared native historical invoice costs across Delivery Notes,
+  partial billing, UOM, returns, bundles, nonstock and foreign/base paths; source/field/row
+  permissions, corrected consumers and native report/export checks. 120 backend cases,
+  26 native cases including CSV/XLSX, 54 Node regressions, 4 RU/TG Catalog/Detail browser
+  contexts and actual-site read-only reconciliation passed. Unknown costs remain explicit.
+- M3c: implemented locally — native-style Business results tab, independent company/period
+  controls, separate posted/invoice figures, full permitted account breakdown/native links,
+  explicit missing costs/completeness and company-correct toolbar dialog context. 122 backend
+  cases, 73 Node cases, four RU/TG desktop/mobile browser contexts and actual-site read-only
+  native P&L/navigation checks passed. Activation/owner acceptance remain pending.
+- M4a: next — audit expense/payroll/tax source-to-GL coverage, recognition versus payment,
+  unposted obligations and duplicate-backed documents before further integration. Trace
+  actual HRMS/custom staff and both tax settings paths under their owning app guidance;
+  produce a bounded reconciliation report and concrete follow-up. Q03/Q04/Q10 remain open.
+- M4/M5 remain incomplete. Phase-specific UI checks do not finish M5.
 
 M1 and Expense Desk improvements are the first practical work. M3 starts before new
 staff/tax screens are complete; M4 follows their verified data contracts. Manager

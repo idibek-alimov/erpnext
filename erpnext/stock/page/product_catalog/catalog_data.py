@@ -29,35 +29,29 @@ def stock_attention(quantities, has_variants):
 
 
 def _sales_rows(codes, warehouses, company, start, end):
-	from erpnext.accounts.report.gross_profit.gross_profit import GrossProfitGenerator
+	from erpnext.stock.retail_costs import invoice_rows
 
 	if not codes or not warehouses or not frappe.has_permission("Sales Invoice", "read"):
 		return []
-	invoices = frappe.get_list("Sales Invoice", filters={"company": company, "docstatus": 1,
-		"posting_date": ["between", [start, end]], "is_opening": "No"},
-		pluck="name", limit_page_length=0)
-	if not invoices:
-		return []
-	query = GrossProfitGenerator.__new__(GrossProfitGenerator)
-	query.filters = frappe._dict(company=company, from_date=start, to_date=end)
-	sii, si = frappe.qb.DocType("Sales Invoice Item"), frappe.qb.DocType("Sales Invoice")
-	return (query.prepare_invoice_query().where(sii.item_code.isin(codes))
-		.where(sii.warehouse.isin(warehouses)).where(si.name.isin(invoices)).run(as_dict=True))
+	return invoice_rows(company, start, end, set(codes), set(warehouses))[0]
 
 
 def _prices(codes, company, currency):
 	"""Show current list prices; stock value always comes directly from Bin."""
 	if not codes:
 		return {}, {}, []
-	prices = frappe.db.sql("""SELECT item_code, price_list, price_list_rate FROM `tabItem Price`
-		WHERE item_code IN %(codes)s AND currency = %(currency)s
-		AND price_list IN ('Standard Selling', 'Standard Buying')
-		AND (valid_from IS NULL OR valid_from <= %(today)s)
-		AND (valid_upto IS NULL OR valid_upto >= %(today)s)
-		ORDER BY modified DESC""", dict(codes=codes, currency=currency, today=today()), as_dict=True)
+	prices = []
+	if frappe.has_permission("Item Price", "read"):
+		prices = frappe.get_list("Item Price", filters={"item_code": ["in", codes], "currency": currency,
+			"price_list": ["in", ["Standard Selling", "Standard Buying"]]},
+			fields=["item_code", "price_list", "price_list_rate", "valid_from", "valid_upto"],
+			order_by="modified desc", limit_page_length=0)
 	sell, buy = {}, {}
-	for p in prices:
-		(sell if p.price_list == "Standard Selling" else buy).setdefault(p.item_code, flt(p.price_list_rate))
+	for price in prices:
+		if price.get("price_list_rate") is None or (price.get("valid_from") and getdate(price.valid_from) > getdate(today())) or (
+			price.get("valid_upto") and getdate(price.valid_upto) < getdate(today())):
+			continue
+		(sell if price.price_list == "Standard Selling" else buy).setdefault(price.item_code, flt(price.price_list_rate))
 	# Keep variant-specific rules separate rather than applying one variant's discount to the model.
 	rules = frappe.db.sql("""SELECT pri.item_code, prig.item_group, pr.priority,
 		pr.discount_percentage, pr.rate, pr.rate_or_discount
@@ -199,7 +193,11 @@ def build_catalog(search=None, item_group=None, status_filter=None, sort_by=None
 		costs = ProductCostLookup(visible_rows, company)
 		for row in visible_rows:
 			cost = 0 if row.is_debit_note else costs.cost(row)
-			profits[code_to_model[row.item_code]] += flt(row.base_net_amount) - flt(cost)
+			model = code_to_model[row.item_code]
+			if cost is None:
+				profits[model] = None
+			elif profits[model] is not None:
+				profits[model] += flt(row.base_net_amount) - flt(cost)
 	for p in visible:
 		p["gross_profit"] = profits[p["item_code"]]
 		p.pop("modified")

@@ -5,36 +5,12 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, date_diff, flt, get_first_day, getdate, nowtime, today
 
-from erpnext.accounts.report.gross_profit.gross_profit import GrossProfitGenerator
 from erpnext.stock.page.product_catalog.product_catalog import get_default_company, get_stores_warehouse
+from erpnext.stock.retail_costs import HistoricalCostLookup, invoice_rows
 
 
-class ProductCostLookup(GrossProfitGenerator):
-	"""Reuse ERPNext valuation without the report's invoice regrouping of returns."""
-
-	def __init__(self, rows, company):
-		self.filters = frappe._dict(company=company, to_date=today())
-		self.si_list = rows
-		self.sle = {}
-		self.average_buying_rate = {}
-		self.currency_precision = cint(frappe.db.get_default("currency_precision")) or 3
-		self.get_delivery_notes()
-		self.load_non_stock_items()
-		self.load_product_bundle()
-
-	def cost(self, row):
-		# Fallback valuation must be looked up at each transaction's date.
-		self.average_buying_rate = {}
-		row = row.copy()
-		self.filters.to_date = row.posting_date
-		if row.dn_detail:
-			row.item_row = row.dn_detail
-		bundles = self.product_bundles.get(
-			row.parenttype if row.update_stock else "Delivery Note", {}
-		).get(row.parent if row.update_stock else row.delivery_note, {})
-		if row.item_code in bundles:
-			return self.get_buying_amount_from_product_bundle(row, bundles[row.item_code])
-		return self.get_buying_amount(row, row.item_code)
+class ProductCostLookup(HistoricalCostLookup):
+	"""Compatibility import for the shared permission-scoped native valuation lookup."""
 
 
 def summarize_product_sales(rows):
@@ -47,7 +23,10 @@ def summarize_product_sales(rows):
 		d["sold"] += max(qty, 0)
 		d["returned"] += max(-qty, 0)
 		d["revenue"] += flt(row.base_net_amount)
-		d["profit"] += flt(row.base_net_amount) - flt(row.buying_amount)
+		if row.get("buying_amount") is None:
+			d["profit"] = None
+		elif d["profit"] is not None:
+			d["profit"] += flt(row.base_net_amount) - flt(row.buying_amount)
 		if row.parent not in d["invoices"]:
 			d["invoices"].append(row.parent)
 	return sorted(daily.values(), key=lambda d: d["date"], reverse=True)
@@ -69,7 +48,7 @@ def get_product_overview(item_code, period="month", warehouse=None, color=None, 
 	if warehouse and warehouse not in warehouses:
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 	scope_warehouses = [warehouse] if warehouse else warehouses
-	variants = frappe.get_all("Item", filters={"variant_of": item_code}, pluck="name")
+	variants = frappe.get_list("Item", filters={"variant_of": item_code}, pluck="name", limit_page_length=0)
 	codes = variants or [item_code]
 	if color:
 		codes = frappe.db.sql_list("""SELECT DISTINCT parent FROM `tabItem Variant Attribute`
@@ -88,24 +67,12 @@ def get_product_overview(item_code, period="month", warehouse=None, color=None, 
 	can_read_sales = frappe.has_permission("Sales Invoice", "read")
 	rows = []
 	if codes and scope_warehouses and can_read_sales:
-		# Resolve invoice permissions before reading their child rows.
-		invoices = frappe.get_list("Sales Invoice", filters={"company": company, "docstatus": 1,
-			"posting_date": ["between", [start, end]], "is_opening": "No"},
-			pluck="name", limit_page_length=0)
-		if invoices:
-			query = GrossProfitGenerator.__new__(GrossProfitGenerator)
-			query.filters = frappe._dict(company=company, from_date=start, to_date=end)
-			sii = frappe.qb.DocType("Sales Invoice Item")
-			si = frappe.qb.DocType("Sales Invoice")
-			rows = query.prepare_invoice_query().where(sii.item_code.isin(codes)).where(
-				sii.warehouse.isin(scope_warehouses)).where(si.name.isin(invoices)).run(as_dict=True)
-			costs = ProductCostLookup(rows, company)
-			for row in rows:
-				if row.is_debit_note:
-					row.qty = 0
-					row.buying_amount = 0
-				else:
-					row.buying_amount = costs.cost(row)
+		rows, _headers = invoice_rows(company, start, end, set(codes), set(scope_warehouses))
+		costs = ProductCostLookup(rows, company)
+		for row in rows:
+			if row.is_debit_note:
+				row.qty = 0
+			row.buying_amount = costs.cost(row)
 	daily = summarize_product_sales(rows)
 	variant_sold = {}
 	for row in rows:
@@ -120,13 +87,13 @@ def get_product_overview(item_code, period="month", warehouse=None, color=None, 
 	for d in daily:
 		key = d["date"][:7] if monthly else d["date"]
 		series[key][0] += d["revenue"]
-		series[key][1] += d["profit"]
+		series[key][1] = None if d["profit"] is None or series[key][1] is None else series[key][1] + d["profit"]
 	stock_by_code = {s.item_code: s for s in stock}
 	return dict(company=company, currency=frappe.get_cached_value("Company", company, "default_currency"),
 		warehouses=warehouses, from_date=str(chart_start), to_date=str(end), can_read_sales=can_read_sales,
 		stock=sum(flt(s.qty) for s in stock), stock_value=sum(flt(s.value) for s in stock),
 		sold=sum(d["sold"] for d in daily), returned=sum(d["returned"] for d in daily),
-		revenue=sum(d["revenue"] for d in daily), profit=sum(d["profit"] for d in daily),
+		revenue=sum(d["revenue"] for d in daily), profit=sum(d["profit"] for d in daily) if all(d["profit"] is not None for d in daily) else None,
 		daily=daily, labels=list(series), revenue_series=[v[0] for v in series.values()],
 		profit_series=[v[1] for v in series.values()], variant_sold=variant_sold,
 		variant_stock={c: flt(stock_by_code[c].qty) if c in stock_by_code else 0 for c in codes})
@@ -200,11 +167,11 @@ def get_product_detail(item_code, company=None):
 		frappe.throw(_("Товар {0} не найден").format(item_code))
 
 	if item.has_variants:
-		variants = frappe.get_all(
+		variants = frappe.get_list(
 			"Item",
 			filters={"variant_of": item_code},
 			fields=["name", "item_name", "image", "custom_short_code"],
-			order_by="creation asc",
+			order_by="creation asc", limit_page_length=0,
 		)
 	else:
 		variants = [
@@ -244,27 +211,23 @@ def get_product_detail(item_code, company=None):
 	):
 		attr_map.setdefault(a.parent, {})[a.attribute.lower()] = a.attribute_value
 
-	stock_map = {
-		b.item_code: flt(b.qty)
-		for b in frappe.db.sql(
-			"""SELECT item_code, SUM(actual_qty) qty FROM `tabBin`
-			WHERE item_code IN %(c)s GROUP BY item_code""",
-			{"c": codes},
-			as_dict=True,
-		)
-	}
+	warehouses = frappe.get_list("Warehouse", filters={"company": company, "is_group": 0}, pluck="name", limit_page_length=0)
+	stock_map = {}
+	if codes and warehouses and frappe.has_permission("Bin", "read"):
+		for row in frappe.get_list("Bin", filters={"item_code": ["in", codes], "warehouse": ["in", warehouses]},
+			fields=["item_code", "actual_qty"], limit_page_length=0):
+			if row.get("actual_qty") is not None:
+				stock_map[row.item_code] = stock_map.get(row.item_code, 0) + flt(row.actual_qty)
 
-	# Buying and Selling prices
+	# Current price metadata needs its own native read permission and currency.
 	sell_map, buy_map = {}, {}
-	for p in frappe.db.sql(
-		"""SELECT item_code, price_list, price_list_rate FROM `tabItem Price`
-		WHERE item_code IN %(c)s AND price_list IN ('Standard Selling', 'Standard Buying')
-		ORDER BY modified DESC""",
-		{"c": codes},
-		as_dict=True,
-	):
-		target = sell_map if p.price_list == "Standard Selling" else buy_map
-		target.setdefault(p.item_code, flt(p.price_list_rate))
+	if codes and frappe.has_permission("Item Price", "read"):
+		for price in frappe.get_list("Item Price", filters={"item_code": ["in", codes],
+			"price_list": ["in", ["Standard Selling", "Standard Buying"]],
+			"currency": frappe.get_cached_value("Company", company, "default_currency")},
+			fields=["item_code", "price_list", "price_list_rate"], order_by="modified desc", limit_page_length=0):
+			if price.get("price_list_rate") is not None:
+				(sell_map if price.price_list == "Standard Selling" else buy_map).setdefault(price.item_code, flt(price.price_list_rate))
 
 	# Effective Active Pricing Rules (Discounts)
 	active_item_rules = frappe.db.sql(
@@ -378,7 +341,7 @@ def get_product_detail(item_code, company=None):
 				"barcode": barcode_map.get(v.name) or v.custom_short_code or v.name,
 				"stock_qty": stock,
 				"sold_qty": 0,
-				"buying_price": buy_map.get(v.name, 0),
+				"buying_price": buy_map.get(v.name),
 				"selling_price": base_sell,
 				"discount": discount_info,
 			}

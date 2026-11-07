@@ -22,6 +22,20 @@ from erpnext.stock.utils import get_incoming_rate
 def execute(filters=None):
 	if not filters:
 		filters = frappe._dict()
+	if not filters.get("company"):
+		frappe.throw(_("Company is required."))
+	from erpnext.setup.retail_security import require_financial_access
+	from erpnext.stock.retail_costs import HistoricalCostLookup
+
+	require_financial_access(filters.company)
+	# Both report display and native CSV/Excel export execute this path. Check the
+	# selected invoice evidence before the classic report can coerce missing cost to 0.
+	query = GrossProfitGenerator.__new__(GrossProfitGenerator)
+	query.filters = filters
+	rows = query.prepare_invoice_query().run(as_dict=True)
+	lookup = HistoricalCostLookup(rows, filters.company)
+	if any(lookup.cost(row) is None for row in rows):
+		frappe.throw(_("Historical costs are missing or restricted. Review the source documents before running Gross Profit."))
 	filters.currency = frappe.get_cached_value("Company", filters.company, "default_currency")
 
 	gross_profit_data = GrossProfitGenerator(filters)
@@ -510,6 +524,9 @@ class GrossProfitGenerator:
 		self.average_buying_rate = {}
 		self.filters = frappe._dict(filters)
 		self.load_invoice_items()
+		from erpnext.stock.retail_costs import HistoricalCostLookup
+
+		self._verified_nonstock = HistoricalCostLookup(self.si_list, self.filters.company)
 		self.get_delivery_notes()
 
 		self.load_product_bundle()
@@ -715,21 +732,11 @@ class GrossProfitGenerator:
 		)
 
 	def get_returned_invoice_items(self):
-		returned_invoices = frappe.db.sql(
-			"""
-			select
-				si.name, si_item.item_code, si_item.stock_qty as qty, si_item.base_net_amount as base_amount, si.return_against
-			from
-				`tabSales Invoice` si, `tabSales Invoice Item` si_item
-			where
-				si.name = si_item.parent
-				and si.docstatus = 1
-				and si.is_return = 1
-				and si.posting_date between %(from_date)s and %(to_date)s
-		""",
-			{"from_date": self.filters.from_date, "to_date": self.filters.to_date},
-			as_dict=1,
-		)
+		from erpnext.stock.retail_costs import invoice_rows
+
+		rows, _headers = invoice_rows(self.filters.company, self.filters.from_date, self.filters.to_date)
+		returned_invoices = [frappe._dict(name=row.parent, item_code=row.item_code, qty=row.qty,
+			base_amount=row.base_net_amount, return_against=row.return_against) for row in rows if row.is_return]
 
 		self.returned_invoices = frappe._dict()
 		for inv in returned_invoices:
@@ -745,6 +752,11 @@ class GrossProfitGenerator:
 		return False
 
 	def get_buying_amount_from_product_bundle(self, row, product_bundle):
+		if hasattr(self, "_verified_nonstock") and row.get("parent") in self._verified_nonstock.headers:
+			value = self._verified_nonstock.cost(row)
+			if value is None:
+				frappe.throw(_("Historical bundle cost is missing or restricted."))
+			return flt(value, self.currency_precision)
 		buying_amount = 0.0
 		for packed_item in product_bundle:
 			if packed_item.get("parent_detail_docname") == row.item_row:
@@ -757,26 +769,22 @@ class GrossProfitGenerator:
 		return flt(buying_amount, self.currency_precision)
 
 	def calculate_buying_amount_from_sle(self, row, my_sle, parenttype, parent, item_row, item_code):
-		for i, sle in enumerate(my_sle):
+		for sle in my_sle:
 			# find the stock valution rate from stock ledger entry
 			if (
 				sle.voucher_type == parenttype
 				and parent == sle.voucher_no
 				and sle.voucher_detail_no == item_row
 			):
-				previous_stock_value = len(my_sle) > i + 1 and flt(my_sle[i + 1].stock_value) or 0.0
-
-				if previous_stock_value:
-					return abs(previous_stock_value - flt(sle.stock_value)) * flt(row.qty) / abs(flt(sle.qty))
-				else:
-					return flt(row.qty) * self.get_average_buying_rate(row, item_code)
-		return 0.0
+				if sle.get("stock_value_difference") is not None and flt(sle.qty):
+					return flt(row.qty) * flt(sle.stock_value_difference) / flt(sle.qty)
+		frappe.throw(_("Stock valuation is missing or restricted."))
 
 	def get_buying_amount(self, row, item_code):
 		# IMP NOTE
 		# stock_ledger_entries should already be filtered by item_code and warehouse and
 		# sorted by posting_date desc, posting_time desc
-		if item_code in self.non_stock_items and (row.project or row.cost_center):
+		if item_code in self.non_stock_items:
 			# Issue 6089-Get last purchasing rate for non-stock item
 			item_rate = self.get_last_purchase_rate(item_code, row)
 			return flt(row.qty) * item_rate
@@ -848,33 +856,14 @@ class GrossProfitGenerator:
 		return self.average_buying_rate[key]
 
 	def get_last_purchase_rate(self, item_code, row):
-		purchase_invoice = frappe.qb.DocType("Purchase Invoice")
-		purchase_invoice_item = frappe.qb.DocType("Purchase Invoice Item")
+		from erpnext.stock.retail_costs import HistoricalCostLookup
 
-		query = (
-			frappe.qb.from_(purchase_invoice_item)
-			.inner_join(purchase_invoice)
-			.on(purchase_invoice.name == purchase_invoice_item.parent)
-			.select(
-				purchase_invoice_item.base_rate / purchase_invoice_item.conversion_factor,
-			)
-			.where(purchase_invoice.docstatus == 1)
-			.where(purchase_invoice.posting_date <= self.filters.to_date)
-			.where(purchase_invoice_item.item_code == item_code)
-			.where(purchase_invoice.is_return == 0)
-			.where(purchase_invoice_item.parenttype == "Purchase Invoice")
-		)
-
-		if row.project:
-			query = query.where(purchase_invoice_item.project == row.project)
-
-		if row.cost_center:
-			query = query.where(purchase_invoice_item.cost_center == row.cost_center)
-
-		query = query.orderby(purchase_invoice.posting_date, order=frappe.qb.desc).limit(1)
-		last_purchase_rate = query.run()
-
-		return flt(last_purchase_rate[0][0]) if last_purchase_rate else 0
+		if not hasattr(self, "_verified_nonstock"):
+			self._verified_nonstock = HistoricalCostLookup(self.si_list, self.filters.company)
+		value = self._verified_nonstock.cost(row)
+		if value is None:
+			frappe.throw(_("Historical purchase cost is missing or restricted."))
+		return value / flt(row.qty) if flt(row.qty) else 0
 
 	def load_invoice_items(self):
 		self.si_list = []
@@ -904,6 +893,15 @@ class GrossProfitGenerator:
 		self.si_list += ret_invoice_query.run(as_dict=True)
 
 	def prepare_invoice_query(self):
+		from frappe.model import get_permitted_fields
+
+		for doctype, parenttype, required in (("Sales Invoice", None,
+			("posting_date", "posting_time", "project", "update_stock", "customer", "customer_group", "customer_name",
+				"territory", "is_debit_note", "base_net_total", "is_return")), ("Sales Invoice Item", "Sales Invoice",
+			("item_code", "item_name", "description", "warehouse", "item_group", "brand", "so_detail", "sales_order",
+				"dn_detail", "delivery_note", "stock_qty", "base_net_rate", "base_net_amount", "cost_center", "serial_and_batch_bundle"))):
+			if not set(required).issubset(get_permitted_fields(doctype, parenttype=parenttype, permission_type="read")):
+				frappe.throw(_("Required gross profit report fields are not readable."), frappe.PermissionError)
 		SalesInvoice = frappe.qb.DocType("Sales Invoice")
 		SalesInvoiceItem = frappe.qb.DocType("Sales Invoice Item")
 		Item = frappe.qb.DocType("Item")
@@ -920,6 +918,17 @@ class GrossProfitGenerator:
 		)
 
 		query = self.apply_common_filters(query, SalesInvoice, SalesInvoiceItem, SalesTeam, Item)
+		# Resolve native row permissions before reading joined child/financial fields.
+		filters = {"docstatus": 1, "is_opening": "No"}
+		if self.filters.company:
+			filters["company"] = self.filters.company
+		if self.filters.from_date and self.filters.to_date:
+			filters["posting_date"] = ["between", [self.filters.from_date, self.filters.to_date]]
+		names = frappe.get_list("Sales Invoice", filters=filters, pluck="name", limit_page_length=0)
+		items = frappe.get_list("Item", pluck="name", limit_page_length=0)
+		warehouses = frappe.get_list("Warehouse", filters={"company": self.filters.company}, pluck="name", limit_page_length=0)
+		query = query.where(SalesInvoice.name.isin(names or [""])).where(Item.name.isin(items or [""]))
+		query = query.where(SalesInvoiceItem.warehouse.isin(warehouses) | SalesInvoiceItem.warehouse.isnull() | (SalesInvoiceItem.warehouse == ""))
 
 		query = query.select(
 			SalesInvoiceItem.parenttype,
@@ -1168,28 +1177,11 @@ class GrossProfitGenerator:
 	def get_stock_ledger_entries(self, item_code, warehouse):
 		if item_code and warehouse:
 			if (item_code, warehouse) not in self.sle:
-				sle = qb.DocType("Stock Ledger Entry")
-				res = (
-					qb.from_(sle)
-					.select(
-						sle.item_code,
-						sle.voucher_type,
-						sle.voucher_no,
-						sle.voucher_detail_no,
-						sle.stock_value,
-						sle.warehouse,
-						sle.actual_qty.as_("qty"),
-					)
-					.where(
-						(sle.company == self.filters.company)
-						& (sle.item_code == item_code)
-						& (sle.warehouse == warehouse)
-						& (sle.is_cancelled == 0)
-					)
-					.orderby(sle.item_code)
-					.orderby(sle.warehouse, sle.posting_datetime, sle.creation, order=Order.desc)
-					.run(as_dict=True)
-				)
+				res = frappe.get_list("Stock Ledger Entry", filters={"company": self.filters.company,
+					"item_code": item_code, "warehouse": warehouse, "is_cancelled": 0},
+					fields=["item_code", "voucher_type", "voucher_no", "voucher_detail_no", "stock_value",
+						"warehouse", "actual_qty as qty", "stock_value_difference"],
+					order_by="posting_date desc, posting_time desc, creation desc", limit_page_length=0)
 
 				self.sle[(item_code, warehouse)] = res
 

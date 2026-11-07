@@ -34,8 +34,8 @@ def current_revision(scope=None):
 
 	read_permissions = {dt: bool(frappe.has_permission(dt, "read")) for dt in (
 		"Supplier", "Company", "Warehouse", "Bin", "Item", "Purchase Invoice", "Purchase Receipt",
-		"Payment Entry", "Journal Entry", "Contact", "Address", "Item Price", "Price List", "Sales Invoice")}
-	policy = dict(version=3, scope=scope, user=frappe.session.user, roles=sorted(frappe.get_roles()), read_permissions=read_permissions,
+		"Payment Entry", "Journal Entry", "Contact", "Address", "Item Price", "Price List", "Sales Invoice", "Stock Ledger Entry", "Delivery Note")}
+	policy = dict(version=4, scope=scope, user=frappe.session.user, roles=sorted(frappe.get_roles()), read_permissions=read_permissions,
 		user_permissions=get_user_permissions(), date=today(), window=int(time.time() // REUSE_SECONDS),
 		create_payment=bool(frappe.has_permission("Payment Entry", "create")),
 		submit_payment=bool(frappe.has_permission("Payment Entry", "submit")),

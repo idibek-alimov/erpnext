@@ -99,6 +99,24 @@ class TestBusinessResults(unittest.TestCase):
 		with self.assertRaises(frappe.PermissionError):
 			self.ledger()
 
+	def test_native_navigation_checks_report_role_reference_and_disabled_state(self):
+		self.f.get_doc.return_value = Mock(disabled=0, ref_doctype="GL Entry", is_permitted=Mock(return_value=True))
+		self.assertTrue(all(results._navigation().values()))
+		self.f.has_permission.assert_any_call("GL Entry", "report")
+		self.f.get_doc.return_value.disabled = 1
+		out = results._navigation()
+		self.assertFalse(out["general_ledger"])
+		self.assertTrue(out["account"])
+
+	def test_native_report_role_and_reference_permissions_do_not_follow_result_access(self):
+		doc = Mock(disabled=0, ref_doctype="GL Entry", is_permitted=Mock(return_value=False))
+		self.f.get_doc.return_value = doc
+		self.assertFalse(results._navigation()["profit_and_loss"])
+		doc.is_permitted.return_value = True
+		self.f.has_permission.side_effect = lambda doctype, kind: kind == "read"
+		self.assertFalse(results._navigation()["general_ledger"])
+		self.assertTrue(results._navigation()["sales_invoice"])
+
 	def test_future_reversed_and_unbounded_ranges_rejected_before_queries(self):
 		with patch.object(results, "require_financial_access"), patch.object(results, "today", return_value="2026-11-07"):
 			for start, end in (("2026-11-08", "2026-11-08"), ("2026-11-07", "2026-11-01"), ("2020-01-01", "2026-11-07")):

@@ -33,138 +33,35 @@ def get_supplier_details(supplier, company=None):
 	require_financial_access(company)
 	if not supplier:
 		return {}
-
 	company = company or get_default_company()
-	currency = frappe.db.get_value("Company", company, "default_currency") or "TJS"
+	require_financial_access(company)
+	doc = frappe.get_doc("Supplier", supplier)
+	doc.check_permission("read")
+	doc.apply_fieldlevel_read_permissions()
+	from erpnext.buying.page.supplier_hub.supplier_data import load_supplier_context, readable
 
-	# 1. Supplier Doc info
-	supp = frappe.db.get_value(
-		"Supplier",
-		supplier,
-		["name", "supplier_name", "supplier_group", "mobile_no", "email_id", "country"],
-		as_dict=True,
-	)
-	if not supp:
-		frappe.throw(_("Supplier {0} not found").format(supplier))
-
-	# 2. Invoices list
-	invoices = frappe.db.sql(
-		"""
-		SELECT 
-			name, posting_date, bill_no, grand_total, outstanding_amount, status
-		FROM `tabPurchase Invoice`
-		WHERE supplier = %(supplier)s AND docstatus = 1 AND company = %(company)s
-		ORDER BY posting_date DESC, creation DESC
-		LIMIT 50
-		""",
-		{"supplier": supplier, "company": company},
-		as_dict=True,
-	)
-
-	# 3. Payments list
-	payments = frappe.db.sql(
-		"""
-		SELECT 
-			name, posting_date, mode_of_payment, paid_amount, reference_no, reference_date, status
-		FROM `tabPayment Entry`
-		WHERE party_type = 'Supplier' AND party = %(supplier)s AND docstatus = 1 AND company = %(company)s
-		ORDER BY posting_date DESC, creation DESC
-		LIMIT 50
-		""",
-		{"supplier": supplier, "company": company},
-		as_dict=True,
-	)
-
-	# 4. Products list
-	# Items from PI, PR, and Item Default
-	item_rows = frappe.db.sql(
-		"""
-		SELECT DISTINCT pii.item_code
-		FROM `tabPurchase Invoice Item` pii
-		JOIN `tabPurchase Invoice` pi ON pi.name = pii.parent
-		WHERE pi.supplier = %(supplier)s AND pi.docstatus = 1 AND pi.company = %(company)s AND pii.item_code IS NOT NULL
-		UNION
-		SELECT DISTINCT pri.item_code
-		FROM `tabPurchase Receipt Item` pri
-		JOIN `tabPurchase Receipt` pr ON pr.name = pri.parent
-		WHERE pr.supplier = %(supplier)s AND pr.docstatus = 1 AND pr.company = %(company)s AND pri.item_code IS NOT NULL
-		UNION
-		SELECT DISTINCT parent as item_code
-		FROM `tabItem Default`
-		WHERE default_supplier = %(supplier)s
-		""",
-		{"supplier": supplier, "company": company},
-		as_dict=True,
-	)
-
-	direct_items = [r.item_code for r in item_rows if r.item_code]
-	all_items = set(direct_items)
-
-	if direct_items:
-		variants = frappe.db.sql(
-			"SELECT name, variant_of FROM `tabItem` WHERE variant_of IN %(items)s AND disabled = 0",
-			{"items": direct_items},
-			as_dict=True,
-		)
-		for v in variants:
-			all_items.add(v.name)
-
-		parents = frappe.db.sql(
-			"SELECT variant_of FROM `tabItem` WHERE name IN %(items)s AND variant_of IS NOT NULL AND variant_of != ''",
-			{"items": direct_items},
-			as_dict=True,
-		)
-		for p in parents:
-			all_items.add(p.variant_of)
-
-	products = []
-	if all_items:
-		items_data = frappe.db.sql(
-			"""
-			SELECT 
-				i.name as item_code, i.item_name, i.item_group, i.image, i.custom_short_code,
-				i.has_variants, i.variant_of, i.stock_uom,
-				COALESCE(b.actual_qty, 0) as stock_qty,
-				COALESCE(b.stock_value, 0) as stock_value,
-				COALESCE(b.valuation_rate, 0) as valuation_rate
-			FROM `tabItem` i
-			LEFT JOIN (
-				SELECT item_code, SUM(actual_qty) as actual_qty, SUM(stock_value) as stock_value,
-				       AVG(valuation_rate) as valuation_rate
-				FROM `tabBin`
-				WHERE item_code IN %(items)s
-				GROUP BY item_code
-			) b ON b.item_code = i.name
-			WHERE i.name IN %(items)s AND i.disabled = 0
-			ORDER BY b.actual_qty DESC, i.item_name ASC
-			""",
-			{"items": list(all_items)},
-			as_dict=True,
-		)
-
-		# Fetch selling prices
-		selling_prices = frappe.db.sql(
-			"""
-			SELECT item_code, price_list_rate
-			FROM `tabItem Price`
-			WHERE item_code IN %(items)s AND price_list = 'Standard Selling'
-			""",
-			{"items": list(all_items)},
-			as_dict=True,
-		)
-		sp_map = {p.item_code: flt(p.price_list_rate) for p in selling_prices}
-
-		for it in items_data:
-			it["selling_price"] = sp_map.get(it["item_code"], 0.0)
-			products.append(it)
-
-	return {
-		"supplier": supp,
-		"invoices": invoices,
-		"payments": payments,
-		"products": products,
-		"currency": currency,
-	}
+	context = load_supplier_context(company, "month", None, supplier, include_stock=True, include_payables=False)
+	invoices = readable("Purchase Invoice", {"company": company, "supplier": supplier, "docstatus": 1},
+		["name", "posting_date", "bill_no", "grand_total", "outstanding_amount", "status", "currency"])
+	payments = readable("Payment Entry", {"company": company, "party_type": "Supplier", "party": supplier, "docstatus": 1},
+		["name", "posting_date", "mode_of_payment", "paid_amount", "reference_no", "reference_date", "status", "paid_from_account_currency"])
+	products = [dict(item, item_code=code,
+		stock_qty=flt(context["stock"].get(code, {}).get("qty")) if context["can_stock"] else None,
+		stock_value=flt(context["stock"].get(code, {}).get("value")) if context["can_stock"] else None,
+		valuation_rate=(flt(context["stock"].get(code, {}).get("value")) / flt(context["stock"].get(code, {}).get("qty"))
+			if flt(context["stock"].get(code, {}).get("qty")) else None), selling_price=None)
+		for code, item in context["items"].items()]
+	if products and frappe.has_permission("Item Price", "read"):
+		prices = readable("Item Price", {"item_code": ["in", [row["item_code"] for row in products]],
+			"price_list": "Standard Selling", "currency": frappe.get_cached_value("Company", company, "default_currency")},
+			["item_code", "price_list_rate"])
+		by_code = {row.item_code: row.get("price_list_rate") for row in prices}
+		for row in products:
+			row["selling_price"] = by_code.get(row["item_code"])
+	return dict(supplier={field: doc.get(field) for field in ("name", "supplier_name", "supplier_group", "mobile_no", "email_id", "country")},
+		invoices=sorted(invoices, key=lambda row: (str(row.get("posting_date") or ""), row.name), reverse=True)[:50],
+		payments=sorted(payments, key=lambda row: (str(row.get("posting_date") or ""), row.name), reverse=True)[:50],
+		products=products, currency=frappe.get_cached_value("Company", company, "default_currency"))
 
 
 @frappe.whitelist()
@@ -177,24 +74,18 @@ def get_payment_options(company=None):
 @frappe.whitelist()
 def get_unpaid_invoices(supplier, company=None):
 	"""Returns list of submitted purchase invoices with outstanding debt for a supplier."""
+	from erpnext.setup.retail_security import require_financial_access
+
+	require_financial_access(company)
 	if not supplier:
 		return []
-
 	company = company or get_default_company()
-	invoices = frappe.db.sql(
-		"""
-		SELECT name, posting_date, bill_no, grand_total, outstanding_amount
-		FROM `tabPurchase Invoice`
-		WHERE supplier = %(supplier)s AND docstatus = 1 AND company = %(company)s AND outstanding_amount > 0
-		ORDER BY posting_date DESC, creation DESC
-		""",
-		{"supplier": supplier, "company": company},
-		as_dict=True,
-	)
-	for inv in invoices:
-		inv["grand_total"] = flt(inv["grand_total"], 2)
-		inv["outstanding_amount"] = flt(inv["outstanding_amount"], 2)
-	return invoices
+	require_financial_access(company)
+	frappe.get_doc("Supplier", supplier).check_permission("read")
+	return frappe.get_list("Purchase Invoice", filters={"supplier": supplier, "company": company,
+		"docstatus": 1, "outstanding_amount": [">", 0]},
+		fields=["name", "posting_date", "grand_total", "outstanding_amount", "due_date", "currency"],
+		order_by="posting_date asc, name asc", limit_page_length=0)
 
 
 @frappe.whitelist(methods=["POST"])

@@ -9008,3 +9008,8 @@ Owner Contributions Account,Суратҳисоби маблағи воридка
 Owner Withdrawals Account,Суратҳисоби маблағи гирифтаи соҳиб
 Owner Loan Account,Суратҳисоби қарзи соҳиб
 Optional. Use a dedicated liability account for money the business must repay to the owner.,"Ихтиёрӣ. Суратҳисоби алоҳидаи уҳдадориҳо барои маблағе, ки тиҷорат бояд ба соҳиб баргардонад."
+Historical costs are missing or restricted. Review the source documents before running Gross Profit.,Арзиши таърихӣ нест ё дастрасӣ маҳдуд аст. Пеш аз ҳисоботи фоидаи умумӣ ҳуҷҷатҳои аслиро санҷед.
+Historical purchase cost is missing or restricted.,Арзиши таърихии харид нест ё дастрасӣ маҳдуд аст.
+Historical bundle cost is missing or restricted.,Арзиши таърихии маҷмуа нест ё дастрасӣ маҳдуд аст.
+Stock valuation is missing or restricted.,Арзиши баҳисобгирии захираҳо нест ё дастрасӣ маҳдуд аст.
+Required gross profit report fields are not readable.,Ба майдонҳои ҳатмии ҳисоботи фоидаи умумӣ дастрасӣ нест.

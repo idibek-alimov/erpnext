@@ -113,6 +113,21 @@ def _sales(company, start, end):
 	return result
 
 
+def _navigation():
+	"""Offer native drilldowns only when their native entry gates allow them."""
+	links = {"account": bool(frappe.has_permission("Account", "read")),
+		"sales_invoice": bool(frappe.has_permission("Sales Invoice", "read"))}
+	for key, report in (("general_ledger", "General Ledger"),
+		("profit_and_loss", "Profit and Loss Statement")):
+		try:
+			doc = frappe.get_doc("Report", report)
+			links[key] = bool(not doc.disabled and doc.is_permitted()
+				and frappe.has_permission(doc.ref_doctype, "report"))
+		except frappe.DoesNotExistError:
+			links[key] = False
+	return links
+
+
 def read_results(company, from_date=None, to_date=None):
 	require_financial_access(company)
 	end = getdate(to_date or today())
@@ -124,15 +139,23 @@ def read_results(company, from_date=None, to_date=None):
 	_required(doc.as_dict(), ("default_currency",))
 	if "default_finance_book" not in doc.as_dict():
 		frappe.throw(_("Company finance book read permission is required."), frappe.PermissionError)
-	ledger = _ledger(company, start, end, doc.default_finance_book, get_currency_precision() or 2)
+	precision = get_currency_precision() or 2
+	ledger = _ledger(company, start, end, doc.default_finance_book, precision)
 	sales = _sales(company, start, end)
+	from erpnext.stock.retail_costs import invoice_costs
+
+	analytical = invoice_costs(company, start, end, sales["net_sales"])
+	limitations = ["permission_scoped", "unposted_costs_not_included", "payroll_coverage_unverified",
+		"tax_coverage_unverified", "offline_pos_unknown", "store_allocation_unconfigured"]
+	if analytical["cogs"] is None:
+		limitations.append("invoice_date_cogs_not_reconciled")
 	return dict(company=company, currency=doc.default_currency, from_date=str(start), to_date=str(end),
+		navigation=_navigation(), currency_precision=precision,
 		basis="posted_general_ledger", finance_book=doc.default_finance_book or None,
-		ledger=ledger, invoice_sales=sales,
+		ledger=ledger, invoice_sales=sales, invoice_costs=analytical,
 		reconciliation=dict(income_less_invoice_sales=ledger["income"] - sales["net_sales"] if sales["net_sales"] is not None else None,
-			invoice_date_cogs=None, invoice_date_gross_profit=None),
+			invoice_date_cogs=analytical["cogs"], invoice_date_gross_profit=analytical["gross_profit"]),
 		completeness=dict(status="provisional", scope="native_permitted_accounts_and_ledger_rows", final_profit=False,
-			limitations=["permission_scoped", "unposted_costs_not_included", "payroll_coverage_unverified",
-				"tax_coverage_unverified", "offline_pos_unknown", "invoice_date_cogs_not_reconciled", "store_allocation_unconfigured"]),
+			limitations=limitations),
 		source_policy="GL only; custom expense/payroll totals and tax estimates are not added. "
 			"Includes opening P&L entries and the default/blank finance books, excludes cancelled and period-closing GL.")

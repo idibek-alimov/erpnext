@@ -287,7 +287,7 @@ class ProductDetailApp {
 			<tr data-item-code="${frappe.utils.escape_html(s.item_code)}">
 				<td><b>${frappe.utils.escape_html(s.size)}</b></td>
 				<td class="text-muted">${frappe.utils.escape_html(s.short_code)}</td>
-				<td class="text-right">${format_currency(s.buying_price, cur)}</td>
+				<td class="text-right">${s.buying_price === null || s.buying_price === undefined ? "—" : format_currency(s.buying_price, cur)}</td>
 				<td class="text-right">${priceDisplay}</td>
 				${
 					isReco
@@ -696,7 +696,7 @@ class ProductDetailApp {
 		const o = this.overview,
 			L = this.label.bind(this),
 			esc = frappe.utils.escape_html;
-		const money = (n) => format_currency(n, o.currency);
+		const money = (n) => n === null || n === undefined ? "—" : format_currency(n, o.currency);
 		const qty = (n) => format_number(n, null, 2);
 		const now = L("Current balance", "Текущий остаток", "Бақияи ҷорӣ");
 		const no_access = L("No sales access", "Нет доступа к продажам", "Дастрасӣ ба фурӯш нест");
@@ -720,7 +720,9 @@ class ProductDetailApp {
 			[
 				L("Gross profit", "Валовая прибыль", "Фоидаи умумӣ"),
 				o.can_read_sales ? money(o.profit) : "—",
-				o.can_read_sales ? `${this.t("revenue")}: ${money(o.revenue)}` : no_access,
+				o.can_read_sales ? (o.profit === null
+					? L("Historical cost is missing or restricted", "Историческая себестоимость отсутствует или недоступна", "Арзиши таърихӣ нест ё дастрасӣ маҳдуд аст")
+					: `${this.t("revenue")}: ${money(o.revenue)}`) : no_access,
 			],
 			[
 				L("Stock value", "Стоимость остатка", "Арзиши бақия"),
@@ -795,10 +797,10 @@ class ProductDetailApp {
 					labels: o.labels,
 					datasets: [
 						{ name: this.t("revenue"), values: o.revenue_series },
-						{
+						...(o.profit_series.every((value) => value !== null) ? [{
 							name: L("Gross profit", "Валовая прибыль", "Фоидаи умумӣ"),
 							values: o.profit_series,
-						},
+						}] : []),
 					],
 				},
 				type: "line",
@@ -816,7 +818,7 @@ class ProductDetailApp {
 		const o = this.overview,
 			L = this.label.bind(this),
 			esc = frappe.utils.escape_html;
-		const money = (n) => format_currency(n, o.currency);
+		const money = (n) => n === null || n === undefined ? "—" : format_currency(n, o.currency);
 		const $history = this.$body.find(".pd-sales-history");
 		if (!o.can_read_sales || !o.daily.length) {
 			$history.html(

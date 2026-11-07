@@ -1,6 +1,6 @@
 # ERPNext simplification roadmap
 
-Updated: 2026-11-07. Status: implementation started; Money Hub M0, M1a/b/c, M2a/b and M3a completed locally, M3b next; owner review/activation pending.
+Updated: 2026-11-07. Status: implementation started; Money Hub M0, M1a/b/c, M2a/b and M3a/b/c completed locally, M4a coverage audit next; owner review/activation pending.
 
 For the current task, implementation/verification status, test queue and new-chat
 instructions, start with the root
@@ -104,8 +104,9 @@ shortage/loss approval or posting rights.
 
 Money Hub is **In progress**: M0 complete, M1a/b/c and M2a/b implemented/checked locally,
 M3a posted results/financial visibility are also implemented locally; see the
-[M3a report](money-hub-m3a.md). M3b invoice-date costs/source scope is next, followed by
-M3c's Money Hub results tab. Owner acceptance and intended-site activation remain pending.
+[M3a report](money-hub-m3a.md). M3b shared historical costs/source scope are implemented locally; see the
+[M3b report](money-hub-m3b.md). M3c's Money Hub results tab is implemented and checked locally;
+see the [M3c report](money-hub-m3c.md). M4a expense/payroll/tax coverage audit is next. Owner acceptance and intended-site activation remain pending.
 See its [baseline](money-hub-baseline.md), [M1a report](money-hub-m1a.md),
 [M1b report](money-hub-m1b.md) and [M1c report](money-hub-m1c.md).
 The other eight workstreams remain **Planned** under this new roadmap.
@@ -127,10 +128,10 @@ or live financial transactions are necessary to validate these planning document
 
 ## Next task, when instructed
 
-Continue Money Hub M3b: reconcile the invoice-date historical-cost bridge and native
-SI/PI/warehouse/company permissions, including classic cost/report/export and legacy
-product/supplier metadata paths. Preserve the M3a posted-results service, provisional
-Home labels and D06 manager policy. Build the Money Hub results tab in M3c after the
-service/source reconciliation. Final payroll/tax allocation and net profit remain M4.
-Read the root tracker and M3a report for evidence and precise boundaries. Update this
-roadmap, the Money Hub plan and root tracker after implementation/testing.
+Continue Money Hub M4a: audit expense/payroll/tax source-to-GL coverage and create the
+reconciliation/implementation follow-up. Trace actual custom Staff Settlement and native
+HRMS claims/advances/payroll, supplier reimbursement/payment and both existing tax
+settings paths. Preserve M3a/b/c's GL-only posted results and separate invoice analysis;
+identify missing/unposted/duplicate-backed costs without inventing tax or allocation
+rules. Q03/Q04/Q10 remain open before final net profit. Read owning app guidance, root
+tracker and linked reports; update the tracker and plans with actual checks and next work.

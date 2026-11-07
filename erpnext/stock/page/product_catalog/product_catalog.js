@@ -117,7 +117,7 @@ class ProductCatalogApp {
 		return format_number(value, null, Number.isInteger(flt(value)) ? 0 : 2);
 	}
 	money(value) {
-		return format_currency(value, this.data.currency);
+		return value === null || value === undefined ? "—" : format_currency(value, this.data.currency);
 	}
 	setup_actions() {
 		this.page.set_primary_action(
@@ -301,7 +301,9 @@ class ProductCatalogApp {
 					this.data.to_date
 			  )}`
 			: this.t("all");
-		this.wrapper.find(".pc-scope-note").text(`${dates}. ${this.t("scope_note")}`);
+		const missing_cost = this.data.can_read_sales && this.data.items.some((item) => item.gross_profit === null);
+		const cost_note = missing_cost ? (this.lang ? "Арзиши таърихӣ нест ё дастрасӣ маҳдуд аст." : "Историческая себестоимость отсутствует или недоступна.") : "";
+		this.wrapper.find(".pc-scope-note").text(`${dates}. ${this.t("scope_note")} ${cost_note}`);
 		this.render_table();
 		this.render_pagination();
 	}

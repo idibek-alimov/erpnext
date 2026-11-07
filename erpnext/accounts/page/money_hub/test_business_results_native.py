@@ -76,7 +76,7 @@ class TestBusinessResultsNative(FrappeTestCase):
 		native = execute(filters)
 		self.assertEqual(native[4][-1]["value"], out["ledger"]["result"])
 		self.assertFalse(out["completeness"]["final_profit"])
-		self.assertIsNone(out["reconciliation"]["invoice_date_gross_profit"])
+		self.assertEqual(out["reconciliation"]["invoice_date_gross_profit"], 0)
 
 	def test_financing_transfers_advances_and_stock_purchases_do_not_expense_cash(self):
 		owner_money.configure(self.company, create_accounts=True)
@@ -135,7 +135,7 @@ class TestBusinessResultsNative(FrappeTestCase):
 		from erpnext.setup.page.retail_home import retail_home
 		from erpnext.stock.page.product_catalog.product_catalog import get_catalog
 		from erpnext.stock.page.product_detail.product_detail import get_product_detail, get_product_overview
-		from erpnext.buying.page.supplier_hub.supplier_hub import get_supplier_hub_data
+		from erpnext.buying.page.supplier_hub.supplier_hub import get_supplier_hub_data, get_supplier_details, get_unpaid_invoices
 		from erpnext.buying.page.supplier_detail.supplier_detail import get_supplier_detail, get_invoice_items
 		user = self.user("Retail Cashier")
 		for actor in (user, "Guest"):
@@ -144,7 +144,8 @@ class TestBusinessResultsNative(FrappeTestCase):
 			for function, args in ((money_hub.get_business_results, dict(company=self.company)),
 				(retail_home.get_pnl, dict(company=self.company)), (retail_home.get_business_pulse, dict(company=self.company)),
 				(get_catalog, {}), (get_product_detail, dict(item_code="secret")), (get_product_overview, dict(item_code="secret")),
-				(get_supplier_hub_data, {}), (get_supplier_detail, dict(supplier="secret")),
+				(get_supplier_hub_data, {}), (get_supplier_details, dict(supplier="secret")),
+				(get_unpaid_invoices, dict(supplier="secret")), (get_supplier_detail, dict(supplier="secret")),
 				(get_invoice_items, dict(supplier="secret", invoice="secret", company=self.company))):
 				with self.subTest(actor=actor, api=function.__name__), self.assertRaises(frappe.PermissionError):
 					unwrap(function)(**args)

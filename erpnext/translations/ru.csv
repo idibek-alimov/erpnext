@@ -9012,3 +9012,8 @@ Owner Contributions Account,Счёт взносов владельца
 Owner Withdrawals Account,Счёт изъятий владельца
 Owner Loan Account,Счёт займа владельца
 Optional. Use a dedicated liability account for money the business must repay to the owner.,"Необязательно. Отдельный счёт обязательств для денег, которые бизнес должен вернуть владельцу."
+Historical costs are missing or restricted. Review the source documents before running Gross Profit.,Историческая себестоимость отсутствует или недоступна. Проверьте исходные документы перед запуском отчёта о валовой прибыли.
+Historical purchase cost is missing or restricted.,Историческая стоимость закупки отсутствует или недоступна.
+Historical bundle cost is missing or restricted.,Историческая себестоимость комплекта отсутствует или недоступна.
+Stock valuation is missing or restricted.,Учётная стоимость запасов отсутствует или недоступна.
+Required gross profit report fields are not readable.,Нет доступа к обязательным полям отчёта о валовой прибыли.

@@ -10,10 +10,10 @@ frappe.pages["money-hub"].on_page_load = function (wrapper) {
 	});
 
 	page.set_primary_action(is_tg ? __("Хароҷотҳо") : __("Расходы"), () => frappe.set_route("expense-desk"));
-	page.add_inner_button(is_tg ? __("Интиқол") : __("Перевод"), () => wrapper.money_hub_app?.open_transfer());
-	page.add_menu_item(is_tg ? __("Маблағи соҳиб") : __("Средства владельца"), () => wrapper.money_hub_app?.open_owner_money());
+	page.add_inner_button(is_tg ? __("Интиқол") : __("Перевод"), () => wrapper.money_hub_app?.open_money_action("open_transfer"));
+	page.add_menu_item(is_tg ? __("Маблағи соҳиб") : __("Средства владельца"), () => wrapper.money_hub_app?.open_money_action("open_owner_money"));
 	page.add_inner_button(is_tg ? __("Навсозӣ") : __("Обновить"), () => wrapper.money_hub_app?.load());
-	if (frappe.model.can_create("Money Wallet")) page.add_menu_item(is_tg ? __("Ҳамёни нав") : __("Создать кошелёк"), () => wrapper.money_hub_app?.open_creator());
+	if (frappe.model.can_create("Money Wallet")) page.add_menu_item(is_tg ? __("Ҳамёни нав") : __("Создать кошелёк"), () => wrapper.money_hub_app?.open_money_action("open_creator"));
 	page.add_menu_item(is_tg ? __("Танзими ҳамёнҳо") : __("Настройка кошельков"), () => frappe.set_route("List", "Money Wallet"));
 	for (const [ru, tg, route] of [
 		["Налоги", "Андозҳо", "tax-desk"], ["Поставщики", "Таъминкунандагон", "supplier-hub"],
@@ -42,7 +42,7 @@ frappe.pages["money-hub"].on_page_load = function (wrapper) {
 
 frappe.pages["money-hub"].on_page_show = function (wrapper) {
 	const route = frappe.get_route();
-	const target_tab = (route && route[1] === "ledger") ? "ledger" : "accounts";
+	const target_tab = ["ledger", "results"].includes(route?.[1]) ? route[1] : "accounts";
 	if (wrapper.money_hub_app) {
 		wrapper.money_hub_app.active_tab = target_tab;
 		wrapper.money_hub_app.load();
@@ -62,7 +62,11 @@ class MoneyHubApp {
 
 		// Read active tab from URL route: #money-hub/ledger or #money-hub/accounts
 		const route = frappe.get_route();
-		this.active_tab = (route && route[1] === "ledger") ? "ledger" : "accounts";
+		this.active_tab = ["ledger", "results"].includes(route?.[1]) ? route[1] : "accounts";
+		this.results_company = frappe.defaults.get_user_default("Company") || "";
+		this.results_period = "month";
+		this.results_from = "";
+		this.results_to = "";
 
 		// Filters State
 		this.search_query = "";
@@ -81,15 +85,20 @@ class MoneyHubApp {
 		return this.is_tg ? tg : ru;
 	}
 
-	fmt(amount, currency = this.data?.currency) {
+	fmt(amount, currency = this.data?.currency, precision_override = null) {
 		const n = Number(amount || 0);
-		const precision = this.data?.currency_precisions?.[currency] ?? 2;
+		const precision = precision_override ?? this.data?.currency_precisions?.[currency] ?? 2;
 		return n.toLocaleString(this.is_tg ? "tg" : "ru-RU", { minimumFractionDigits: precision, maximumFractionDigits: precision });
 	}
 
 	async load() {
 		const sequence = this.load_sequence = (this.load_sequence || 0) + 1;
 		this.feed_sequence = (this.feed_sequence || 0) + 1;
+		this.results_sequence = (this.results_sequence || 0) + 1;
+		if (this.active_tab === "results") {
+			this.render_results_page();
+			return this.load_results();
+		}
 		this.wrapper.text(__("Loading…"));
 		try {
 			const response = await frappe.call({method: "erpnext.accounts.page.money_hub.money_hub.get_money_hub_data", args: {include_hidden: this.include_hidden ? 1 : 0}, silent: true});
@@ -167,6 +176,7 @@ class MoneyHubApp {
 	}
 
 	render_feed_state() {
+		if (this.active_tab === "results") return;
 		if (this.active_tab === "accounts") {
 			// Background history loads must not replace the focused account table.
 			this.wrapper.find(".mh-ledger-count").text(this.feed_loading ? "…" : this.feed_result?.total_count ?? "—");
@@ -176,6 +186,7 @@ class MoneyHubApp {
 	}
 
 	render() {
+		if (this.active_tab === "results") return this.render_results_page();
 		if (!this.data) return;
 		const focused = document.activeElement;
 		const focus_id = focused?.id;
@@ -203,6 +214,7 @@ class MoneyHubApp {
 						<span>${this.t("Движение денег", "Ҳаракати пул")}</span>
 						<span class="mh-tab-badge mh-ledger-count">${this.feed_loading ? "…" : this.feed_result?.total_count ?? "—"}</span>
 					</button>
+					<button type="button" class="mh-tab-item" data-tab="results">${this.t("Результаты бизнеса", "Натиҷаҳои тиҷорат")}</button>
 				</div>
 
 				<div class="mh-account-scope">
@@ -310,6 +322,199 @@ class MoneyHubApp {
 				if (selection != null && control.setSelectionRange) control.setSelectionRange(selection, selection);
 			}
 		}
+	}
+
+	async open_money_action(action) {
+		// Results may use another company, including one with no readable wallets.
+		// Resolve its native wallet context before opening any existing write dialog.
+		if (this.active_tab !== "results") return this[action]();
+		const company = this.results?.company;
+		if (!company || this.results_loading || this.results_error) {
+			frappe.msgprint(this.t("Сначала загрузите результаты выбранной компании.", "Аввал натиҷаҳои ширкати интихобшударо бор кунед."));
+			return;
+		}
+		const sequence = this.results_sequence;
+		try {
+			const response = await frappe.call({method: "erpnext.accounts.page.money_hub.money_hub.get_money_hub_data",
+				args: {company, include_hidden: this.include_hidden ? 1 : 0}, silent: true});
+			if (this.active_tab !== "results" || sequence !== this.results_sequence || company !== this.results_company) return;
+			if (response.message?.company !== company) throw new Error();
+			this.data = response.message;
+			return this[action]();
+		} catch {
+			if (this.active_tab !== "results" || sequence !== this.results_sequence) return;
+			frappe.msgprint(this.t("Не удалось открыть денежные операции этой компании. Проверьте права на счета и кошельки.", "Амалиёти пулии ин ширкат кушода нашуд. Ҳуқуқ ба суратҳисобҳо ва ҳамёнҳоро санҷед."));
+		}
+	}
+
+	results_dates() {
+		const today = frappe.datetime.get_today();
+		if (this.results_period === "custom") return [this.results_from, this.results_to];
+		const start = this.results_period === "today" ? today : this.results_period === "week"
+			? frappe.datetime.add_days(today, -6) : today.slice(0, 8) + "01";
+		return [start, today];
+	}
+
+	render_results_page() {
+		const t = (ru, tg) => this.t(ru, tg);
+		const [from, to] = this.results_dates();
+		this.wrapper.html(`<div class="mh-layout mh-results-page">
+			<nav class="mh-tabs-bar" aria-label="${t("Разделы денег", "Бахшҳои пул")}">
+				${[["accounts", t("Счета и кассы", "Ҳамёнҳо ва суратҳисобҳо")], ["ledger", t("Движение денег", "Ҳаракати пул")], ["results", t("Результаты бизнеса", "Натиҷаҳои тиҷорат")]].map(([tab, label]) => `<button type="button" class="mh-tab-item ${tab === "results" ? "active" : ""}" data-tab="${tab}" ${tab === "results" ? 'aria-current="page"' : ""}>${label}</button>`).join("")}
+			</nav>
+			<div class="mh-results-filters">
+				<div class="mh-results-company"></div>
+				<div><label for="mh-results-period">${t("Период", "Давра")}</label><select id="mh-results-period" class="form-control">
+					${[["month", t("Этот месяц", "Ин моҳ")], ["today", t("Сегодня", "Имрӯз")], ["week", t("7 дней", "7 рӯз")], ["custom", t("Свои даты", "Санаҳои дилхоҳ")]].map(([key, label]) => `<option value="${key}" ${this.results_period === key ? "selected" : ""}>${label}</option>`).join("")}
+				</select></div>
+				<div><label for="mh-results-from">${t("С даты", "Аз санаи")}</label><input type="date" id="mh-results-from" class="form-control" value="${frappe.utils.escape_html(from || "")}" ${this.results_period === "custom" ? "" : "disabled"}></div>
+				<div><label for="mh-results-to">${t("По дату", "То санаи")}</label><input type="date" id="mh-results-to" class="form-control" value="${frappe.utils.escape_html(to || "")}" max="${frappe.datetime.get_today()}" ${this.results_period === "custom" ? "" : "disabled"}></div>
+				<button type="button" class="btn btn-default mh-results-apply">${t("Показать", "Нишон додан")}</button>
+			</div>
+			<div class="mh-results-body" aria-live="polite"></div>
+		</div>`);
+		this.wrapper.find(".mh-tab-item").on("click", (event) => this.switch_tab($(event.currentTarget).data("tab")));
+		this.results_company_control = frappe.ui.form.make_control({
+			parent: this.wrapper.find(".mh-results-company"), render_input: true,
+			df: {fieldname: "results_company", fieldtype: "Link", options: "Company", label: t("Компания", "Ширкат"),
+				default: this.results_company, reqd: 1, only_select: 1,
+				change: () => {
+					const company = this.results_company_control?.get_value();
+					if (company == null || company === this.results_company) return;
+					this.results_company = company;
+					this.load_results();
+				}},
+		});
+		// Initialize like a native FieldGroup default; user changes still validate the Link.
+		this.results_company_control.set_input(this.results_company);
+		this.results_company_control.$input.on("input", () => {
+			this.results_sequence = (this.results_sequence || 0) + 1;
+			this.results = null;
+			this.results_loading = false;
+			this.results_error = t("Выберите компанию из списка.", "Ширкатро аз рӯйхат интихоб кунед.");
+			this.render_results_body();
+		});
+		this.wrapper.find("#mh-results-period").on("change", (event) => {
+			this.results_period = event.target.value;
+			if (this.results_period === "custom") {
+				this.results_from = this.wrapper.find("#mh-results-from").val();
+				this.results_to = this.wrapper.find("#mh-results-to").val();
+				this.results_sequence = (this.results_sequence || 0) + 1;
+				this.results = null;
+				this.results_loading = false;
+				this.results_error = t("Выберите даты и нажмите «Показать».", "Санаҳоро интихоб карда, «Нишон додан»-ро пахш кунед.");
+			}
+			this.render_results_page();
+			if (this.results_period !== "custom") this.load_results();
+		});
+		this.wrapper.find("#mh-results-from, #mh-results-to").on("change", () => {
+			this.results_from = this.wrapper.find("#mh-results-from").val();
+			this.results_to = this.wrapper.find("#mh-results-to").val();
+			this.results_sequence = (this.results_sequence || 0) + 1;
+			this.results = null;
+			this.results_loading = false;
+			this.results_error = t("Нажмите «Показать» для выбранных дат.", "Барои санаҳои интихобшуда «Нишон додан»-ро пахш кунед.");
+			this.render_results_body();
+		});
+		this.wrapper.find(".mh-results-apply").on("click", () => this.load_results());
+		this.render_results_body();
+	}
+
+	async load_results() {
+		const sequence = this.results_sequence = (this.results_sequence || 0) + 1;
+		const company = this.results_company;
+		const [from_date, to_date] = this.results_dates();
+		this.results = null;
+		this.results_error = null;
+		this.results_loading = true;
+		this.render_results_body();
+		try {
+			const entered_company = this.results_company_control?.get_value();
+			if (entered_company != null && entered_company !== company) {
+				throw new Error(this.t("Выберите компанию из списка.", "Ширкатро аз рӯйхат интихоб кунед."));
+			}
+			if (!from_date || !to_date || from_date > to_date || to_date > frappe.datetime.get_today()
+				|| frappe.datetime.get_diff(to_date, from_date) > 365) {
+				throw new Error(this.t("Выберите период до 366 дней, не позднее сегодня.", "Давраи то 366 рӯзро интихоб кунед, на дертар аз имрӯз."));
+			}
+			if (company === "" && this.results_company_resolved) throw new Error(this.t("Выберите компанию.", "Ширкатро интихоб кунед."));
+			const response = await frappe.call({method: "erpnext.accounts.page.money_hub.money_hub.get_business_results",
+				args: {company: company || null, from_date, to_date}, silent: true});
+			if (sequence !== this.results_sequence || this.active_tab !== "results") return;
+			const result = response.message;
+			if (!result?.ledger || !result.invoice_sales || !result.invoice_costs || !result.completeness
+				|| !Array.isArray(result.ledger.accounts) || !result.currency || !result.company
+				|| (company && result.company !== company) || result.from_date !== from_date || result.to_date !== to_date) {
+				throw new Error(this.t("Не удалось загрузить результаты.", "Натиҷаҳо бор нашуданд."));
+			}
+			this.results = result;
+			this.results_company = result.company;
+			this.results_company_resolved = true;
+			this.results_company_control?.set_input(result.company);
+		} catch (error) {
+			if (sequence !== this.results_sequence || this.active_tab !== "results") return;
+			const denied = error.exc_type === "PermissionError" || error.status === 403 || error.httpStatus === 403;
+			this.results_error = denied
+				? this.t("Нет доступа к финансовым данным этой компании. Проверьте права у администратора.", "Ба маълумоти молиявии ин ширкат дастрасӣ нест. Ҳуқуқҳоро бо маъмур санҷед.")
+				: this.t("Не удалось загрузить результаты. Проверьте период и соединение и повторите.", "Натиҷаҳо бор нашуданд. Давра ва пайвастро санҷида, такрор кунед.");
+			// Local validation is already plain business language; never inject server HTML.
+			if (error instanceof Error && !error.exc_type) this.results_error = error.message;
+		}
+		if (sequence !== this.results_sequence || this.active_tab !== "results") return;
+		this.results_loading = false;
+		this.render_results_body();
+	}
+
+	render_results_body() {
+		if (this.active_tab !== "results") return;
+		this.wrapper.find(".mh-results-body").html(this.results_html());
+		this.wrapper.find(".mh-results-retry").on("click", () => this.load_results());
+	}
+
+	results_html() {
+		const t = (ru, tg) => this.t(ru, tg);
+		const esc = (value) => frappe.utils.escape_html(String(value ?? ""));
+		if (this.results_loading) return `<p class="mh-results-state" role="status">${t("Загрузка результатов…", "Боркунии натиҷаҳо…")}</p>`;
+		if (this.results_error) return `<div class="mh-results-state"><p role="alert">${esc(this.results_error)}</p><button type="button" class="btn btn-default mh-results-retry">${t("Повторить", "Такрор")}</button></div>`;
+		const r = this.results;
+		if (!r) return "";
+		const {ledger: l, invoice_sales: s, invoice_costs: c} = r;
+		const money = (value, code = r.currency) => value == null ? "—" : esc(this.fmt(value, code, r.currency_precision ?? 2));
+		const metric = (label, value) => `<div><span>${label}</span><strong class="${value < 0 ? "text-danger" : ""}">${money(value)}</strong></div>`;
+		const query = (values) => Object.entries(values).filter(([, value]) => value != null).map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(typeof value === "object" ? JSON.stringify(value) : value)}`).join("&");
+		const report_link = (report, filters, label) => `<a href="/app/query-report/${encodeURIComponent(report)}?${esc(query(filters))}">${label}</a>`;
+		const gl_filters = {company: r.company, from_date: r.from_date, to_date: r.to_date, finance_book: r.finance_book || "", include_default_book_entries: 1};
+		const categories = (a) => a.root_type === "Income" ? t("Доход", "Даромад") : a.account_type === "Cost of Goods Sold" ? t("Себестоимость", "Арзиши мол") : t("Прочие расходы", "Дигар хароҷот");
+		const rows = l.accounts.map((a) => `<tr><td>${r.navigation?.account ? `<a href="${esc(frappe.utils.get_form_link("Account", a.account))}">${esc(a.account)}</a>` : esc(a.account)}</td>
+			<td>${categories(a)}</td><td class="text-right">${money(a.base_amount)}</td><td class="text-right">${money(a.account_amount, a.account_currency)} ${esc(a.account_currency)}</td>
+			${r.navigation?.general_ledger ? `<td>${report_link("General Ledger", {...gl_filters, account: [a.account]}, t("Проводки", "Сабтҳо"))}</td>` : ""}</tr>`).join("");
+		return `<p class="text-muted mh-results-scope">${esc(r.company)} · ${esc(r.from_date)} — ${esc(r.to_date)} · ${esc(r.currency)}${r.finance_book ? " · " + esc(r.finance_book) : ""}</p>
+			<h3>${t("Результат по проводкам", "Натиҷа аз рӯи сабтҳо")}</h3>
+			<div class="mh-results-summary">${metric(t("Признанный доход", "Даромади сабтшуда"), l.income)}${metric(t("Себестоимость по проводкам", "Арзиши мол аз рӯи сабтҳо"), l.cogs)}${metric(t("Прочие признанные расходы", "Дигар хароҷоти сабтшуда"), l.other_expenses)}${metric(t("Результат по проводкам", "Натиҷаи сабтҳо"), l.result)}</div>
+			<p class="mh-results-note">${t("Предварительно, в пределах доступных проводок. Это не окончательная чистая прибыль. Доход − себестоимость − прочие расходы = результат. Движение денег и покупка запасов сами по себе не являются расходами этого периода.", "Пешакӣ, дар доираи сабтҳои дастрас. Ин фоидаи софи ниҳоӣ нест. Даромад − арзиши мол − дигар хароҷот = натиҷа. Ҳаракати пул ва хариди захира худ аз худ хароҷоти ин давра нестанд.")}</p>
+			${!rows ? `<p class="mh-results-empty">${t("За период нет доступных ненулевых проводок доходов и расходов. Измените компанию или период.", "Дар ин давра сабтҳои ғайрисифрии дастраси даромад ва хароҷот нестанд. Ширкат ё давраро тағйир диҳед.")}</p>` : ""}
+			<details class="mh-results-breakdown"><summary>${t("По счетам — все доступные результаты", "Аз рӯи суратҳисобҳо — ҳамаи натиҷаҳои дастрас")} (${l.accounts.length})</summary>
+				${rows ? `<div class="mh-results-table" tabindex="0" role="region" aria-label="${t("Доходы и расходы по счетам", "Даромад ва хароҷот аз рӯи суратҳисобҳо")}"><table class="table table-sm"><thead><tr>${[t("Счёт", "Суратҳисоб"), t("Категория", "Гурӯҳ"), esc(r.currency), t("В валюте счёта", "Бо асъори суратҳисоб"), ...(r.navigation?.general_ledger ? [t("Источник", "Манбаъ")] : [])].map((label, i) => `<th scope="col" class="${[2, 3].includes(i) ? "text-right" : ""}">${label}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>` : ""}
+			</details>
+			<div class="mh-results-links">${r.navigation?.profit_and_loss ? report_link("Profit and Loss Statement", {company: r.company, filter_based_on: "Date Range", period_start_date: r.from_date, period_end_date: r.to_date, periodicity: "Monthly", finance_book: r.finance_book || "", include_default_book_entries: 1}, t("Отчёт о прибылях и убытках ERPNext", "Ҳисоботи фоида ва зарари ERPNext")) : ""}</div>
+			<section class="mh-results-invoices"><h3>${t("Продажи и валовая прибыль по счетам", "Фурӯш ва фоидаи умумӣ аз рӯи ҳисобҳо")}</h3>
+				<p class="text-muted">${t("Отдельный анализ по датам счетов, без налогов, после скидок и возвратов. Эти суммы не прибавляются к расходам выше.", "Таҳлили алоҳида аз рӯи санаи ҳисобҳо, бе андоз, пас аз тахфиф ва бозгашт. Ин маблағҳо ба хароҷоти боло илова намешаванд.")}</p>
+				<div class="mh-results-summary mh-results-three">${metric(t("Продажи без налогов", "Фурӯш бе андоз"), s.net_sales)}${metric(t("Историческая себестоимость", "Арзиши таърихии мол"), c.cogs)}${metric(t("Валовая прибыль", "Фоидаи умумӣ"), c.gross_profit)}</div>
+				<p class="mh-results-note">${t("Учтена записанная себестоимость отгрузок, доступная на", "Арзиши сабтшудаи таҳвилҳо, ки дастрас аст то")} ${esc(c.as_of)}. ${t("Поздние отгрузки могут изменить этот анализ прошлых продаж. В проводках расходы относятся к дате их записи.", "Таҳвилҳои дертар метавонанд таҳлили фурӯши гузаштаро тағйир диҳанд. Дар сабтҳо хароҷот ба санаи сабт тааллуқ дорад.")}</p>
+				${c.cogs == null ? `<p class="mh-results-missing">${t("Полная себестоимость и валовая прибыль недоступны: не хватает данных или прав на источники. Известная часть себестоимости", "Арзиши пурраи мол ва фоидаи умумӣ дастрас нестанд: маълумот ё ҳуқуқ ба манбаъҳо намерасад. Қисми маълуми арзиши мол")}: ${money(c.known_cogs)} ${esc(r.currency)}. ${t("Строк без стоимости", "Сатрҳои бе арзиш")}: ${esc(c.unknown_rows ?? "—")}.</p>` : ""}
+				<p>${t("Возвраты уже включены в продажи", "Бозгаштҳо аллакай ба фурӯш дохиланд")}: ${money(s.returns)} ${esc(r.currency)}.</p>
+				${r.navigation?.sales_invoice ? `<a href="/app/sales-invoice?${esc(query({company: r.company, posting_date: ["between", [r.from_date, r.to_date]], docstatus: 1, is_opening: "No"}))}">${t("Счета продаж ERPNext", "Ҳисобҳои фурӯши ERPNext")}</a>` : ""}
+				<details class="mh-results-breakdown"><summary>${t("Валюты и сверка с доходом", "Асъорҳо ва муқоиса бо даромад")}</summary>
+					${(s.by_currency || []).map((row) => `<p>${esc(row.currency)}: ${money(row.net_total, row.currency)} → ${money(row.base_net_total)} ${esc(r.currency)}</p>`).join("")}
+					<p>${t("Доход по проводкам минус продажи по счетам", "Даромади сабтҳо бо тарҳи фурӯши ҳисобҳо")}: ${money(r.reconciliation?.income_less_invoice_sales)} ${esc(r.currency)}. ${t("Разница возможна из-за дат, источников и прав доступа.", "Фарқ аз сабаби сана, манбаъ ва ҳуқуқи дастрасӣ имконпазир аст.")}</p>
+				</details>
+			</section>
+			<section class="mh-results-completeness"><h3>${t("Полнота данных", "Пуррагии маълумот")}</h3><ul>
+				<li>${t("Только счета и строки, доступные по вашим правам. Ограниченные данные не означают полный результат компании.", "Танҳо суратҳисобҳо ва сатрҳои мувофиқи ҳуқуқи шумо дастрас. Маълумоти маҳдуд натиҷаи пурраи ширкат нест.")}</li>
+				<li>${t("Необъединённые POS-продажи показаны отдельно и не добавлены повторно", "Фурӯши муттаҳиднашудаи POS алоҳида нишон дода шуда, дубора илова нашудааст")}: ${money(s.unmerged_pos_net_sales)} ${esc(r.currency)} (${esc(s.unmerged_pos_count ?? "—")}). ${t("Непереданные офлайн-продажи неизвестны.", "Фурӯши офлайни фиристоданашуда номаълум аст.")}</li>
+				<li>${t("Зарплата, налоги и другие расходы учтены только при наличии проводок. Полнота зарплаты и налогов ещё не проверена; неопубликованные обязательства не включены.", "Маош, андоз ва дигар хароҷот танҳо бо сабти муҳосибӣ ҳисоб шудаанд. Пуррагии маош ва андоз ҳанӯз санҷида нашудааст; уҳдадориҳои сабтнашуда дохил нестанд.")}</li>
+				<li>${t("Распределение по магазинам не настроено. Окончательная чистая прибыль пока недоступна.", "Тақсимот аз рӯи мағозаҳо танзим нашудааст. Фоидаи софи ниҳоӣ ҳанӯз дастрас нест.")}</li>
+			</ul></section>`;
 	}
 
 	render_accounts(cur, totals) {

@@ -183,7 +183,7 @@ def linked_product_profit(links, company, warehouses, start, end):
 	A link is not a stock-lot provenance claim. Shared SKUs appear in each supplier's
 	row, but the filtered summary counts each SKU once, just like linked inventory.
 	"""
-	from erpnext.accounts.report.gross_profit.gross_profit import GrossProfitGenerator
+	from erpnext.stock.retail_costs import invoice_rows
 	from erpnext.stock.page.product_detail.product_detail import ProductCostLookup
 
 	if not frappe.has_permission("Sales Invoice", "read"):
@@ -191,24 +191,7 @@ def linked_product_profit(links, company, warehouses, start, end):
 	codes = set().union(*links.values()) if links else set()
 	if not codes or not warehouses:
 		return {}
-	# Resolve parent permissions first. Bound every generated IN clause.
-	invoices = readable("Sales Invoice", dict(company=company, docstatus=1,
-		posting_date=["between", [start, end]], is_opening="No"), ["name"])
-	if not invoices:
-		return {}
-	query = GrossProfitGenerator.__new__(GrossProfitGenerator)
-	query.filters = frappe._dict(company=company, from_date=start, to_date=end)
-	sii, si = frappe.qb.DocType("Sales Invoice Item"), frappe.qb.DocType("Sales Invoice")
-	base = query.prepare_invoice_query()
-	rows = []
-	# Fetch permitted sales once per invoice/warehouse batch, then discard unlinked
-	# SKUs. Avoid multiplying sales queries by a potentially huge variant catalog.
-	for warehouse_offset in range(0, len(warehouses), QUERY_BATCH_SIZE):
-		for invoice_offset in range(0, len(invoices), QUERY_BATCH_SIZE):
-			batch = (base.where(sii.warehouse.isin(warehouses[warehouse_offset:warehouse_offset + QUERY_BATCH_SIZE]))
-				.where(si.name.isin([i.name for i in invoices[invoice_offset:invoice_offset + QUERY_BATCH_SIZE]]))
-				.run(as_dict=True))
-			rows.extend(row for row in batch if row.item_code in codes)
+	rows = invoice_rows(company, start, end, codes, set(warehouses))[0]
 	profits = defaultdict(float)
 	if rows:
 		costs = ProductCostLookup(rows, company)
